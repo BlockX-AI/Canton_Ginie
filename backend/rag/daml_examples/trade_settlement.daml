@@ -1,0 +1,141 @@
+module TradeSettlement where
+
+import Daml.Script
+
+-- Delivery vs Payment (DvP) trade settlement
+template TradeAgreement
+  with
+    buyer       : Party
+    seller      : Party
+    clearingHouse: Party
+    asset       : Text
+    quantity    : Decimal
+    price       : Decimal
+    settlementDate: Date
+    tradeId     : Text
+  where
+    signatory buyer, seller
+    observer  clearingHouse
+
+    ensure quantity > 0.0 && price > 0.0
+
+    choice ConfirmSettlement : ContractId SettlementInstruction
+      controller clearingHouse
+      do
+        create SettlementInstruction with
+          buyer          = buyer
+          seller         = seller
+          clearingHouse  = clearingHouse
+          asset          = asset
+          quantity       = quantity
+          cashAmount     = quantity * price
+          tradeId        = tradeId
+
+    choice FailTrade : ContractId FailedTrade
+      with failureReason : Text
+      controller clearingHouse
+      do
+        create FailedTrade with
+          buyer         = buyer
+          seller        = seller
+          tradeId       = tradeId
+          failureReason = failureReason
+
+
+-- Settlement instruction for atomic DvP
+template SettlementInstruction
+  with
+    buyer         : Party
+    seller        : Party
+    clearingHouse : Party
+    asset         : Text
+    quantity      : Decimal
+    cashAmount    : Decimal
+    tradeId       : Text
+  where
+    signatory clearingHouse
+    observer  buyer, seller
+
+    choice ExecuteDvP : (ContractId AssetReceipt, ContractId CashReceipt)
+      controller clearingHouse
+      do
+        assetReceipt <- create AssetReceipt with
+          recipient = buyer
+          asset     = asset
+          quantity  = quantity
+          tradeId   = tradeId
+        cashReceipt <- create CashReceipt with
+          recipient  = seller
+          cashAmount = cashAmount
+          tradeId    = tradeId
+        return (assetReceipt, cashReceipt)
+
+
+template AssetReceipt
+  with
+    recipient : Party
+    asset     : Text
+    quantity  : Decimal
+    tradeId   : Text
+  where
+    signatory recipient
+    observer  recipient
+
+    choice AcknowledgeAsset : ()
+      controller recipient
+      do return ()
+
+
+template CashReceipt
+  with
+    recipient  : Party
+    cashAmount : Decimal
+    tradeId    : Text
+  where
+    signatory recipient
+    observer  recipient
+
+    choice AcknowledgeCash : ()
+      controller recipient
+      do return ()
+
+
+template FailedTrade
+  with
+    buyer         : Party
+    seller        : Party
+    tradeId       : Text
+    failureReason : Text
+  where
+    signatory buyer
+    observer  seller
+
+
+setup : Script ()
+setup = script do
+  buyer         <- allocateParty "HedgeFund"
+  seller        <- allocateParty "InvestmentBank"
+  clearingHouse <- allocateParty "ClearingHouse"
+
+  agreementCid <- submitMulti [buyer, seller] [] do
+    createCmd TradeAgreement with
+      buyer          = buyer
+      seller         = seller
+      clearingHouse  = clearingHouse
+      asset          = "AAPL"
+      quantity       = 1000.0
+      price          = 150.0
+      settlementDate = date 2025 Jan 10
+      tradeId        = "TRD-2025-001"
+
+  instructionCid <- submit clearingHouse do
+    exerciseCmd agreementCid ConfirmSettlement
+
+  (assetCid, cashCid) <- submit clearingHouse do
+    exerciseCmd instructionCid ExecuteDvP
+
+  submit buyer do
+    exerciseCmd assetCid AcknowledgeAsset
+
+  submit seller do
+    exerciseCmd cashCid AcknowledgeCash

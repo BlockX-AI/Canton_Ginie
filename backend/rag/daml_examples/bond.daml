@@ -1,0 +1,77 @@
+module Bond where
+
+import Daml.Script
+
+-- Bond template representing a fixed-income financial instrument
+template Bond
+  with
+    issuer      : Party
+    investor    : Party
+    faceValue   : Decimal
+    couponRate  : Decimal
+    maturityDate: Date
+    description : Text
+  where
+    signatory issuer
+    observer  investor
+
+    ensure faceValue > 0.0 && couponRate >= 0.0 && couponRate <= 1.0
+
+    choice Redeem : ()
+      controller investor
+      do
+        assertMsg "Bond has matured" True
+        return ()
+
+    choice PayCoupon : ContractId CouponPayment
+      controller issuer
+      do
+        create CouponPayment with
+          payer    = issuer
+          receiver = investor
+          amount   = faceValue * couponRate
+
+    choice Transfer : ContractId Bond
+      with newInvestor : Party
+      controller investor
+      do
+        create this with investor = newInvestor
+
+
+template CouponPayment
+  with
+    payer    : Party
+    receiver : Party
+    amount   : Decimal
+  where
+    signatory payer
+    observer  receiver
+
+    ensure amount > 0.0
+
+    choice Settle : ()
+      controller receiver
+      do
+        return ()
+
+
+-- Setup script for testing
+setup : Script ()
+setup = script do
+  issuer   <- allocateParty "GoldmanSachs"
+  investor <- allocateParty "PensionFund"
+
+  bondCid <- submit issuer do
+    createCmd Bond with
+      issuer       = issuer
+      investor     = investor
+      faceValue    = 1000000.0
+      couponRate   = 0.05
+      maturityDate = date 2030 Jan 01
+      description  = "5% Fixed Rate Bond 2030"
+
+  couponCid <- submit issuer do
+    exerciseCmd bondCid PayCoupon
+
+  submit investor do
+    exerciseCmd couponCid Settle

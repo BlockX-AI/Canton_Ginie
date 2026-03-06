@@ -1,0 +1,87 @@
+module AssetTransfer where
+
+import Daml.Script
+
+-- Generic asset that can be transferred between parties
+template Asset
+  with
+    owner       : Party
+    issuer      : Party
+    assetName   : Text
+    quantity    : Decimal
+    description : Text
+  where
+    signatory issuer
+    observer  owner
+
+    ensure quantity > 0.0
+
+    choice ProposeTransfer : ContractId TransferProposal
+      with recipient : Party
+      controller owner
+      do
+        create TransferProposal with
+          asset      = this
+          sender     = owner
+          recipient  = recipient
+
+    choice Split : (ContractId Asset, ContractId Asset)
+      with splitAmount : Decimal
+      controller owner
+      do
+        assertMsg "Split amount must be less than total" (splitAmount < quantity)
+        part1 <- create this with quantity = splitAmount
+        part2 <- create this with quantity = quantity - splitAmount
+        return (part1, part2)
+
+    choice Merge : ContractId Asset
+      with otherCid : ContractId Asset
+      controller owner
+      do
+        other <- fetch otherCid
+        assertMsg "Same asset type" (other.assetName == assetName)
+        assertMsg "Same owner" (other.owner == owner)
+        archive otherCid
+        create this with quantity = quantity + other.quantity
+
+
+-- Transfer proposal awaiting recipient acceptance
+template TransferProposal
+  with
+    asset     : Asset
+    sender    : Party
+    recipient : Party
+  where
+    signatory sender
+    observer  recipient
+
+    choice Accept : ContractId Asset
+      controller recipient
+      do
+        create asset with owner = recipient
+
+    choice Reject : ContractId Asset
+      controller recipient
+      do
+        create asset
+
+
+setup : Script ()
+setup = script do
+  bank    <- allocateParty "CentralBank"
+  alice   <- allocateParty "Alice"
+  bob     <- allocateParty "Bob"
+
+  assetCid <- submit bank do
+    createCmd Asset with
+      owner       = alice
+      issuer      = bank
+      assetName   = "USD"
+      quantity    = 10000.0
+      description = "US Dollar deposit"
+
+  proposalCid <- submit alice do
+    exerciseCmd assetCid ProposeTransfer with recipient = bob
+
+  submit bob do
+    exerciseCmd proposalCid Accept

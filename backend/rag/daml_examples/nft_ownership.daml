@@ -1,0 +1,116 @@
+module NftOwnership where
+
+import Daml.Script
+
+-- Non-Fungible Token representing unique asset ownership on Canton
+template NFT
+  with
+    minter      : Party
+    owner       : Party
+    tokenId     : Text
+    assetName   : Text
+    assetUri    : Text
+    metadata    : Text
+    royaltyRate : Decimal
+  where
+    signatory minter
+    observer  owner
+
+    ensure royaltyRate >= 0.0 && royaltyRate <= 1.0
+
+    choice TransferNFT : ContractId NFT
+      with newOwner : Party
+      controller owner
+      do
+        create this with owner = newOwner
+
+    choice ListForSale : ContractId NFTListing
+      with askPrice : Decimal
+      controller owner
+      do
+        create NFTListing with
+          nft      = this
+          seller   = owner
+          askPrice = askPrice
+
+    choice BurnNFT : ()
+      controller minter
+      do
+        return ()
+
+
+-- Marketplace listing for NFT
+template NFTListing
+  with
+    nft      : NFT
+    seller   : Party
+    askPrice : Decimal
+  where
+    signatory seller
+    observer  seller
+
+    ensure askPrice > 0.0
+
+    choice PurchaseNFT : (ContractId NFT, ContractId RoyaltyPayment)
+      with buyer : Party
+      controller buyer
+      do
+        royaltyAmount <- return (askPrice * nft.royaltyRate)
+        newNft <- create nft with owner = buyer
+        royalty <- create RoyaltyPayment with
+          minter    = nft.minter
+          seller    = seller
+          buyer     = buyer
+          tokenId   = nft.tokenId
+          salePrice = askPrice
+          royalty   = royaltyAmount
+        return (newNft, royalty)
+
+    choice DelistNFT : ContractId NFT
+      controller seller
+      do
+        create nft
+
+
+-- Royalty payment to original creator
+template RoyaltyPayment
+  with
+    minter    : Party
+    seller    : Party
+    buyer     : Party
+    tokenId   : Text
+    salePrice : Decimal
+    royalty   : Decimal
+  where
+    signatory buyer
+    observer  minter, seller
+
+    choice SettleRoyalty : ()
+      controller minter
+      do return ()
+
+
+setup : Script ()
+setup = script do
+  artist <- allocateParty "DigitalArtist"
+  alice  <- allocateParty "Collector1"
+  bob    <- allocateParty "Collector2"
+
+  nftCid <- submit artist do
+    createCmd NFT with
+      minter      = artist
+      owner       = alice
+      tokenId     = "NFT-001"
+      assetName   = "Digital Sunrise"
+      assetUri    = "ipfs://Qm..."
+      metadata    = "{\"rarity\": \"legendary\"}"
+      royaltyRate = 0.1
+
+  listingCid <- submit alice do
+    exerciseCmd nftCid ListForSale with askPrice = 10.0
+
+  (newNftCid, royaltyCid) <- submit bob do
+    exerciseCmd listingCid PurchaseNFT with buyer = bob
+
+  submit artist do
+    exerciseCmd royaltyCid SettleRoyalty
