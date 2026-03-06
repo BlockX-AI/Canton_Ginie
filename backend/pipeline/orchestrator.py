@@ -16,23 +16,22 @@ logger = structlog.get_logger()
 
 def intent_node(state: dict) -> dict:
     logger.info("Node: intent", job_id=state.get("job_id"))
-    try:
-        intent = run_intent_agent(state["user_input"])
+    result = run_intent_agent(state["user_input"])
+    if not result["success"]:
+        logger.error("Intent node failed", error=result.get("error"))
         return {
             **state,
-            "structured_intent": intent,
-            "current_step":      "Generating Daml code...",
-            "progress":          20,
-        }
-    except Exception as e:
-        logger.error("Intent node failed", error=str(e))
-        return {
-            **state,
-            "error_message":  str(e),
+            "error_message":  result.get("error", "Intent agent failed"),
             "is_fatal_error": True,
             "current_step":   "Failed at intent analysis",
             "progress":       0,
         }
+    return {
+        **state,
+        "structured_intent": result["structured_intent"],
+        "current_step":      "Generating Daml code...",
+        "progress":          20,
+    }
 
 
 def rag_node(state: dict) -> dict:
@@ -57,26 +56,25 @@ def rag_node(state: dict) -> dict:
 
 def generate_node(state: dict) -> dict:
     logger.info("Node: generate", job_id=state.get("job_id"))
-    try:
-        code = run_writer_agent(
-            structured_intent=state["structured_intent"],
-            rag_context=state.get("rag_context", []),
-        )
+    result = run_writer_agent(
+        structured_intent=state["structured_intent"],
+        rag_context=state.get("rag_context", []),
+    )
+    if not result["success"]:
+        logger.error("Generate node failed", error=result.get("error"))
         return {
             **state,
-            "generated_code": code,
-            "current_step":   "Compiling contract...",
-            "progress":       50,
-        }
-    except Exception as e:
-        logger.error("Generate node failed", error=str(e))
-        return {
-            **state,
-            "error_message":  str(e),
+            "error_message":  result.get("error", "Writer agent failed"),
             "is_fatal_error": True,
             "current_step":   "Failed at code generation",
             "progress":       0,
         }
+    return {
+        **state,
+        "generated_code": result["daml_code"],
+        "current_step":   "Compiling contract...",
+        "progress":       50,
+    }
 
 
 def compile_node(state: dict) -> dict:
@@ -111,26 +109,25 @@ def fix_node(state: dict) -> dict:
     attempt = state.get("attempt_number", 1)
     logger.info("Node: fix", job_id=state.get("job_id"), attempt=attempt)
 
-    try:
-        fixed_code = run_fix_agent(
-            daml_code=state["generated_code"],
-            compile_errors=state.get("compile_errors", []),
-            attempt_number=attempt,
-        )
+    result = run_fix_agent(
+        daml_code=state["generated_code"],
+        compile_errors=state.get("compile_errors", []),
+        attempt_number=attempt,
+    )
+    if not result["success"]:
+        logger.error("Fix node failed", error=result.get("error"))
         return {
             **state,
-            "generated_code": fixed_code,
-            "current_step":   f"Re-compiling after fix (attempt {attempt})...",
-            "progress":       58,
-        }
-    except Exception as e:
-        logger.error("Fix node failed", error=str(e))
-        return {
-            **state,
-            "error_message":  str(e),
+            "error_message":  result.get("error", "Fix agent failed"),
             "is_fatal_error": True,
             "current_step":   "Auto-fix failed",
         }
+    return {
+        **state,
+        "generated_code": result["fixed_code"],
+        "current_step":   f"Re-compiling after fix (attempt {attempt})...",
+        "progress":       58,
+    }
 
 
 def deploy_node(state: dict) -> dict:
@@ -268,10 +265,20 @@ def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbo
     pipeline = build_pipeline()
     final_state = pipeline.invoke(initial_state)
 
+    if final_state.get("contract_id"):
+        derived_status = "complete"
+    elif final_state.get("is_fatal_error") or final_state.get("error_message"):
+        derived_status = "failed"
+    else:
+        derived_status = "complete"
+
+    final_state["status"]     = derived_status
+    final_state["daml_code"]  = final_state.get("generated_code", "")
+
     logger.info(
         "Pipeline completed",
         job_id=job_id,
-        success=bool(final_state.get("contract_id")),
+        status=derived_status,
         attempts=final_state.get("attempt_number"),
     )
 

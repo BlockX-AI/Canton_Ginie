@@ -1,8 +1,8 @@
 import re
 import structlog
-from anthropic import Anthropic
 
 from config import get_settings
+from utils.llm_client import call_llm
 
 logger = structlog.get_logger()
 
@@ -25,6 +25,7 @@ Error: "Could not find module" → Add the import at the top: `import ModuleName
 Error: "Couldn't match type" → Check you're using Party for parties, Decimal for numbers, Text for strings
 Error: "controller ... not party" → The controller must reference a Party field from the template
 Error: "Ambiguous occurrence" → Qualify the name or use a different identifier
+Error: "Multiple 'ensure' declarations" → A template can only have ONE ensure clause. Merge conditions: `ensure cond1 && cond2`
 
 DAML SYNTAX REMINDERS:
 - `signatory` and `observer` must be directly inside `where` block (no indentation relative to where)
@@ -42,16 +43,14 @@ ERROR_EXPLANATIONS = {
     "unknown_variable":     "A variable is used but not defined. Make sure all party and field names are declared in the `with` block.",
     "missing_import":       "A module is referenced but not imported. Add `import ModuleName` at the top of the file.",
     "ambiguous_occurrence": "An identifier matches multiple definitions. Qualify it with the module name (e.g., `Module.identifier`).",
+    "multiple_ensure":      "Each template can have at most ONE `ensure` clause. Merge all conditions: `ensure cond1 && cond2 && cond3`.",
     "wrong_controller":     "The controller expression is not a Party. Use a field name of type Party from the template's `with` block.",
     "indentation_error":    "Indentation must be consistent. Use exactly 2 spaces for each level.",
     "unknown":              "Check the full error message and ensure Daml syntax rules are followed.",
 }
 
 
-def run_fix_agent(daml_code: str, compile_errors: list[dict], attempt_number: int) -> str:
-    settings = get_settings()
-    client = Anthropic(api_key=settings.anthropic_api_key)
-
+def run_fix_agent(daml_code: str, compile_errors: list[dict], attempt_number: int) -> dict:
     logger.info("Running fix agent", attempt=attempt_number, error_count=len(compile_errors))
 
     error_descriptions = _format_errors_for_llm(compile_errors)
@@ -62,18 +61,18 @@ def run_fix_agent(daml_code: str, compile_errors: list[dict], attempt_number: in
     else:
         user_message = _build_fix_message(daml_code, error_descriptions)
 
-    response = client.messages.create(
-        model=settings.llm_model,
-        max_tokens=4096,
-        system=FIX_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}]
-    )
-
-    fixed_code = response.content[0].text.strip()
-    clean_code = _extract_daml_code(fixed_code)
-
-    logger.info("Fix agent completed", attempt=attempt_number, code_length=len(clean_code))
-    return clean_code
+    try:
+        raw = call_llm(
+            system_prompt=FIX_SYSTEM_PROMPT,
+            user_message=user_message,
+            max_tokens=4096,
+        )
+        clean_code = _extract_daml_code(raw)
+        logger.info("Fix agent completed", attempt=attempt_number, code_length=len(clean_code))
+        return {"success": True, "fixed_code": clean_code}
+    except Exception as e:
+        logger.error("Fix agent failed", error=str(e))
+        return {"success": False, "error": str(e), "fixed_code": daml_code}
 
 
 def _format_errors_for_llm(errors: list[dict]) -> str:

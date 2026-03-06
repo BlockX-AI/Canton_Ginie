@@ -13,11 +13,26 @@ from config import get_settings
 
 
 # ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+def api_key_valid():
+    from utils.llm_client import check_llm_available
+    result = check_llm_available()
+    if not result["ok"]:
+        print(f"\n  LLM check failed: provider={result['provider']} error={result.get('error','')}")
+    return result["ok"]
+
+
+# ---------------------------------------------------------------------------
 # Intent Agent
 # ---------------------------------------------------------------------------
 
 class TestIntentAgent:
-    def test_parses_bond_contract(self):
+    def test_parses_bond_contract(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid — update ANTHROPIC_API_KEY in backend/.env")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent(
             "I want a bond tokenization contract where Goldman Sachs issues "
@@ -32,7 +47,9 @@ class TestIntentAgent:
         print(f"  parties       : {intent['parties']}")
         print(f"  key_features  : {intent.get('key_features', [])}")
 
-    def test_parses_escrow_contract(self):
+    def test_parses_escrow_contract(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent(
             "Build an escrow contract with buyer, seller and escrow agent. "
@@ -42,14 +59,18 @@ class TestIntentAgent:
         intent = result["structured_intent"]
         assert "escrow" in str(intent).lower() or "buyer" in str(intent["parties"]).lower()
 
-    def test_parses_nft_contract(self):
+    def test_parses_nft_contract(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent("Create an NFT marketplace where artists mint tokens and collectors trade them.")
         assert result["success"]
         intent = result["structured_intent"]
         assert intent.get("contract_type")
 
-    def test_returns_daml_templates(self):
+    def test_returns_daml_templates(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent("Simple asset transfer between two parties.")
         assert result["success"]
@@ -62,7 +83,9 @@ class TestIntentAgent:
 # ---------------------------------------------------------------------------
 
 class TestWriterAgent:
-    def test_generates_valid_daml(self):
+    def test_generates_valid_daml(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.writer_agent import run_writer_agent
         intent = {
             "contract_type": "bond_tokenization",
@@ -81,7 +104,9 @@ class TestWriterAgent:
         print(f"\n  code_length   : {len(code)} chars")
         print(f"  first_80_chars: {code[:80].strip()}")
 
-    def test_generates_valid_daml_escrow(self):
+    def test_generates_valid_daml_escrow(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.writer_agent import run_writer_agent
         intent = {
             "contract_type": "escrow",
@@ -97,7 +122,9 @@ class TestWriterAgent:
         assert "template" in code.lower()
         assert "signatory" in code.lower()
 
-    def test_has_module_declaration(self):
+    def test_has_module_declaration(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.writer_agent import run_writer_agent
         intent = {
             "contract_type": "equity_token",
@@ -204,7 +231,9 @@ setup = script do
 # ---------------------------------------------------------------------------
 
 class TestFixAgent:
-    def test_fix_improves_code(self):
+    def test_fix_improves_code(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.fix_agent import run_fix_agent
 
         bad_code = "module Main where\n\ntemplate Broken\n  with\n    owner : Party\n  where\n    choice Foo : () controller owner do return ()\n"
@@ -216,7 +245,9 @@ class TestFixAgent:
         assert "signatory" in fixed.lower(), "Fix agent did not add signatory"
         print(f"\n  fixed snippet: {fixed[:120]}")
 
-    def test_fix_regenerates_on_many_errors(self):
+    def test_fix_regenerates_on_many_errors(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.fix_agent import run_fix_agent
 
         bad_code = "this is not valid daml at all\n"
@@ -232,7 +263,9 @@ class TestFixAgent:
 # ---------------------------------------------------------------------------
 
 class TestPipelineCompile:
-    def test_intent_to_compile(self):
+    def test_intent_to_compile(self, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("Anthropic API key invalid")
         from agents.intent_agent import run_intent_agent
         from agents.writer_agent import run_writer_agent
         from agents.compile_agent import run_compile_agent, resolve_daml_sdk

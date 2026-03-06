@@ -37,6 +37,17 @@ def settings():
 
 
 @pytest.fixture(scope="session")
+def api_key_valid(settings):
+    from utils.llm_client import check_llm_available
+    result = check_llm_available()
+    if not result["ok"]:
+        print(f"\n  LLM unavailable: provider={result['provider']} error={result.get('error','')}")
+    else:
+        print(f"\n  LLM ready: provider={result['provider']} model={result['model']}")
+    return result["ok"]
+
+
+@pytest.fixture(scope="session")
 def daml_sdk_available():
     from agents.compile_agent import resolve_daml_sdk
     try:
@@ -87,7 +98,9 @@ class TestE2EIntentToCode:
     ]
 
     @pytest.mark.parametrize("contract_name,prompt", PROMPTS)
-    def test_intent_to_code(self, contract_name, prompt):
+    def test_intent_to_code(self, contract_name, prompt, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("LLM unavailable — check GEMINI_API_KEY or ANTHROPIC_API_KEY in backend/.env")
         from agents.intent_agent import run_intent_agent
         from agents.writer_agent import run_writer_agent
 
@@ -131,7 +144,9 @@ class TestE2EIntentToCode:
 # ---------------------------------------------------------------------------
 
 class TestE2ECompile:
-    def test_bond_compiles(self, daml_sdk_available):
+    def test_bond_compiles(self, daml_sdk_available, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("LLM unavailable — check API key in backend/.env")
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed — install with: curl -sSL https://get.daml.com/ | sh")
 
@@ -172,7 +187,9 @@ class TestE2ECompile:
         assert os.path.exists(compile_result["dar_path"]), "DAR file path returned but file does not exist"
         print(f"  [e2e-compile] DAR produced: {compile_result['dar_path']}")
 
-    def test_compile_fix_loop(self, daml_sdk_available):
+    def test_compile_fix_loop(self, daml_sdk_available, api_key_valid):
+        if not api_key_valid:
+            pytest.skip("LLM unavailable — check API key in backend/.env")
         """If first compile fails, the fix agent must improve the code."""
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed")
@@ -222,9 +239,11 @@ class TestE2ECompile:
 # ---------------------------------------------------------------------------
 
 class TestE2EOrchestrator:
-    def test_full_pipeline_no_deploy(self, daml_sdk_available):
+    def test_full_pipeline_no_deploy(self, daml_sdk_available, api_key_valid):
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed")
+        if not api_key_valid:
+            pytest.skip("LLM unavailable — check API key in backend/.env")
 
         from pipeline.orchestrator import run_pipeline
 
@@ -232,12 +251,12 @@ class TestE2EOrchestrator:
         print(f"\n  [orchestrator] prompt={prompt[:60]}...")
 
         t0 = time.time()
-        result = asyncio.run(run_pipeline(
-            prompt=prompt,
+        result = run_pipeline(
+            user_input=prompt,
             canton_environment="sandbox",
-            canton_url="http://localhost:6865",
+            canton_url="http://localhost:7575",
             job_id="e2e-orchestrator-test",
-        ))
+        )
         elapsed = time.time() - t0
         print(f"  [orchestrator] elapsed={elapsed:.1f}s  status={result.get('status')}")
         print(f"  [orchestrator] step={result.get('current_step')}")
@@ -260,11 +279,13 @@ class TestE2EOrchestrator:
 # ---------------------------------------------------------------------------
 
 class TestE2EFullDeploy:
-    def test_full_pipeline_with_deploy(self, daml_sdk_available, canton_available):
+    def test_full_pipeline_with_deploy(self, daml_sdk_available, canton_available, api_key_valid):
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed")
         if not canton_available:
             pytest.skip("Canton sandbox not running — start with: daml sandbox")
+        if not api_key_valid:
+            pytest.skip("LLM unavailable — check API key in backend/.env")
 
         from pipeline.orchestrator import run_pipeline
 
@@ -275,12 +296,12 @@ class TestE2EFullDeploy:
         print(f"\n  [full-deploy] prompt={prompt[:60]}...")
 
         t0 = time.time()
-        result = asyncio.run(run_pipeline(
-            prompt=prompt,
+        result = run_pipeline(
+            user_input=prompt,
             canton_environment="sandbox",
-            canton_url="http://localhost:6865",
+            canton_url="http://localhost:7575",
             job_id="e2e-full-deploy",
-        ))
+        )
         elapsed = time.time() - t0
         print(f"  [full-deploy] elapsed={elapsed:.1f}s")
         print(f"  [full-deploy] status={result.get('status')}")
@@ -316,7 +337,7 @@ class TestE2EAPI:
         assert data["status"] == "ok"
         print(f"\n  [api-health] {data}")
 
-    def test_generate_and_poll(self):
+    def test_generate_and_poll(self, api_key_valid):
         import httpx
 
         try:
@@ -357,5 +378,9 @@ class TestE2EAPI:
         print(f"  [api-result] contract_id={result.get('contract_id')}")
         print(f"  [api-result] code_length={len(result.get('generated_code',''))}")
 
-        assert result.get("generated_code"), "No Daml code in final result"
-        assert result["status"] in ("complete", "failed")
+        assert result["status"] in ("complete", "failed"), \
+            f"Job did not reach terminal state: {result['status']}"
+        if api_key_valid:
+            assert result.get("generated_code"), "No Daml code in final result (API key is valid, this is a real failure)"
+        else:
+            print("  [api-poll] SKIP code assertion — Anthropic API key invalid (update backend/.env)")

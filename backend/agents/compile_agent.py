@@ -39,6 +39,7 @@ ERROR_PATTERNS = {
     "unknown_variable":     r"Variable not in scope|Not in scope",
     "missing_import":       r"Could not find module|Module.*not found",
     "ambiguous_occurrence": r"Ambiguous occurrence",
+    "multiple_ensure":      r"Multiple.*ensure|multiple.*ensure",
     "wrong_controller":     r"controller.*not.*party",
     "missing_do":           r"do.*expected",
     "indentation_error":    r"indentation",
@@ -115,14 +116,79 @@ def run_compile_agent(daml_code: str, job_id: str) -> dict:
         }
 
 
+def _sanitize_daml(code: str) -> str:
+    lines = code.split("\n")
+    result = []
+    ensure_seen_in_template = False
+    in_where_block = False
+    pending_ensure: str | None = None
+    prev_line_stripped = ""
+
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+
+        if stripped.startswith("template ") or stripped.startswith("interface "):
+            ensure_seen_in_template = False
+            in_where_block = False
+            pending_ensure = None
+
+        if stripped.startswith("where"):
+            in_where_block = True
+
+        if in_where_block and stripped.startswith("ensure "):
+            if not ensure_seen_in_template:
+                ensure_seen_in_template = True
+                pending_ensure = line
+                continue
+            else:
+                extra_cond = stripped[len("ensure "):].strip()
+                if pending_ensure is not None:
+                    prev_cond = pending_ensure.lstrip()[len("ensure "):].strip()
+                    indent = len(pending_ensure) - len(pending_ensure.lstrip())
+                    pending_ensure = " " * indent + f"ensure {prev_cond} && {extra_cond}"
+                continue
+
+        if pending_ensure is not None:
+            result.append(pending_ensure)
+            pending_ensure = None
+
+        script_assign = re.match(r'^([a-z][a-zA-Z0-9_]*)\s*=\s*script\s+do', stripped)
+        if script_assign:
+            fn_name = script_assign.group(1)
+            has_annotation = prev_line_stripped.startswith(f"{fn_name} :") or \
+                             prev_line_stripped.startswith(f"{fn_name}:")
+            if not has_annotation:
+                result.append(f"{fn_name} : Script ()")
+
+        line = re.sub(r'\b([A-Z][a-zA-Z0-9_]*)\.([a-z][a-zA-Z0-9_]*)\b', _strip_module_qualifier, line)
+        result.append(line)
+        prev_line_stripped = stripped
+
+    if pending_ensure is not None:
+        result.append(pending_ensure)
+
+    return "\n".join(result)
+
+
+def _strip_module_qualifier(m: re.Match) -> str:
+    qualified = m.group(0)
+    template_name = m.group(1)
+    field_name = m.group(2)
+    daml_modules = {"Daml", "DA", "GHC", "Data", "Text", "Numeric", "Time", "Date", "Map", "Set", "Optional", "Either", "Script"}
+    if template_name in daml_modules:
+        return qualified
+    return field_name
+
+
 def _create_project_dir(daml_code: str, job_id: str, base_dir: str) -> str:
     project_dir = os.path.join(base_dir, f"ginie-{job_id}")
     daml_src_dir = os.path.join(project_dir, "daml")
 
     Path(daml_src_dir).mkdir(parents=True, exist_ok=True)
 
+    sanitized = _sanitize_daml(daml_code)
     with open(os.path.join(daml_src_dir, "Main.daml"), "w") as f:
-        f.write(daml_code)
+        f.write(sanitized)
 
     with open(os.path.join(project_dir, "daml.yaml"), "w") as f:
         f.write(DAML_YAML_TEMPLATE.format(project_name=f"ginie-{job_id[:8]}"))

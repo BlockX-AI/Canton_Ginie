@@ -1,8 +1,8 @@
 import json
 import structlog
-from anthropic import Anthropic
 
 from config import get_settings
+from utils.llm_client import call_llm
 
 logger = structlog.get_logger()
 
@@ -52,25 +52,14 @@ Example output format:
 
 
 def run_intent_agent(user_input: str) -> dict:
-    settings = get_settings()
-    client = Anthropic(api_key=settings.anthropic_api_key)
-
     logger.info("Running intent agent", input_length=len(user_input))
 
     try:
-        response = client.messages.create(
-            model=settings.llm_model,
+        raw_output = call_llm(
+            system_prompt=INTENT_SYSTEM_PROMPT,
+            user_message=f"Parse this contract description and return structured JSON:\n\n{user_input}",
             max_tokens=1024,
-            system=INTENT_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Parse this contract description and return structured JSON:\n\n{user_input}"
-                }
-            ]
         )
-
-        raw_output = response.content[0].text.strip()
 
         if raw_output.startswith("```"):
             lines = raw_output.split("\n")
@@ -84,14 +73,15 @@ def run_intent_agent(user_input: str) -> dict:
                 intent[field] = _get_default(field)
 
         logger.info("Intent parsed", contract_type=intent.get("contract_type"), parties=intent.get("parties"))
-        return intent
+        return {"success": True, "structured_intent": intent}
 
     except json.JSONDecodeError as e:
         logger.error("Failed to parse intent JSON", error=str(e))
-        return _fallback_intent(user_input)
+        fallback = _fallback_intent(user_input)
+        return {"success": True, "structured_intent": fallback}
     except Exception as e:
         logger.error("Intent agent failed", error=str(e))
-        raise
+        return {"success": False, "error": str(e), "structured_intent": _fallback_intent(user_input)}
 
 
 def _get_default(field: str):

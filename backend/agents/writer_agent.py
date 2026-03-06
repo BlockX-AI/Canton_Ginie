@@ -1,9 +1,9 @@
 import re
 import structlog
-from anthropic import Anthropic
 
 from config import get_settings
 from rag.vector_store import search_daml_patterns
+from utils.llm_client import call_llm
 
 logger = structlog.get_logger()
 
@@ -20,13 +20,26 @@ STRICT DAML SYNTAX RULES YOU MUST FOLLOW:
 7. Indentation: use 2 spaces consistently
 8. Template fields are separated by newlines, not commas
 9. The `with` block for template fields uses no commas
-10. ensure clauses validate pre-conditions
-11. assertMsg for runtime checks inside choices
-12. ContractId <TemplateName> is the type for contract references
-13. Use `do` blocks for choice bodies
-14. `create` creates a new contract, `archive` destroys one
-15. `fetch` reads a contract without archiving it
-16. `exercise` calls a choice on a contract
+10. CRITICAL: Each template can have AT MOST ONE `ensure` clause — combine multiple conditions with &&
+    WRONG: ensure amount > 0.0 \n    ensure issuer /= investor
+    RIGHT:  ensure amount > 0.0 && issuer /= investor
+11. CRITICAL: NEVER use module-qualified names for template fields inside choice do-blocks
+    WRONG: bond <- fetch CouponPayment.bondCid
+    RIGHT:  bond <- fetch bondCid
+12. assertMsg for runtime checks inside choices
+13. ContractId <TemplateName> is the type for contract references
+14. Use `do` blocks for choice bodies
+15. `create` creates a new contract, `archive` destroys one
+16. `fetch` reads a contract without archiving it
+17. `exercise` calls a choice on a contract
+18. CRITICAL: Every top-level Script function MUST have an explicit type annotation:
+    WRONG: myTest = script do ...
+    RIGHT:  myTest : Script ()
+            myTest = script do ...
+19. CRITICAL: Choice return type MUST match what the do-block actually returns:
+    If return type is `ContractId Foo`, the last line must be `create Foo with ...`
+    If return type is `()`, the last line must be `return ()` or `archive ...`
+    NEVER declare a non-() return type unless the do-block creates/returns that exact type
 
 CANTON PARTY MODEL:
 - Parties are named actors with permissions (NOT wallet addresses)
@@ -62,9 +75,8 @@ OUTPUT FORMAT:
 - Start directly with: module Main where"""
 
 
-def run_writer_agent(structured_intent: dict, rag_context: list[str]) -> str:
+def run_writer_agent(structured_intent: dict, rag_context: list[str] = None) -> dict:
     settings = get_settings()
-    client = Anthropic(api_key=settings.anthropic_api_key)
 
     parties = structured_intent.get("parties", ["owner", "counterparty"])
     features = structured_intent.get("features", [])
@@ -105,20 +117,25 @@ CHOICES TO IMPLEMENT:
 
 Write the complete Daml module. Use module name 'Main'. Include a setup script using Daml.Script for testing."""
 
+    if rag_context is None:
+        rag_context = []
+
     logger.info("Running writer agent", contract_type=contract_type, templates=templates)
 
-    response = client.messages.create(
-        model=settings.llm_model,
-        max_tokens=4096,
-        system=WRITER_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}]
-    )
+    try:
+        raw_code = call_llm(
+            system_prompt=WRITER_SYSTEM_PROMPT,
+            user_message=user_message,
+            max_tokens=4096,
+        )
+        clean_code = _extract_daml_code(raw_code)
 
-    raw_code = response.content[0].text.strip()
-    clean_code = _extract_daml_code(raw_code)
+        logger.info("Writer agent completed", code_length=len(clean_code))
+        return {"success": True, "daml_code": clean_code}
 
-    logger.info("Writer agent completed", code_length=len(clean_code))
-    return clean_code
+    except Exception as e:
+        logger.error("Writer agent failed", error=str(e))
+        return {"success": False, "error": str(e), "daml_code": ""}
 
 
 def fetch_rag_context(structured_intent: dict) -> list[str]:
