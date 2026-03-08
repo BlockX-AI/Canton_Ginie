@@ -1,13 +1,23 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
+  // Disable source maps in production to protect code
+  productionBrowserSourceMaps: false,
+  // Remove console.log in production
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production",
+  },
+  images: {
+    remotePatterns: [
       {
-        source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*",
+        protocol: "https",
+        hostname: "picsum.photos",
       },
-    ];
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+    ],
   },
 };
 
