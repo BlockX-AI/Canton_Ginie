@@ -169,3 +169,247 @@ def _extract_daml_code(raw: str) -> str:
         return raw[idx:].strip()
 
     return raw.strip()
+
+
+# ---------------------------------------------------------------------------
+# Sandbox-based targeted fix agent
+# ---------------------------------------------------------------------------
+
+_MISSING_IMPORTS = {
+    "DA.Time":  ["Time", "datetime", "RelTime", "addRelTime"],
+    "DA.Date":  ["Date", "date", "fromGregorian", "toGregorian"],
+    "DA.List":  ["sortOn", "dedup", "head", "tail", "isPrefixOf"],
+    "DA.Map":   ["Map", "fromList", "toList", "lookup", "insert", "delete"],
+    "DA.Set":   ["Set", "fromList", "toList", "member", "insert", "delete"],
+    "DA.Text":  ["Text", "explode", "intercalate", "isPrefixOf"],
+}
+
+
+def _detect_needed_import(message: str) -> str | None:
+    for module, keywords in _MISSING_IMPORTS.items():
+        for kw in keywords:
+            if kw in message:
+                return module
+    return None
+
+
+async def _fix_type_mismatch(code: str, error: dict) -> str:
+    msg = error.get("message", "")
+
+    # Fix: time (toGregorian date) h m s  →  time date h m s
+    # toGregorian returns (Int,Month,Int) but time expects Date
+    if "toGregorian" in code and "Date" in msg:
+        fixed = re.sub(r"\btime\s+\(toGregorian\s+(\w+)\)", r"time \1", code)
+        if fixed != code:
+            return fixed
+
+    # Fix: (Int, Month, Int) used where Date expected — drop toGregorian calls wholesale
+    if "(Int, Month, Int)" in msg or "Month" in msg:
+        fixed = re.sub(r"toGregorian\s+", "", code)
+        if fixed != code:
+            return fixed
+
+    line_idx = error.get("line", 0) - 1
+    lines = code.split("\n")
+    if line_idx < 0 or line_idx >= len(lines):
+        return code
+
+    line = lines[line_idx]
+
+    # Int → Decimal for numeric fields
+    if "Int" in msg or ": Int" in line:
+        lines[line_idx] = line.replace(": Int", ": Decimal")
+        return "\n".join(lines)
+
+    # Numeric n → Decimal
+    if "Numeric" in line:
+        lines[line_idx] = re.sub(r"Numeric\s+\d+", "Decimal", line)
+        return "\n".join(lines)
+
+    # Fix: fromGregorian (Int,Int,Int) → date
+    if "fromGregorian" in line:
+        lines[line_idx] = re.sub(r"fromGregorian\s+\d+\s+\w+\s+\d+", "(date 2024 Jan 1)", line)
+        return "\n".join(lines)
+
+    return code
+
+
+async def _fix_missing_signatory(code: str) -> str:
+    where_pattern = re.compile(r"(  where\n)(?!\s+signatory)")
+    if where_pattern.search(code):
+        # Find first Party field to use as signatory
+        party_field_match = re.search(r"^\s+(\w+)\s*:\s*Party", code, re.MULTILINE)
+        party_field = party_field_match.group(1) if party_field_match else "issuer"
+        return where_pattern.sub(f"  where\n    signatory {party_field}\n", code, count=1)
+    return code
+
+
+async def _fix_import_error(code: str, error: dict) -> str:
+    needed = _detect_needed_import(error.get("message", ""))
+    if not needed:
+        return code
+
+    import_line = f"import {needed}"
+    if import_line in code:
+        return code
+
+    lines = code.split("\n")
+    insert_idx = 0
+    for i, line in enumerate(lines):
+        if line.startswith("import "):
+            insert_idx = i + 1
+        elif line.startswith("module "):
+            insert_idx = i + 1
+
+    lines.insert(insert_idx, import_line)
+    return "\n".join(lines)
+
+
+async def _fix_unknown_variable(code: str, error: dict) -> str:
+    msg = error.get("message", "")
+    # Strip "this." references — common mistake
+    if "this." in code:
+        return re.sub(r"\bthis\.([a-z][a-zA-Z0-9_]*)\b", r"\1", code)
+    return code
+
+
+async def _fix_parse_error(code: str, error: dict) -> str:
+    """Fix common DAML parse errors produced by LLMs."""
+    original = code
+
+    # 1. Replace tabs with 2 spaces
+    code = code.replace("\t", "  ")
+
+    # 2. Remove markdown code fences the LLM may have left
+    code = re.sub(r"^```(?:daml|haskell)?\s*$", "", code, flags=re.MULTILINE)
+
+    # 3. Remove commas between template `with` fields
+    #    e.g.  issuer : Party,  →  issuer : Party
+    code = re.sub(r"(:\s*\w+)\s*,\s*$", r"\1", code, flags=re.MULTILINE)
+
+    # 4. Remove braces that some LLMs add around template/choice bodies
+    code = code.replace("{", "").replace("}", "")
+
+    # 5. Fix `where {` → `where`
+    code = re.sub(r"\bwhere\s*\{", "where", code)
+
+    # 6. Remove semicolons
+    code = re.sub(r";\s*$", "", code, flags=re.MULTILINE)
+
+    # 7. Fix `deriving` lines (not valid in DAML)
+    code = re.sub(r"^\s*deriving.*$", "", code, flags=re.MULTILINE)
+
+    # 8. Fix double-colon type annotations `field :: Type` → `field : Type`
+    code = re.sub(r"(\w+)\s*::\s*(\w+)", r"\1 : \2", code)
+
+    if code != original:
+        return code
+    return original
+
+
+async def _fix_multiple_declaration(code: str, error: dict) -> str:
+    """
+    Remove the SECOND definition of a duplicate choice/template name.
+    The error message contains the name: 'Multiple declarations of Foo'
+    and the duplicate line number.
+    """
+    msg = error.get("message", "")
+    dup_name_m = re.search(r"Multiple declarations of [\u2018\u2019'`\"](\w+)[\u2018\u2019'`\"]", msg)
+    if not dup_name_m:
+        dup_name_m = re.search(r"Multiple declarations of (\w+)", msg)
+    if not dup_name_m:
+        return code
+
+    name = dup_name_m.group(1)
+    dup_line = error.get("line", 0)  # second (duplicate) declaration line
+    if dup_line <= 0:
+        return code
+
+    lines = code.split("\n")
+    if dup_line > len(lines):
+        return code
+
+    idx = dup_line - 1  # 0-based
+    # Find the start of the block containing this duplicate (look backwards for choice/template)
+    block_start = idx
+    for k in range(idx, -1, -1):
+        stripped = lines[k].strip()
+        if stripped.startswith(f"choice {name}") or stripped.startswith(f"template {name}"):
+            block_start = k
+            break
+
+    # Find end of the block (next same-level keyword or end of file)
+    indent = len(lines[block_start]) - len(lines[block_start].lstrip())
+    block_end = len(lines)
+    for k in range(block_start + 1, len(lines)):
+        stripped = lines[k].strip()
+        if not stripped:
+            continue
+        cur_indent = len(lines[k]) - len(lines[k].lstrip())
+        if cur_indent <= indent and stripped and not stripped.startswith("--"):
+            block_end = k
+            break
+
+    del lines[block_start:block_end]
+    return "\n".join(lines)
+
+
+async def run_fix_agent_sandbox(
+    sandbox,
+    compile_errors: list[dict],
+    attempt: int = 0,
+    max_attempts: int = 5,
+) -> dict:
+    if attempt >= max_attempts:
+        return {"success": False, "error": "Max fix attempts reached", "attempt": attempt}
+
+    logger.info("Running sandbox fix agent", attempt=attempt, error_count=len(compile_errors))
+
+    changed = False
+
+    for error in compile_errors:
+        error_type = error.get("type", "unknown")
+        file_name = error.get("file", "Main.daml")
+        # Normalise: strip any leading daml/ so we don't build daml/daml/...
+        clean_name = file_name.lstrip("/").lstrip("\\")
+        if clean_name.startswith("daml/") or clean_name.startswith("daml\\"):
+            file_path = clean_name.replace("\\", "/")
+        else:
+            file_path = f"daml/{clean_name}"
+
+        try:
+            code = await sandbox.files.read(file_path)
+        except FileNotFoundError:
+            logger.warning("Fix agent: file not found", path=file_path)
+            continue
+
+        original = code
+
+        if error_type == "type_mismatch":
+            code = await _fix_type_mismatch(code, error)
+        elif error_type == "missing_signatory":
+            code = await _fix_missing_signatory(code)
+        elif error_type == "import_error":
+            code = await _fix_import_error(code, error)
+        elif error_type == "unknown_variable":
+            code = await _fix_unknown_variable(code, error)
+        elif error_type == "indentation_error":
+            code = code.replace("\t", "  ")
+        elif error_type == "multiple_declaration":
+            code = await _fix_multiple_declaration(code, error)
+        elif error_type == "parse_error":
+            code = await _fix_parse_error(code, error)
+        else:
+            logger.debug("No targeted fix for error type", error_type=error_type)
+            continue
+
+        if code != original:
+            await sandbox.files.write(file_path, code)
+            changed = True
+            logger.info("Applied targeted fix", error_type=error_type, file=file_name)
+
+    return {
+        "success": True,
+        "changed": changed,
+        "attempt": attempt + 1,
+    }

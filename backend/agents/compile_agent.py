@@ -6,6 +6,7 @@ import structlog
 from pathlib import Path
 
 from config import get_settings
+from daml.error_classifier import ErrorClassifier
 
 logger = structlog.get_logger()
 
@@ -377,3 +378,42 @@ def _summarize_errors(errors: list[dict]) -> str:
         loc = f"line {err['line']}" if err.get("line") else "unknown location"
         summary_parts.append(f"[{err.get('error_type', 'error')} at {loc}]: {err.get('message', '')[:100]}")
     return "\n".join(summary_parts)
+
+
+async def run_compile_agent_sandbox(sandbox, project_name: str) -> dict:
+    logger.info("Running sandbox compile agent", project_name=project_name)
+
+    try:
+        sdk_path = resolve_daml_sdk()
+    except FileNotFoundError as exc:
+        return {
+            "compile_success": False,
+            "dar_path": "",
+            "compile_errors": [{"file": "", "line": 0, "column": 0, "type": "sdk_not_installed", "message": str(exc), "context": []}],
+        }
+
+    result = await sandbox.commands.run(f'"{sdk_path}" build --project-root .')
+
+    if result["exit_code"] == 0:
+        dar_path = f".daml/dist/{project_name}-0.0.1.dar"
+        logger.info("Sandbox compilation succeeded", project_name=project_name, dar_path=dar_path)
+        return {
+            "compile_success": True,
+            "dar_path": dar_path,
+            "compile_errors": [],
+        }
+
+    combined = (result["stderr"] + "\n" + result["stdout"]).strip()
+    classifier = ErrorClassifier()
+    errors = classifier.parse_compile_output(combined)
+
+    logger.warning(
+        "Sandbox compilation failed",
+        project_name=project_name,
+        error_count=len(errors),
+    )
+    return {
+        "compile_success": False,
+        "dar_path": "",
+        "compile_errors": errors,
+    }

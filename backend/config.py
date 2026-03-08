@@ -1,6 +1,9 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
 import os
+
+_ENV_FILE = str(Path(__file__).parent / ".env")
 
 
 class Settings(BaseSettings):
@@ -15,6 +18,7 @@ class Settings(BaseSettings):
     canton_devnet_url: str = "https://canton.network/ledger"
     canton_mainnet_url: str = "https://main.canton.network/ledger"
     canton_environment: str = "sandbox"
+    canton_token: str = ""
 
     daml_sdk_path: str = os.path.expanduser("~/.daml/bin/daml")
     dar_output_dir: str = "/tmp/ginie_jobs"
@@ -30,7 +34,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.1
 
     class Config:
-        env_file = ".env"
+        env_file = _ENV_FILE
         case_sensitive = False
 
     def get_canton_url(self) -> str:

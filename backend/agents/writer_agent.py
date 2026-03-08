@@ -138,6 +138,11 @@ Write the complete Daml module. Use module name 'Main'. Include a setup script u
             user_message=user_message,
             max_tokens=4096,
         )
+        
+        if not raw_code:
+            logger.error("Writer agent failed", error="LLM returned empty response")
+            return {"success": False, "error": "LLM returned empty response", "daml_code": ""}
+        
         clean_code = _extract_daml_code(raw_code)
 
         logger.info("Writer agent completed", code_length=len(clean_code))

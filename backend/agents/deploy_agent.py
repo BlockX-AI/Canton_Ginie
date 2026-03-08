@@ -1,11 +1,13 @@
 import os
+import re
 import uuid
-import hashlib
+import zipfile
 import structlog
 import httpx
 from typing import Optional
 
 from config import get_settings
+from canton.canton_client_v2 import CantonClientV2, make_sandbox_jwt
 
 logger = structlog.get_logger()
 
@@ -212,4 +214,175 @@ def run_deploy_agent(
 
 
 def _compute_package_id(dar_bytes: bytes) -> str:
-    return hashlib.sha256(dar_bytes).hexdigest()[:40]
+    pass  # replaced by _extract_package_id_from_dar
+
+
+def _extract_package_id_from_dar(dar_path: str) -> str:
+    """Read the main DALF package hash from META-INF/MANIFEST.MF inside the DAR zip."""
+    try:
+        with zipfile.ZipFile(dar_path) as z:
+            manifest = z.read("META-INF/MANIFEST.MF").decode("utf-8")
+        # Reconstruct multi-line folded value (lines starting with a space are continuations)
+        lines: list[str] = []
+        for raw in manifest.splitlines():
+            if raw.startswith(" ") and lines:
+                lines[-1] += raw[1:]
+            else:
+                lines.append(raw)
+        for line in lines:
+            if line.startswith("Main-Dalf:"):
+                main_dalf = line.split(":", 1)[1].strip()
+                # Pattern:  {dir}-{hash}/{filename}-{hash}.dalf
+                # Extract 64-char hex hash from filename
+                import re as _re
+                m = _re.search(r"[/\\]([0-9a-f]{64})\.dalf$", main_dalf)
+                if m:
+                    return m.group(1)
+                # Fallback: any 64-char hex run in the path
+                m = _re.search(r"[0-9a-f]{64}", main_dalf)
+                if m:
+                    return m.group(0)
+    except Exception as exc:
+        logger.warning("Could not extract package ID from DAR manifest", error=str(exc))
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Sandbox-based async deploy agent using Canton v2 API
+# ---------------------------------------------------------------------------
+
+def _parse_template_fields(daml_code: str) -> list[dict]:
+    template_match = re.search(
+        r"template\s+\w+\s+with\s+(.*?)\s+where",
+        daml_code,
+        re.DOTALL,
+    )
+    if not template_match:
+        return []
+
+    fields = []
+    for line in template_match.group(1).split("\n"):
+        line = line.strip()
+        if ":" in line:
+            name, field_type = line.split(":", 1)
+            fields.append({"name": name.strip(), "type": field_type.strip()})
+    return fields
+
+
+def _build_payload(fields: list[dict], party_values: dict) -> dict:
+    payload = {}
+    for field in fields:
+        name = field["name"]
+        ftype = field["type"].strip()
+
+        if name in party_values:
+            payload[name] = party_values[name]
+        elif ftype == "Party":
+            payload[name] = list(party_values.values())[0] if party_values else name
+        elif ftype in ("Decimal", "Numeric") or ftype.startswith("Numeric "):
+            payload[name] = "1.0"
+        elif ftype == "Int" or ftype == "Int64":
+            payload[name] = 1
+        elif ftype == "Text":
+            payload[name] = f"sample-{name}"
+        elif ftype == "Date":
+            payload[name] = "2024-01-01"
+        elif ftype in ("Time", "UTCTime"):
+            payload[name] = "2024-01-01T00:00:00Z"
+        elif ftype == "Bool":
+            payload[name] = True
+        elif ftype.startswith("["):
+            payload[name] = []
+        elif ftype.startswith("Optional"):
+            payload[name] = None
+        else:
+            payload[name] = f"sample-{name}"
+    return payload
+
+
+def _extract_template_name(daml_code: str) -> str | None:
+    match = re.search(r"^template\s+(\w+)", daml_code, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _extract_module_name(daml_code: str) -> str | None:
+    match = re.search(r"^module\s+(\S+)\s+where", daml_code, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+async def run_deploy_agent_sandbox(
+    sandbox,
+    project_name: str,
+    parties: list[str],
+    canton_url: str,
+    auth_token: Optional[str] = None,
+) -> dict:
+    logger.info("Running sandbox deploy agent", project_name=project_name, canton_url=canton_url)
+
+    client = CantonClientV2(canton_url, auth_token)
+
+    dar_relative = f".daml/dist/{project_name}-0.0.1.dar"
+    dar_absolute = sandbox.get_absolute_path(dar_relative)
+
+    # Step 1: Extract real package ID from DAR manifest before upload
+    package_id = _extract_package_id_from_dar(dar_absolute)
+
+    success, error = await client.upload_dar(dar_absolute)
+    if not success:
+        logger.error("DAR upload failed", error=error)
+        return {"success": False, "error": f"DAR upload failed: {error}", "contract_id": "", "package_id": ""}
+
+    logger.info("DAR uploaded", package_id=package_id)
+
+    # Step 2: Allocate parties
+    allocated: dict[str, str] = {}
+    for party_hint in parties:
+        ok, party_id, err = await client.allocate_party(party_hint)
+        if not ok:
+            logger.error("Party allocation failed", hint=party_hint, error=err)
+            return {"success": False, "error": f"Party allocation failed for {party_hint}: {err}", "contract_id": "", "package_id": package_id}
+        allocated[party_hint] = party_id
+        logger.info("Party allocated", hint=party_hint, party_id=party_id)
+
+    # Regenerate JWT with real party IDs so the ledger authorises the actAs parties
+    full_party_ids = list(allocated.values())
+    if full_party_ids:
+        client.set_token(make_sandbox_jwt(full_party_ids))
+
+    # Step 3: Parse template fields from Main.daml
+    try:
+        daml_code = await sandbox.files.read("daml/Main.daml")
+    except FileNotFoundError:
+        return {"success": False, "error": "daml/Main.daml not found in sandbox", "contract_id": "", "package_id": package_id}
+
+    template_name = _extract_template_name(daml_code) or project_name
+    fields = _parse_template_fields(daml_code)
+
+    # Step 4: Build payload — use fully-qualified packageId:Module:Template
+    payload = _build_payload(fields, allocated)
+    module_name = _extract_module_name(daml_code) or "Main"
+    template_id = f"{package_id}:{module_name}:{template_name}" if package_id else f"{module_name}:{template_name}"
+    acting_party = list(allocated.values())[0] if allocated else ""
+
+    logger.info("Creating contract", template_id=template_id, acting_party=acting_party)
+
+    # Step 5: Create contract
+    ok, contract_id, err = await client.create_contract(template_id, payload, acting_party)
+    if not ok:
+        logger.error("Contract creation failed", error=err)
+        return {"success": False, "error": f"Contract creation failed: {err}", "contract_id": "", "package_id": package_id}
+
+    logger.info("Contract created", contract_id=contract_id)
+
+    # Step 6: Verify contract exists
+    ok, err = await client.verify_contract(contract_id, template_id=template_id)
+    if not ok:
+        logger.warning("Contract verification failed", error=err)
+
+    return {
+        "success": True,
+        "contract_id": contract_id,
+        "package_id": package_id,
+        "parties": allocated,
+        "template_id": template_id,
+    }

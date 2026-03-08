@@ -3,7 +3,7 @@ import structlog
 from typing import Optional
 from langchain_chroma import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from rag.loader import load_daml_examples
 

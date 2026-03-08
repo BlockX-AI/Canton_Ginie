@@ -6,9 +6,11 @@ from langgraph.graph.state import CompiledStateGraph
 from pipeline.state import PipelineState
 from agents.intent_agent import run_intent_agent
 from agents.writer_agent import run_writer_agent, fetch_rag_context
-from agents.compile_agent import run_compile_agent
-from agents.fix_agent import run_fix_agent
-from agents.deploy_agent import run_deploy_agent
+from agents.compile_agent import run_compile_agent, run_compile_agent_sandbox
+from agents.fix_agent import run_fix_agent, run_fix_agent_sandbox
+from agents.deploy_agent import run_deploy_agent, run_deploy_agent_sandbox
+from sandbox.daml_sandbox import DamlSandbox
+from tools.daml_tools import create_template, add_signatory, add_choice
 from config import get_settings
 
 logger = structlog.get_logger()
@@ -235,6 +237,158 @@ def build_pipeline() -> CompiledStateGraph:
     graph.add_edge("error",  END)
 
     return graph.compile()
+
+
+async def run_mvp_pipeline(
+    job_id: str,
+    user_input: str,
+    canton_url: str = "http://localhost:7575",
+    auth_token: str | None = None,
+    max_fix_attempts: int = 3,
+) -> dict:
+    """
+    Minimal async pipeline: English → DAML → Compile → Fix → Deploy → Contract ID.
+
+    Uses DamlSandbox for isolated project execution.
+    Returns a result dict with success, contract_id, and package_id.
+    """
+    logger.info("Starting MVP pipeline", job_id=job_id)
+
+    settings = get_settings()
+
+    # --- Step 1: Intent ---
+    intent_result = run_intent_agent(user_input)
+    if not intent_result["success"]:
+        return {
+            "success": False,
+            "stage": "intent",
+            "error": intent_result.get("error", "Intent agent failed"),
+            "contract_id": "",
+            "package_id": "",
+        }
+
+    structured_intent = intent_result["structured_intent"]
+    parties = structured_intent.get("parties", ["issuer", "owner"])
+    templates = structured_intent.get("daml_templates_needed", ["Main"])
+    project_name = templates[0] if templates else "GinieContract"
+
+    # MVP: cap to single template for reliable compilation
+    structured_intent["daml_templates_needed"] = [project_name]
+    structured_intent["suggested_choices"] = structured_intent.get("suggested_choices", [])[:4]
+    logger.info("Intent parsed", project_name=project_name, parties=parties)
+
+    # --- Step 2: Create sandbox ---
+    sandbox = DamlSandbox(job_id, project_name)
+    await sandbox.initialize()
+
+    # --- Step 3: RAG + generate DAML ---
+    try:
+        rag_context = fetch_rag_context(structured_intent)
+    except Exception:
+        rag_context = []
+
+    write_result = run_writer_agent(
+        structured_intent=structured_intent,
+        rag_context=rag_context,
+    )
+    if not write_result["success"]:
+        await sandbox.cleanup()
+        return {
+            "success": False,
+            "stage": "generate",
+            "error": write_result.get("error", "Writer agent failed"),
+            "contract_id": "",
+            "package_id": "",
+        }
+
+    daml_code = write_result["daml_code"]
+    await sandbox.files.write("daml/Main.daml", daml_code)
+    logger.info("DAML code written to sandbox", project_name=project_name)
+
+    # --- Step 4: Compile → Fix loop (max_fix_attempts) ---
+    compile_result = None
+    fix_attempt = 0
+
+    for attempt in range(max_fix_attempts + 1):
+        compile_result = await run_compile_agent_sandbox(sandbox, project_name)
+
+        if compile_result["compile_success"]:
+            logger.info("Compilation succeeded", attempt=attempt)
+            break
+
+        if attempt >= max_fix_attempts:
+            logger.error("Max fix attempts reached", attempts=attempt)
+            await sandbox.cleanup()
+            return {
+                "success": False,
+                "stage": "compile",
+                "error": f"Compilation failed after {max_fix_attempts} fix attempts",
+                "compile_errors": compile_result.get("compile_errors", []),
+                "contract_id": "",
+                "package_id": "",
+            }
+
+        logger.info("Applying fixes", attempt=attempt, errors=len(compile_result.get("compile_errors", [])))
+        fix_result = await run_fix_agent_sandbox(
+            sandbox,
+            compile_result.get("compile_errors", []),
+            attempt=fix_attempt,
+            max_attempts=max_fix_attempts,
+        )
+
+        # If targeted fixes made no changes, fall back to LLM-based fixing
+        if not fix_result.get("changed", False):
+            logger.info("Targeted fixes made no change, falling back to LLM fix agent")
+            try:
+                current_code = await sandbox.files.read("daml/Main.daml")
+                llm_fix = run_fix_agent(
+                    daml_code=current_code,
+                    compile_errors=compile_result.get("compile_errors", []),
+                    attempt_number=fix_attempt,
+                )
+                if llm_fix.get("success") and llm_fix.get("fixed_code"):
+                    await sandbox.files.write("daml/Main.daml", llm_fix["fixed_code"])
+                    logger.info("LLM fix agent applied", code_length=len(llm_fix["fixed_code"]))
+            except Exception as llm_exc:
+                logger.warning("LLM fix agent failed", error=str(llm_exc))
+
+        fix_attempt += 1
+
+    # --- Step 5: Deploy ---
+    deploy_result = await run_deploy_agent_sandbox(
+        sandbox=sandbox,
+        project_name=project_name,
+        parties=parties,
+        canton_url=canton_url,
+        auth_token=auth_token,
+    )
+
+    await sandbox.cleanup()
+
+    if not deploy_result["success"]:
+        return {
+            "success": False,
+            "stage": "deploy",
+            "error": deploy_result.get("error", "Deploy failed"),
+            "contract_id": "",
+            "package_id": deploy_result.get("package_id", ""),
+        }
+
+    logger.info(
+        "MVP pipeline complete",
+        job_id=job_id,
+        contract_id=deploy_result["contract_id"],
+        package_id=deploy_result["package_id"],
+    )
+
+    return {
+        "success": True,
+        "contract_id": deploy_result["contract_id"],
+        "package_id": deploy_result["package_id"],
+        "parties": deploy_result.get("parties", {}),
+        "template_id": deploy_result.get("template_id", ""),
+        "stage": "complete",
+    }
 
 
 def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbox", canton_url: str = "") -> dict:
