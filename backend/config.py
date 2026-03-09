@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from pathlib import Path
 import os
@@ -7,6 +7,12 @@ _ENV_FILE = str(Path(__file__).parent / ".env")
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE,
+        case_sensitive=False,
+        extra='ignore'
+    )
+
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     llm_provider: str = "gemini"
@@ -32,10 +38,6 @@ class Settings(BaseSettings):
     max_fix_attempts: int = 3
     llm_model: str = "gemini-2.5-pro"
     llm_temperature: float = 0.1
-
-    class Config:
-        env_file = _ENV_FILE
-        case_sensitive = False
 
     def get_canton_url(self) -> str:
         mapping = {
