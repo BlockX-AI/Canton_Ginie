@@ -38,7 +38,7 @@ def _call_gemini(settings, system_prompt: str, user_message: str, max_tokens: in
         if response.candidates:
             for candidate in response.candidates:
                 content = getattr(candidate, "content", None)
-                if content and hasattr(content, "parts"):
+                if content and hasattr(content, "parts") and content.parts:
                     for part in content.parts:
                         if hasattr(part, "text") and part.text:
                             return part.text.strip()
