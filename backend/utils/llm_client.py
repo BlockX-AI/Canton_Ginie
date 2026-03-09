@@ -37,9 +37,11 @@ def _call_gemini(settings, system_prompt: str, user_message: str, max_tokens: in
         # Gemini may block content or return empty — try candidates
         if response.candidates:
             for candidate in response.candidates:
-                for part in getattr(candidate, "content", {}).get("parts", []):
-                    if hasattr(part, "text") and part.text:
-                        return part.text.strip()
+                content = getattr(candidate, "content", None)
+                if content and hasattr(content, "parts"):
+                    for part in content.parts:
+                        if hasattr(part, "text") and part.text:
+                            return part.text.strip()
         logger.warning("Gemini returned empty response", finish_reason=getattr(response.candidates[0] if response.candidates else None, "finish_reason", "unknown"))
         return ""
     return text.strip()
