@@ -7,14 +7,16 @@ def call_llm(system_prompt: str, user_message: str, max_tokens: int = 4096) -> s
     from config import get_settings
     settings = get_settings()
 
-    if settings.llm_provider == "gemini" and settings.gemini_api_key:
+    if settings.llm_provider == "openai" and settings.openai_api_key:
+        return _call_openai(settings, system_prompt, user_message, max_tokens)
+    elif settings.llm_provider == "gemini" and settings.gemini_api_key:
         return _call_gemini(settings, system_prompt, user_message, max_tokens)
     elif settings.anthropic_api_key:
         return _call_anthropic(settings, system_prompt, user_message, max_tokens)
     else:
         raise EnvironmentError(
             "No LLM API key configured.\n"
-            "Set GEMINI_API_KEY in backend/.env, or ANTHROPIC_API_KEY."
+            "Set OPENAI_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY in backend/.env.ginie."
         )
 
 
@@ -47,6 +49,23 @@ def _call_gemini(settings, system_prompt: str, user_message: str, max_tokens: in
     return text.strip()
 
 
+def _call_openai(settings, system_prompt: str, user_message: str, max_tokens: int) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=settings.openai_api_key)
+    response = client.chat.completions.create(
+        model=settings.llm_model,
+        max_tokens=max_tokens,
+        temperature=settings.llm_temperature,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+    )
+    text = response.choices[0].message.content
+    return text.strip() if text else ""
+
+
 def _call_anthropic(settings, system_prompt: str, user_message: str, max_tokens: int) -> str:
     from anthropic import Anthropic
 
@@ -64,7 +83,14 @@ def check_llm_available() -> dict:
     from config import get_settings
     settings = get_settings()
 
-    if settings.llm_provider == "gemini" and settings.gemini_api_key:
+    if settings.llm_provider == "openai" and settings.openai_api_key:
+        try:
+            _call_openai(settings, "You are a test assistant.", "Reply with the single word OK.", max_tokens=5)
+            return {"ok": True, "provider": "openai", "model": settings.llm_model}
+        except Exception as e:
+            return {"ok": False, "provider": "openai", "error": str(e)}
+
+    elif settings.llm_provider == "gemini" and settings.gemini_api_key:
         try:
             _call_gemini(settings, "You are a test assistant.", "Reply with the single word OK.", max_tokens=5)
             return {"ok": True, "provider": "gemini", "model": settings.llm_model}

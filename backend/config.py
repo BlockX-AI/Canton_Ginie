@@ -15,7 +15,8 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
-    llm_provider: str = "gemini"
+    openai_api_key: str = ""
+    llm_provider: str = "openai"
 
     redis_url: str = "redis://localhost:6379/0"
     database_url: str = "postgresql://postgres:password@localhost:5432/ginie_daml"
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
 
     max_fix_attempts: int = 3
-    llm_model: str = "gemini-2.5-pro"
+    llm_model: str = "gpt-4o"
     llm_temperature: float = 0.1
 
     def get_canton_url(self) -> str:
