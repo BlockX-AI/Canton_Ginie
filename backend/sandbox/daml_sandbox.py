@@ -54,7 +54,11 @@ class Files:
         self.sandbox_dir = sandbox_dir
 
     def _full_path(self, path: str) -> Path:
-        return Path(self.sandbox_dir) / path
+        full = (Path(self.sandbox_dir) / path).resolve()
+        sandbox_root = Path(self.sandbox_dir).resolve()
+        if not str(full).startswith(str(sandbox_root)):
+            raise ValueError(f"Path traversal denied: {path}")
+        return full
 
     async def write(self, path: str, content: str) -> None:
         full = self._full_path(path)
@@ -105,7 +109,7 @@ class DamlSandbox:
         await asyncio.to_thread(dist_dir.mkdir, parents=True, exist_ok=True)
 
         daml_yaml = (
-            "sdk-version: 2.7.1\n"
+            "sdk-version: 2.10.3\n"
             f"name: {self.project_name}\n"
             "version: 0.0.1\n"
             "source: daml\n"
