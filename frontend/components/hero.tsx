@@ -11,9 +11,10 @@ import {
 import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import GradientText from "./gradient-text";
 
-const GridScan = dynamic(
-  () => import("./grid-scan").then((mod) => ({ default: mod.GridScan })),
+const FloatingLines = dynamic(
+  () => import("./floating-lines"),
   { ssr: false }
 );
 
@@ -33,7 +34,10 @@ export function Hero(): ReactNode {
         `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/generate`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
           body: JSON.stringify({ prompt, canton_environment: "sandbox" }),
         }
       );
@@ -55,23 +59,17 @@ export function Hero(): ReactNode {
       ref={sectionRef}
       className="relative flex min-h-dvh w-full items-center justify-center overflow-hidden"
     >
-      {/* GridScan Background */}
+      {/* FloatingLines Background */}
       <div className="absolute inset-0 -z-10">
-        <GridScan
-          sensitivity={0.55}
-          lineThickness={1}
-          linesColor="#1a1333"
-          gridScale={0.1}
-          scanColor="#a855f7"
-          scanOpacity={0.35}
-          enablePost
-          bloomIntensity={0.5}
-          chromaticAberration={0.002}
-          noiseIntensity={0.008}
-          scanGlow={0.6}
-          scanSoftness={2.5}
-          scanDuration={3.0}
-          scanDelay={1.5}
+        <FloatingLines
+          linesGradient={["#5227FF", "#FF9FFC", "#B19EEF"]}
+          enabledWaves={["top", "middle", "bottom"]}
+          lineCount={5}
+          lineDistance={5}
+          bendRadius={5}
+          bendStrength={-0.5}
+          interactive={true}
+          parallax={true}
         />
       </div>
 
@@ -95,8 +93,8 @@ export function Hero(): ReactNode {
         </motion.div>
 
         {/* Heading */}
-        <motion.h1
-          className="mb-6 text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl"
+        <motion.div
+          className="mb-6"
           initial={{ opacity: 0, y: 20, filter: "blur(8px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{
@@ -105,11 +103,18 @@ export function Hero(): ReactNode {
             ease: [0.25, 0.46, 0.45, 0.94],
           }}
         >
-          <span className="block">Smart Contracts</span>
-          <span className="block bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
-            Powered by Ginie
-          </span>
-        </motion.h1>
+          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
+            <span className="block">Describe it.</span>
+            <GradientText
+              colors={["#5227FF", "#FF9FFC", "#B19EEF", "#5227FF"]}
+              animationSpeed={8}
+              showBorder={false}
+              className="block"
+            >
+              Ginie deploys it.
+            </GradientText>
+          </h1>
+        </motion.div>
 
         {/* Subheading */}
         <motion.p

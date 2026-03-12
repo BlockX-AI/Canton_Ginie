@@ -83,7 +83,9 @@ export default function SandboxPage() {
 
     const pollStatus = async () => {
       try {
-        const response = await fetch(`${API_URL}/status/${jobId}`);
+        const response = await fetch(`${API_URL}/status/${jobId}`, {
+          headers: { "ngrok-skip-browser-warning": "true" },
+        });
         if (!response.ok) {
           if (response.status === 404) {
             router.push("/");
@@ -110,7 +112,9 @@ export default function SandboxPage() {
 
     const fetchResult = async () => {
       try {
-        const response = await fetch(`${API_URL}/result/${jobId}`);
+        const response = await fetch(`${API_URL}/result/${jobId}`, {
+          headers: { "ngrok-skip-browser-warning": "true" },
+        });
         if (!response.ok) return;
 
         const resultData: JobResult = await response.json();
