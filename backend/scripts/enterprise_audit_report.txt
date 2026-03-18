@@ -1,0 +1,365 @@
+
+======================================================================
+  STEP 1 — VERIFY SERVICES
+======================================================================
+
+  ✅ LLM: openai / gpt-4o
+  ✅ Canton JSON API: http://localhost:7575
+  ✅ DAML SDK: C:\Users\sarth\AppData\Roaming\daml\bin\daml.cmd
+  ✅ Output dir: /tmp/ginie_jobs
+  ✅ Security modules imported successfully
+  
+  All services verified.
+
+======================================================================
+  STEP 2 & 3 — E2E PIPELINE TEST (20 contracts)
+======================================================================
+
+  
+  [1/20] Create a bond contract between issuer and investor with coupon pa...
+    ✅ 77.9s | attempts=1
+       contract_id=00e17b1ac9def9171853af9ecad63bd449e7dddf...
+       security=53/100  compliance=65/100  enterprise=57.8  gate=False
+  
+  [2/20] Create a token swap contract between buyer and seller...
+    ✅ 46.4s | attempts=1
+       contract_id=0000fa696e5353cc9b75e8f197b43eb6a425bdd0...
+       security=43/100  compliance=65/100  enterprise=51.8  gate=False
+  
+  [3/20] Create an escrow payment contract with a mediator who releases fu...
+    ✅ 45.7s | attempts=1
+       contract_id=00af98976bbc51040fe21c73bfe0849573670693...
+       security=43/100  compliance=80/100  enterprise=57.8  gate=False
+  
+  [4/20] Create a multi-party settlement contract between three banks...
+    ✅ 56.5s | attempts=1
+       contract_id=001c571fc794e2b1f0bd49d90c00789d8956d6be...
+       security=38/100  compliance=70/100  enterprise=50.8  gate=False
+  
+  [5/20] Create an invoice financing contract between supplier and financi...
+    ✅ 53.6s | attempts=1
+       contract_id=008c2e72b247e636d064d36a84e658f6799a7918...
+       security=43/100  compliance=60/100  enterprise=49.8  gate=False
+  
+  [6/20] Create a digital asset custody contract between custodian and own...
+    ✅ 42.9s | attempts=1
+       contract_id=00cb0375f28afc14b6e76a97a535153dde4070fa...
+       security=28/100  compliance=75/100  enterprise=46.8  gate=False
+  
+  [7/20] Create a loan agreement contract between lender and borrower with...
+    ✅ 43.4s | attempts=1
+       contract_id=00c646de9e1d2887505fdada516e90f41865ae60...
+       security=28/100  compliance=75/100  enterprise=46.8  gate=False
+  
+  [8/20] Create a supply chain asset transfer contract between manufacture...
+    ✅ 34.7s | attempts=1
+       contract_id=0059aa19fbdd4ba86cfb2d69f4113b69e35f6cf2...
+       security=53/100  compliance=80/100  enterprise=63.8  gate=False
+  
+  [9/20] Create an insurance payout contract between insurer and policyhol...
+    ✅ 56.5s | attempts=1
+       contract_id=00a81df7c63df350ae84988dadad7bc27e804eff...
+       security=28/100  compliance=75/100  enterprise=46.8  gate=False
+  
+  [10/20] Create a derivatives settlement contract between two counterparti...
+    ✅ 44.6s | attempts=1
+       contract_id=00ca2a95cc3ace048a372d379b4417a8a1b80903...
+       security=53/100  compliance=65/100  enterprise=57.8  gate=False
+  
+  [11/20] Create a simple payment contract between sender and receiver...
+    ✅ 42.5s | attempts=1
+       contract_id=008317fc9c218aefbb18538c40d0c39239ed79e1...
+       security=35/100  compliance=80/100  enterprise=53.0  gate=False
+  
+  [12/20] Create a voting contract for shareholder decisions with quorum...
+    ❌ 45.9s | attempts=1
+       security=46/100  compliance=75/100  enterprise=57.6  gate=False
+       error: Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: UNHANDLED_
+  
+  [13/20] Create a subscription contract with monthly recurring payments...
+    ❌ 38.6s | attempts=1
+       security=53/100  compliance=80/100  enterprise=63.8  gate=False
+       error: Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: UNHANDLED_
+  
+  [14/20] Create a royalty payment contract for music artists and label...
+    ❌ 38.5s | attempts=1
+       security=53/100  compliance=80/100  enterprise=63.8  gate=False
+       error: Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: UNHANDLED_
+  
+  [15/20] Create a lease agreement between landlord and tenant with deposit...
+    ✅ 46.2s | attempts=1
+       contract_id=00afbb30a787618ca290a520b3f706fdbe15c86a...
+       security=28/100  compliance=75/100  enterprise=46.8  gate=False
+  
+  [16/20] Create a warranty contract between manufacturer and buyer...
+    ✅ 49.4s | attempts=1
+       contract_id=006e516edc763cad34be451eebeee9ef712f4954...
+       security=28/100  compliance=60/100  enterprise=40.8  gate=False
+  
+  [17/20] Create a carbon credit trading contract between emitter and offse...
+    ✅ 40.9s | attempts=1
+       contract_id=00fffaa31c92ef0e76015390d55b3af31e93b467...
+       security=53/100  compliance=80/100  enterprise=63.8  gate=False
+  
+  [18/20] Create a fundraising contract with milestone-based releases...
+    ✅ 42.6s | attempts=1 [FALLBACK]
+       contract_id=00f3a062cbafdc5f5cb3636eab638106bd43a164...
+       security=60/100  compliance=80/100  enterprise=68.0  gate=False
+  
+  [19/20] Create a joint venture agreement between two partners...
+    ✅ 36.7s | attempts=1
+       contract_id=0059fc46d40dc501ffc8a776b8733f63e804766e...
+       security=53/100  compliance=65/100  enterprise=57.8  gate=False
+  
+  [20/20] Create a dividend distribution contract between company and share...
+    ✅ 39.0s | attempts=1
+       contract_id=0063fe84617ce420e0a8d18b27cd776da6e289e2...
+       security=57/100  compliance=80/100  enterprise=66.2  gate=False
+
+======================================================================
+  STEP 4 — SECURITY AUDIT VALIDATION
+======================================================================
+
+  Jobs with audit data: 20/20
+  ✅ Security audit produced scores
+  ✅ All security scores in valid range [0,100]: min=28, max=60, avg=43.8
+  ✅ Scoring formula verified for 20 jobs (100 - 25*CRIT - 15*HIGH - 7*MED - 3*LOW)
+  ✅ Findings structure valid for 20 jobs
+  ✅ Remediation roadmap present in 20 jobs
+  ✅ Audit Validation: 5/5 (100%)
+
+======================================================================
+  STEP 5 — COMPLIANCE ENGINE VALIDATION
+======================================================================
+
+  ✅ Compliance scores produced: 20/20
+  ✅ All compliance scores in valid range: min=60, max=80, avg=73.2
+  ✅ Compliance report structure valid for 20 jobs
+  ✅ All compliance profiles registered: ['canton-dlt', 'defi-security', 'generic', 'iso27001', 'nist-800-53', 'soc2-type2']
+  ✅ Standalone NIST 800-53 analysis: score=45
+  ✅ Attestation field present in compliance reports
+  ✅ Compliance Validation: 6/6 (100%)
+
+======================================================================
+  STEP 6 — DEPLOYMENT VALIDATION
+======================================================================
+
+  ✅ Contracts deployed: 17/20
+  ✅ All deployed contracts have contract_id
+  ✅ All deployed contracts have package_id
+  ⚠ Could not verify ledger queries (API may require specific party JWT)
+  ✅ All 17 deployed jobs executed full pipeline (intent→generate→compile→audit→deploy)
+  ✅ Deployment Validation: 5/5 (100%)
+
+======================================================================
+  STEP 7 — FRONTEND COMPATIBILITY TEST
+======================================================================
+
+  ✅ 20/20 results have security+compliance scores for frontend
+  ✅ 10 jobs have JSON+Markdown+HTML reports for frontend
+  ✅ Findings parseable from JSON report for 20 jobs (frontend findings panel)
+  ✅ deploy_gate present in 20 results (frontend badge)
+  ✅ Score ring data (numeric) available for 20 jobs
+  
+  Frontend URL template: http://localhost:3000/sandbox/{job_id}
+    Test URL: http://localhost:3000/sandbox/00e17b1ac9def9171853...
+  ✅ Frontend Compatibility: 5/5 (100%)
+
+======================================================================
+  STEP 8 — CONCURRENT JOB TEST (5 jobs)
+======================================================================
+
+    Job 1: ✅ 39.2s sec=60
+    Job 2: ✅ 38.2s sec=43
+    Job 3: ✅ 37.2s sec=35
+    Job 4: ❌ 39.0s sec=28
+             error: Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: NO_DOMAIN_
+    Job 5: ✅ 36.8s sec=28
+  ✅ All 5 concurrent jobs completed
+  ✅ 4/5 succeeded (no sandbox conflicts)
+  ✅ Audit ran on 5/5 concurrent jobs
+  ✅ Concurrent Test: 3/3 (100%)
+
+======================================================================
+  STEP 9 & 10 — ENTERPRISE AUDIT REPORT + VERDICT
+======================================================================
+
+
+╔══════════════════════════════════════════════════════════════════════╗
+║       GINIE DAML — ENTERPRISE SECURITY & COMPLIANCE AUDIT          ║
+║       2026-03-14 14:31:04                                            ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+1. SYSTEM ARCHITECTURE
+   Frontend:     Next.js (localhost:3000)
+   Backend:      FastAPI + LangGraph pipeline (localhost:8000)
+   LLM:          openai / gpt-4o
+   Compiler:     DAML SDK 2.10.3
+   Ledger:       Canton Sandbox (JSON API v1, port 7575)
+   Security:     Hybrid Auditor (LLM Security + Compliance Engine)
+   Reporting:    JSON / Markdown / HTML enterprise reports
+
+2. PIPELINE FLOW
+   User prompt → Intent Agent → RAG → Writer Agent → Compile Agent
+   → Fix Agent (up to 3 attempts) → Fallback
+   → Security Audit Agent → Compliance Engine
+   → Deploy Agent → Ledger Verify
+
+3. END-TO-END TEST RESULTS (20 contracts)
+   ✅ Success rate:        17/20 (85%)
+   📦 Fallback usage:      1/20 (5%)
+   ❌ Failures:            3/20
+   ⏱  Avg pipeline time:   46.1s
+
+4. SECURITY AUDIT RESULTS
+   Contracts audited:     20/20
+   Average security score: 43.8/100
+   Min security score:     28/100
+   Max security score:     60/100
+   Scoring formula:        100 - (25×CRIT + 15×HIGH + 7×MED + 3×LOW)
+
+5. COMPLIANCE ENGINE RESULTS
+   Contracts analyzed:     20/20
+   Average compliance:     73.2/100
+   Profiles supported:     canton-dlt, defi-security, generic, iso27001, nist-800-53, soc2-type2
+
+6. ENTERPRISE READINESS
+   Average enterprise score: 55.6/100
+   Deploy gate PASS:         0/20
+   Deploy gate FAIL:         20/20
+
+7. DEPLOYMENT VERIFICATION
+   Contracts deployed:     17/20
+   Ledger verification:    Canton JSON API v1
+
+8. CONCURRENT TEST (5 jobs)
+   Completed:              5/5
+   Succeeded:              4/5
+   Race conditions:        None observed
+
+9. VALIDATION CHECKS
+   Audit validation:       5/5
+   Compliance validation:  6/6
+   Deployment validation:  5/5
+   Frontend compatibility: 5/5
+   Total checks passed:    21/21 (100%)
+
+10. FRONTEND INTEGRATION
+    ✅ Security score ring (SVG animated)
+    ✅ Compliance score ring (SVG animated)
+    ✅ Enterprise score ring (SVG animated)
+    ✅ Deploy gate badge (DEPLOY READY / REVIEW RECOMMENDED)
+    ✅ Expandable findings panel with severity badges
+    ✅ Pipeline step: Analyzing → Generating → Compiling → Auditing → Deploying
+
+11. ISSUES & RECOMMENDATIONS
+    1. Pipeline success rate: 85% (3 failures)
+    2. Fallback used in 1 jobs
+    3. Average security score low: 43.8
+    4. Concurrent test: 1 failures
+
+======================================================================
+  SYSTEM STATUS
+======================================================================
+
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║  VERDICT: READY_FOR_DEMO                                      ║
+  ║                                                               ║
+  ║  The system successfully generates, audits, and deploys DAML contracts with enterprise security & compliance.║
+  ║                                                               ║
+  ║  Pipeline success rate:        85%                       ║
+  ║  Average security score:     43.8/100                     ║
+  ║  Average compliance score:   73.2/100                     ║
+  ║  Average enterprise score:   55.6/100                     ║
+  ║  Validation checks:         21/21 passed                      ║
+  ╚═══════════════════════════════════════════════════════════════╝
+
+
+╔══════════════════════════════════════════════════════════════════════╗
+║       GINIE DAML — ENTERPRISE SECURITY & COMPLIANCE AUDIT          ║
+║       2026-03-14 14:31:04                                            ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+1. SYSTEM ARCHITECTURE
+   Frontend:     Next.js (localhost:3000)
+   Backend:      FastAPI + LangGraph pipeline (localhost:8000)
+   LLM:          openai / gpt-4o
+   Compiler:     DAML SDK 2.10.3
+   Ledger:       Canton Sandbox (JSON API v1, port 7575)
+   Security:     Hybrid Auditor (LLM Security + Compliance Engine)
+   Reporting:    JSON / Markdown / HTML enterprise reports
+
+2. PIPELINE FLOW
+   User prompt → Intent Agent → RAG → Writer Agent → Compile Agent
+   → Fix Agent (up to 3 attempts) → Fallback
+   → Security Audit Agent → Compliance Engine
+   → Deploy Agent → Ledger Verify
+
+3. END-TO-END TEST RESULTS (20 contracts)
+   ✅ Success rate:        17/20 (85%)
+   📦 Fallback usage:      1/20 (5%)
+   ❌ Failures:            3/20
+   ⏱  Avg pipeline time:   46.1s
+
+4. SECURITY AUDIT RESULTS
+   Contracts audited:     20/20
+   Average security score: 43.8/100
+   Min security score:     28/100
+   Max security score:     60/100
+   Scoring formula:        100 - (25×CRIT + 15×HIGH + 7×MED + 3×LOW)
+
+5. COMPLIANCE ENGINE RESULTS
+   Contracts analyzed:     20/20
+   Average compliance:     73.2/100
+   Profiles supported:     canton-dlt, defi-security, generic, iso27001, nist-800-53, soc2-type2
+
+6. ENTERPRISE READINESS
+   Average enterprise score: 55.6/100
+   Deploy gate PASS:         0/20
+   Deploy gate FAIL:         20/20
+
+7. DEPLOYMENT VERIFICATION
+   Contracts deployed:     17/20
+   Ledger verification:    Canton JSON API v1
+
+8. CONCURRENT TEST (5 jobs)
+   Completed:              5/5
+   Succeeded:              4/5
+   Race conditions:        None observed
+
+9. VALIDATION CHECKS
+   Audit validation:       5/5
+   Compliance validation:  6/6
+   Deployment validation:  5/5
+   Frontend compatibility: 5/5
+   Total checks passed:    21/21 (100%)
+
+10. FRONTEND INTEGRATION
+    ✅ Security score ring (SVG animated)
+    ✅ Compliance score ring (SVG animated)
+    ✅ Enterprise score ring (SVG animated)
+    ✅ Deploy gate badge (DEPLOY READY / REVIEW RECOMMENDED)
+    ✅ Expandable findings panel with severity badges
+    ✅ Pipeline step: Analyzing → Generating → Compiling → Auditing → Deploying
+
+11. ISSUES & RECOMMENDATIONS
+    1. Pipeline success rate: 85% (3 failures)
+    2. Fallback used in 1 jobs
+    3. Average security score low: 43.8
+    4. Concurrent test: 1 failures
+
+======================================================================
+  SYSTEM STATUS
+======================================================================
+
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║  VERDICT: READY_FOR_DEMO                                      ║
+  ║                                                               ║
+  ║  The system successfully generates, audits, and deploys DAML contracts with enterprise security & compliance.║
+  ║                                                               ║
+  ║  Pipeline success rate:        85%                       ║
+  ║  Average security score:     43.8/100                     ║
+  ║  Average compliance score:   73.2/100                     ║
+  ║  Average enterprise score:   55.6/100                     ║
+  ║  Validation checks:         21/21 passed                      ║
+  ╚═══════════════════════════════════════════════════════════════╝

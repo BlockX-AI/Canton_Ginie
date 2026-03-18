@@ -58,7 +58,7 @@ def _upload_dar(client: httpx.Client, canton_url: str, dar_bytes: bytes, auth: d
         f"{canton_url}/v1/packages",
         content=dar_bytes,
         headers={**auth, "Content-Type": "application/octet-stream"},
-        timeout=60.0,
+        timeout=180.0,
     )
     if resp.status_code not in (200, 201):
         raise RuntimeError(
@@ -117,7 +117,7 @@ def _create_contract(
         f"{canton_url}/v1/create",
         json={"templateId": template_id, "payload": payload},
         headers={**auth, "Content-Type": "application/json"},
-        timeout=30.0,
+        timeout=60.0,
     )
     if resp.status_code not in (200, 201):
         raise RuntimeError(
