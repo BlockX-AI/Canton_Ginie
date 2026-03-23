@@ -9,9 +9,20 @@ import structlog
 import httpx
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from config import get_settings
 from canton.canton_client_v2 import make_sandbox_jwt
+
+
+class ContractQueryRequest(BaseModel):
+    template_ids: list[str] | None = None
+    party: str | None = None
+
+
+class ContractFetchRequest(BaseModel):
+    contract_id: str
+    template_id: str | None = None
 
 logger = structlog.get_logger()
 
@@ -30,12 +41,34 @@ def _canton_env() -> str:
     return get_settings().canton_environment
 
 
+def _fetch_all_party_ids() -> list[str]:
+    """Fetch all party identifiers from Canton (used for sandbox JWT)."""
+    base = _canton_url()
+    # Bootstrap: use a wildcard JWT to call /v1/parties
+    bootstrap_token = make_sandbox_jwt(["sandbox"])
+    headers = {"Authorization": f"Bearer {bootstrap_token}", "Content-Type": "application/json"}
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(f"{base}/v1/parties", headers=headers)
+        if resp.status_code == 200:
+            result = resp.json().get("result", [])
+            return [p["identifier"] for p in result if p.get("identifier")]
+    except Exception:
+        pass
+    return []
+
+
 def _auth_header(act_as: list[str] | None = None) -> dict:
     """Build auth header for Canton JSON API."""
     import os
     env = _canton_env()
     if env == "sandbox":
-        parties = act_as or ["Alice", "Bob", "Admin", "issuer", "owner", "investor"]
+        # Use provided parties, or dynamically fetch real party identifiers
+        parties = act_as
+        if not parties:
+            parties = _fetch_all_party_ids()
+        if not parties:
+            parties = ["sandbox"]
         token = make_sandbox_jwt(parties)
         return {"Authorization": f"Bearer {token}"}
     token = os.environ.get("CANTON_TOKEN", "")
@@ -108,55 +141,119 @@ def list_parties():
 # 2. List Contracts (query)
 # ---------------------------------------------------------------------------
 
+import json as _json
+import pathlib as _pathlib
+
+_TEMPLATE_CACHE_PATH = _pathlib.Path(__file__).resolve().parent.parent / ".template_cache.json"
+
+
+def _load_cached_template_ids() -> set[str]:
+    """Load previously discovered template IDs from disk cache."""
+    try:
+        if _TEMPLATE_CACHE_PATH.exists():
+            data = _json.loads(_TEMPLATE_CACHE_PATH.read_text())
+            return set(data) if isinstance(data, list) else set()
+    except Exception:
+        pass
+    return set()
+
+
+def _save_cached_template_ids(tids: set[str]):
+    """Persist template IDs to disk so they survive backend restarts."""
+    try:
+        _TEMPLATE_CACHE_PATH.write_text(_json.dumps(sorted(tids)))
+    except Exception:
+        pass
+
+
+def _discover_template_ids() -> list[str]:
+    """Discover template IDs from deployed jobs + persistent cache.
+
+    Canton 2.x /v1/query requires at least one templateId.
+    Canton 2.x /v1/packages/{id} returns binary DAR data (not JSON),
+    so we cannot discover templates from packages.
+
+    Strategy:
+      1. Read template IDs from the in-memory job store (current session)
+      2. Merge with IDs persisted on disk (previous sessions)
+      3. Save merged set back to disk
+    """
+    from api.routes import _in_memory_jobs
+
+    template_ids: set[str] = _load_cached_template_ids()
+
+    for job_data in _in_memory_jobs.values():
+        tid = job_data.get("template_id", "")
+        if tid and ":" in tid:
+            template_ids.add(tid)
+
+    if template_ids:
+        _save_cached_template_ids(template_ids)
+
+    return list(template_ids)
+
+
 @ledger_router.post("/contracts")
-def list_contracts(
-    template_ids: list[str] | None = None,
-    party: str | None = None,
-):
+def list_contracts(req: ContractQueryRequest = ContractQueryRequest()):
     """Query active contracts on the ledger.
 
     Args:
-        template_ids: Optional list of fully qualified template IDs to filter by.
-        party: Optional party to act as for the query.
+        req.template_ids: Optional list of fully qualified template IDs to filter by.
+        req.party: Optional party to act as for the query.
 
     Returns list of active contracts with their details.
+    Canton 2.x /v1/query requires templateIds — when none are provided
+    we auto-discover them from uploaded packages.
     """
+    template_ids = req.template_ids
+    party = req.party
     act_as = [party] if party else None
+
+    # Canton /v1/query requires templateIds — discover if not provided
+    if not template_ids:
+        template_ids = _discover_template_ids()
+        if not template_ids:
+            return {"contracts": [], "count": 0, "environment": _canton_env()}
+
     url = f"{_canton_url()}/v1/query"
     headers = {**_auth_header(act_as=act_as), "Content-Type": "application/json"}
 
-    body = {}
-    if template_ids:
-        body["templateIds"] = template_ids
+    # Query in batches to avoid overloading (max 20 templates per request)
+    all_contracts = []
+    batch_size = 20
+    for i in range(0, len(template_ids), batch_size):
+        batch = template_ids[i:i + batch_size]
+        body = {"templateIds": batch}
 
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.post(url, headers=headers, json=body)
-    except httpx.ConnectError:
-        raise HTTPException(status_code=503, detail="Canton JSON API not reachable")
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Request timed out")
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.post(url, headers=headers, json=body)
+        except httpx.ConnectError:
+            raise HTTPException(status_code=503, detail="Canton JSON API not reachable")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Request timed out")
 
-    if resp.status_code >= 400:
-        raise HTTPException(status_code=resp.status_code, detail=f"Canton query error: {resp.text[:500]}")
+        if resp.status_code >= 400:
+            # Some template batches may fail (e.g. stdlib templates) — skip them
+            logger.warning("Contract query batch failed", status=resp.status_code, batch_start=i)
+            continue
 
-    data = resp.json()
-    result = data.get("result", [])
+        data = resp.json()
+        result = data.get("result", [])
 
-    contracts = []
-    for c in result:
-        contracts.append({
-            "contractId": c.get("contractId", ""),
-            "templateId": c.get("templateId", ""),
-            "payload": c.get("payload", {}),
-            "signatories": c.get("signatories", []),
-            "observers": c.get("observers", []),
-            "agreementText": c.get("agreementText", ""),
-        })
+        for c in result:
+            all_contracts.append({
+                "contractId": c.get("contractId", ""),
+                "templateId": c.get("templateId", ""),
+                "payload": c.get("payload", {}),
+                "signatories": c.get("signatories", []),
+                "observers": c.get("observers", []),
+                "agreementText": c.get("agreementText", ""),
+            })
 
     return {
-        "contracts": contracts,
-        "count": len(contracts),
+        "contracts": all_contracts,
+        "count": len(all_contracts),
         "environment": _canton_env(),
     }
 
@@ -166,13 +263,15 @@ def list_contracts(
 # ---------------------------------------------------------------------------
 
 @ledger_router.post("/contracts/fetch")
-def fetch_contract(contract_id: str, template_id: str | None = None):
+def fetch_contract(req: ContractFetchRequest):
     """Fetch a specific contract by its ID.
 
     Args:
-        contract_id: The contract ID to fetch.
-        template_id: Optional template ID for faster lookup.
+        req.contract_id: The contract ID to fetch.
+        req.template_id: Optional template ID for faster lookup.
     """
+    contract_id = req.contract_id
+    template_id = req.template_id
     body = {"contractId": contract_id}
     if template_id:
         body["templateId"] = template_id
