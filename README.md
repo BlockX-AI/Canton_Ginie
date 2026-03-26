@@ -1,7 +1,7 @@
 <div align="center">
 
 # Ginie
-### Plain English → Deployed Canton Smart Contract in 90 Seconds
+### Plain English → Deployed Canton Smart Contract in only 90 Seconds
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat&logo=typescript&logoColor=white)](https://typescriptlang.org)
