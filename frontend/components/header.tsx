@@ -8,6 +8,7 @@ import {
 } from "motion/react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
+import { useAuth } from "@/lib/auth-context";
 
 const navLinks = [
   { href: "#features", label: "Features" },
@@ -25,6 +26,7 @@ export function Header(): ReactNode {
   const [isOpen, setIsOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const { scrollY } = useScroll();
+  const { isAuthenticated, displayName, partyId, logout } = useAuth();
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     const previous = scrollY.getPrevious() ?? 0;
@@ -137,6 +139,48 @@ export function Header(): ReactNode {
                 </Link>
               </motion.div>
             ))}
+
+            <motion.div
+              className="mx-4 h-px w-5 bg-white/30"
+              role="separator"
+              aria-orientation="vertical"
+              initial={{ opacity: 0, scaleX: 0 }}
+              animate={{ opacity: 1, scaleX: 1 }}
+              transition={{ duration: 0.4, delay: 0.55, ease: "easeOut" }}
+            />
+
+            {isAuthenticated ? (
+              <motion.div
+                className="flex items-center gap-2"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.6 }}
+              >
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                  {displayName || partyId?.split("::")[0] || "Connected"}
+                </span>
+                <button
+                  onClick={() => logout()}
+                  className="focus-ring rounded-md px-2 py-1 text-xs text-white/40 transition-colors hover:text-white/70"
+                >
+                  Logout
+                </button>
+              </motion.div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.6 }}
+              >
+                <Link
+                  href="/setup"
+                  className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300 transition-colors hover:border-purple-500/50 hover:bg-purple-500/20"
+                >
+                  Set Up Identity
+                </Link>
+              </motion.div>
+            )}
           </nav>
 
           <button

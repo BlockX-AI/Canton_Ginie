@@ -1,0 +1,37 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template LoanRequest
+  with
+    lender: Party
+    borrower: Party
+    amount: Decimal
+    interestRate: Decimal
+    termInMonths: Int
+    status: Text
+  where
+    signatory lender
+    observer borrower
+
+    ensure
+      amount > 0.0 && interestRate >= 0.0 && termInMonths > 0
+
+    choice AcceptLoan : ContractId LoanRequest
+      with
+        newInterestRate: Decimal
+      controller borrower
+      do
+        create this with
+          interestRate = newInterestRate
+          status = "Accepted"
+
+    choice DisburseLoan : ()
+      with
+        disbursementDate: Date
+      controller lender
+      do
+        assertMsg "Loan must be accepted before disbursement" (status == "Accepted")
+        return ()

@@ -1,0 +1,34 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template WarehouseReceipt
+  with
+    warehouseManager : Party
+    goodsOwner       : Party
+    goodsDescription : Text
+    quantity         : Decimal
+    storageDate      : Date
+  where
+    signatory warehouseManager
+    observer  goodsOwner
+
+    ensure quantity > 0.0
+
+    choice ReleaseGoods : ()
+      with
+        releaseTo : Party
+      controller goodsOwner
+      do
+        assertMsg "Release quantity must be positive" (quantity > 0.0)
+        archive self
+
+    choice UpdateQuantity : ContractId WarehouseReceipt
+      with
+        newQuantity : Decimal
+      controller warehouseManager
+      do
+        assertMsg "New quantity must be positive" (newQuantity > 0.0)
+        create this with quantity = newQuantity

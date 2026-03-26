@@ -1,0 +1,39 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template KycVerification
+  with
+    verifier    : Party
+    customer    : Party
+    expiryDate  : Date
+    status      : Text
+  where
+    signatory verifier
+    observer  customer
+
+    ensure status == "Pending" || status == "Verified" || status == "Rejected"
+
+    choice Verify : ()
+      controller verifier
+      do
+        assertMsg "KYC already verified or rejected" (status == "Pending")
+        create this with status = "Verified"
+        return ()
+
+    choice Reject : ()
+      controller verifier
+      do
+        assertMsg "KYC already verified or rejected" (status == "Pending")
+        create this with status = "Rejected"
+        return ()
+
+    choice ExtendExpiry : ()
+      with newExpiryDate : Date
+      controller verifier
+      do
+        assertMsg "New expiry date must be after current expiry date" (newExpiryDate > expiryDate)
+        create this with expiryDate = newExpiryDate
+        return ()

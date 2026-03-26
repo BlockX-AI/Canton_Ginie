@@ -1,0 +1,32 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template PurchaseOrder
+  with
+    buyer       : Party
+    supplier    : Party
+    orderNumber : Text
+    totalAmount : Decimal
+    status      : Text
+  where
+    signatory buyer
+    observer supplier
+
+    ensure totalAmount > 0.0 && (status == "Pending" || status == "Approved" || status == "Fulfilled")
+
+    choice ApproveOrder : ()
+      controller supplier
+      do
+        assertMsg "Order must be pending to approve" (status == "Pending")
+        create this with status = "Approved"
+        return ()
+
+    choice FulfillOrder : ()
+      controller supplier
+      do
+        assertMsg "Order must be approved to fulfill" (status == "Approved")
+        create this with status = "Fulfilled"
+        return ()

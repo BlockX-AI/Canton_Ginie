@@ -1,0 +1,39 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template Council
+  with
+    councilHead : Party
+    councilMember : Party
+    electionDate : Date
+    termLength : Int
+  where
+    signatory councilHead
+    observer councilMember
+
+    ensure
+      termLength > 0
+
+    choice ElectNewMember : ContractId Council
+      with
+        newMember : Party
+        newTermLength : Int
+      controller councilHead
+      do
+        assertMsg "Term length must be positive" (newTermLength > 0)
+        create this with
+          councilMember = newMember
+          termLength = newTermLength
+
+    choice ExtendTerm : ()
+      with
+        additionalYears : Int
+      controller councilMember
+      do
+        assertMsg "Additional years must be positive" (additionalYears > 0)
+        create this with
+          termLength = termLength + additionalYears
+        return ()

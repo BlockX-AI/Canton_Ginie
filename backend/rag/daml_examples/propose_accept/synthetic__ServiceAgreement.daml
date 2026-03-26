@@ -1,0 +1,35 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template ServiceAgreement
+  with
+    proposer: Party
+    acceptor: Party
+    serviceDescription: Text
+    slaTerms: Text
+    proposedFee: Decimal
+  where
+    signatory proposer
+    observer acceptor
+
+    ensure
+      proposedFee > 0.0
+
+    choice ProposeAmendment : ContractId ServiceAgreement
+      with
+        newSlaTerms: Text
+        newProposedFee: Decimal
+      controller proposer
+      do
+        create this with
+          slaTerms = newSlaTerms
+          proposedFee = newProposedFee
+
+    choice AcceptAgreement : ()
+      controller acceptor
+      do
+        archive self
+        return ()

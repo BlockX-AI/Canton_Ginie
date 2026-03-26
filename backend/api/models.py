@@ -57,3 +57,4 @@ class HealthResponse(BaseModel):
     daml_sdk: str
     rag_status: str
     redis_status: str
+    db_status: str = "unknown"

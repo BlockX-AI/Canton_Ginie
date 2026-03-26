@@ -1,0 +1,33 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template ShipmentTracking
+  with
+    shipper       : Party
+    receiver      : Party
+    currentLocation : Text
+    destination   : Text
+    status        : Text
+  where
+    signatory shipper
+    observer  receiver
+
+    ensure status == "In Transit" || status == "Delivered"
+
+    choice UpdateLocation : ()
+      with
+        newLocation : Text
+      controller shipper
+      do
+        create this with currentLocation = newLocation
+        return ()
+
+    choice ConfirmDelivery : ()
+      controller receiver
+      do
+        assertMsg "Shipment must be at destination to confirm delivery" (currentLocation == destination)
+        create this with status = "Delivered"
+        return ()

@@ -1,0 +1,31 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template LicenseManagement
+  with
+    issuer       : Party
+    licensee     : Party
+    licenseType  : Text
+    issueDate    : Date
+    expiryDate   : Date
+  where
+    signatory issuer
+    observer  licensee
+
+    ensure issueDate < expiryDate
+
+    choice RenewLicense : ContractId LicenseManagement
+      with newExpiryDate : Date
+      controller licensee
+      do
+        assertMsg "New expiry date must be after current expiry date" (newExpiryDate > expiryDate)
+        create this with expiryDate = newExpiryDate
+
+    choice TransferLicense : ContractId LicenseManagement
+      with newLicensee : Party
+      controller licensee
+      do
+        create this with licensee = newLicensee

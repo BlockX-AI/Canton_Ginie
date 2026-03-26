@@ -1,0 +1,138 @@
+module CashPayment where
+
+import Daml.Script
+
+-- Cash transfer and payment instruction contract
+template CashAccount
+  with
+    bank   : Party
+    owner  : Party
+    balance: Decimal
+    currency: Text
+  where
+    signatory bank
+    observer  owner
+
+    ensure balance >= 0.0
+
+    choice Deposit : ContractId CashAccount
+      with amount : Decimal
+      controller bank
+      do
+        assertMsg "Deposit must be positive" (amount > 0.0)
+        create this with balance = balance + amount
+
+    choice Withdraw : ContractId CashAccount
+      with amount : Decimal
+      controller owner
+      do
+        assertMsg "Sufficient balance" (balance >= amount)
+        create this with balance = balance - amount
+
+    choice InitiatePayment : ContractId PaymentInstruction
+      with
+        recipient : Party
+        amount    : Decimal
+        reference : Text
+      controller owner
+      do
+        assertMsg "Sufficient balance" (balance >= amount)
+        create PaymentInstruction with
+          sender    = owner
+          recipient = recipient
+          bank      = bank
+          amount    = amount
+          currency  = currency
+          reference = reference
+
+
+-- Payment instruction awaiting bank processing
+template PaymentInstruction
+  with
+    sender    : Party
+    recipient : Party
+    bank      : Party
+    amount    : Decimal
+    currency  : Text
+    reference : Text
+  where
+    signatory sender
+    observer  bank, recipient
+
+    ensure amount > 0.0
+
+    choice ProcessPayment : ContractId PaymentReceipt
+      controller bank
+      do
+        create PaymentReceipt with
+          sender    = sender
+          recipient = recipient
+          amount    = amount
+          currency  = currency
+          reference = reference
+
+    choice RejectPayment : ContractId RejectedPayment
+      with reason : Text
+      controller bank
+      do
+        create RejectedPayment with
+          sender    = sender
+          amount    = amount
+          reference = reference
+          reason    = reason
+
+
+template PaymentReceipt
+  with
+    sender    : Party
+    recipient : Party
+    amount    : Decimal
+    currency  : Text
+    reference : Text
+  where
+    signatory recipient
+    observer  sender
+
+    choice AcknowledgePayment : ()
+      controller recipient
+      do return ()
+
+
+template RejectedPayment
+  with
+    sender    : Party
+    amount    : Decimal
+    reference : Text
+    reason    : Text
+  where
+    signatory sender
+    observer  sender
+
+
+setup : Script ()
+setup = script do
+  bank  <- allocateParty "BarclaysBank"
+  alice <- allocateParty "Alice"
+  bob   <- allocateParty "Bob"
+
+  accountCid <- submit bank do
+    createCmd CashAccount with
+      bank     = bank
+      owner    = alice
+      balance  = 0.0
+      currency = "GBP"
+
+  accountCid2 <- submit bank do
+    exerciseCmd accountCid Deposit with amount = 5000.0
+
+  paymentCid <- submit alice do
+    exerciseCmd accountCid2 InitiatePayment with
+      recipient = bob
+      amount    = 1000.0
+      reference = "Invoice #2025-001"
+
+  receiptCid <- submit bank do
+    exerciseCmd paymentCid ProcessPayment
+
+  submit bob do
+    exerciseCmd receiptCid AcknowledgePayment

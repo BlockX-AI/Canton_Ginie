@@ -1,0 +1,42 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template SimpleVote
+  with
+    proposer: Party
+    observer: Party
+    yesVotes: Int
+    noVotes: Int
+    quorum: Int
+  where
+    signatory proposer
+    observer observer
+
+    ensure
+      yesVotes + noVotes >= quorum
+
+    choice VoteYes : ()
+      with
+        voter: Party
+      controller voter
+      do
+        create this with yesVotes = yesVotes + 1
+        return ()
+
+    choice VoteNo : ()
+      with
+        voter: Party
+      controller voter
+      do
+        create this with noVotes = noVotes + 1
+        return ()
+
+    choice FinalizeVote : Text
+      controller proposer
+      do
+        if yesVotes >= quorum
+          then return "Vote Passed"
+          else return "Vote Failed"

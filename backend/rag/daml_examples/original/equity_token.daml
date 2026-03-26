@@ -1,0 +1,127 @@
+module EquityToken where
+
+import Daml.Script
+
+-- Equity token representing fractional ownership in a company
+template EquityToken
+  with
+    company        : Party
+    shareholder    : Party
+    companyName    : Text
+    shares         : Decimal
+    totalSupply    : Decimal
+    pricePerShare  : Decimal
+  where
+    signatory company
+    observer  shareholder
+
+    ensure shares > 0.0 && totalSupply > 0.0 && pricePerShare > 0.0
+
+    choice TransferShares : (ContractId EquityToken, ContractId EquityToken)
+      with
+        recipient    : Party
+        shareAmount  : Decimal
+      controller shareholder
+      do
+        assertMsg "Sufficient shares" (shareAmount <= shares)
+        remaining <- create this with shares = shares - shareAmount
+        transferred <- create this with
+          shareholder = recipient
+          shares      = shareAmount
+        return (remaining, transferred)
+
+    choice PayDividend : ContractId DividendPayment
+      with dividendPerShare : Decimal
+      controller company
+      do
+        create DividendPayment with
+          company     = company
+          shareholder = shareholder
+          amount      = shares * dividendPerShare
+
+    choice BuyBack : ()
+      with offerPrice : Decimal
+      controller company
+      do
+        assertMsg "Fair buyback price" (offerPrice >= pricePerShare)
+        return ()
+
+
+-- Dividend payment notification contract
+template DividendPayment
+  with
+    company     : Party
+    shareholder : Party
+    amount      : Decimal
+  where
+    signatory company
+    observer  shareholder
+
+    ensure amount > 0.0
+
+    choice ClaimDividend : ()
+      controller shareholder
+      do
+        return ()
+
+
+-- Shareholder meeting voting right
+template VotingRight
+  with
+    company     : Party
+    shareholder : Party
+    proposal    : Text
+    voteWeight  : Decimal
+  where
+    signatory company
+    observer  shareholder
+
+    choice CastVote : ContractId VoteCast
+      with inFavor : Bool
+      controller shareholder
+      do
+        create VoteCast with
+          company     = company
+          shareholder = shareholder
+          proposal    = proposal
+          inFavor     = inFavor
+          weight      = voteWeight
+
+
+template VoteCast
+  with
+    company     : Party
+    shareholder : Party
+    proposal    : Text
+    inFavor     : Bool
+    weight      : Decimal
+  where
+    signatory shareholder
+    observer  company
+
+
+setup : Script ()
+setup = script do
+  techCorp   <- allocateParty "TechCorp"
+  investor1  <- allocateParty "Investor1"
+  investor2  <- allocateParty "Investor2"
+
+  tokenCid <- submit techCorp do
+    createCmd EquityToken with
+      company       = techCorp
+      shareholder   = investor1
+      companyName   = "TechCorp Inc."
+      shares        = 1000.0
+      totalSupply   = 10000.0
+      pricePerShare = 50.0
+
+  (remainingCid, transferredCid) <- submit investor1 do
+    exerciseCmd tokenCid TransferShares with
+      recipient   = investor2
+      shareAmount = 200.0
+
+  dividendCid <- submit techCorp do
+    exerciseCmd remainingCid PayDividend with dividendPerShare = 2.5
+
+  submit investor1 do
+    exerciseCmd dividendCid ClaimDividend

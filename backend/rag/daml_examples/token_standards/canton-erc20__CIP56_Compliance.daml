@@ -1,0 +1,47 @@
+module CIP56.Compliance where
+
+-- Public compliance policy (does not contain user list)
+template ComplianceRules
+  with
+    issuer : Party
+    isWhitelistEnabled : Bool
+    observers : [Party] -- Added observers for visibility
+  where
+    signatory issuer
+    observer observers
+
+    -- NOTE: Contract key removed for DAML-LF 2.x compatibility
+
+    choice ToggleWhitelist : ContractId ComplianceRules
+      with
+        newState : Bool
+      controller issuer
+      do
+        create this with isWhitelistEnabled = newState
+
+    nonconsuming choice ValidateProof : Bool
+      with
+        proofCid : ContractId ComplianceProof
+        user : Party
+      controller user
+      do
+        proof <- fetch proofCid
+        assertMsg "Proof issuer mismatch" (proof.issuer == issuer)
+        assertMsg "Proof user mismatch" (proof.user == user)
+        pure True
+
+-- Individual proof of compliance (visible only to user and issuer)
+template ComplianceProof
+  with
+    issuer : Party
+    user : Party
+  where
+    signatory issuer
+    observer user
+
+    -- NOTE: Contract key removed for DAML-LF 2.x compatibility
+
+    choice Revoke : ()
+      controller issuer
+      do
+        pure ()

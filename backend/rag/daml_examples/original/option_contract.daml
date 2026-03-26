@@ -1,0 +1,100 @@
+module OptionContract where
+
+import Daml.Script
+
+-- European-style option contract (exercisable only at expiry)
+template OptionContract
+  with
+    writer      : Party
+    holder      : Party
+    underlying  : Text
+    strikePrice : Decimal
+    premium     : Decimal
+    expiryDate  : Date
+    optionType  : Text   -- "call" or "put"
+    quantity    : Decimal
+  where
+    signatory writer
+    observer  holder
+
+    ensure strikePrice > 0.0 && premium >= 0.0 && quantity > 0.0
+    ensure optionType == "call" || optionType == "put"
+
+    choice ExerciseOption : ContractId OptionExercise
+      controller holder
+      do
+        create OptionExercise with
+          writer      = writer
+          holder      = holder
+          underlying  = underlying
+          strikePrice = strikePrice
+          quantity    = quantity
+          optionType  = optionType
+
+    choice ExpireOption : ()
+      controller writer
+      do
+        return ()
+
+    choice TransferOption : ContractId OptionContract
+      with newHolder : Party
+      controller holder
+      do
+        create this with holder = newHolder
+
+
+template OptionExercise
+  with
+    writer      : Party
+    holder      : Party
+    underlying  : Text
+    strikePrice : Decimal
+    quantity    : Decimal
+    optionType  : Text
+  where
+    signatory holder
+    observer  writer
+
+    choice SettleExercise : ()
+      controller writer
+      do
+        return ()
+
+
+-- Option premium payment
+template PremiumPayment
+  with
+    payer    : Party
+    receiver : Party
+    amount   : Decimal
+    optionId : Text
+  where
+    signatory payer
+    observer  receiver
+
+    choice ConfirmPremium : ()
+      controller receiver
+      do return ()
+
+
+setup : Script ()
+setup = script do
+  bank   <- allocateParty "OptionsDesk"
+  trader <- allocateParty "HedgeFund"
+
+  optionCid <- submit bank do
+    createCmd OptionContract with
+      writer      = bank
+      holder      = trader
+      underlying  = "AAPL"
+      strikePrice = 200.0
+      premium     = 5.0
+      expiryDate  = date 2025 Mar 21
+      optionType  = "call"
+      quantity    = 100.0
+
+  exerciseCid <- submit trader do
+    exerciseCmd optionCid ExerciseOption
+
+  submit bank do
+    exerciseCmd exerciseCid SettleExercise

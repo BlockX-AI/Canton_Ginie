@@ -1,0 +1,37 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template CollateralizedLoan
+  with
+    lender: Party
+    borrower: Party
+    collateralAmount: Decimal
+    loanAmount: Decimal
+    liquidationThreshold: Decimal
+  where
+    signatory lender
+    observer borrower
+
+    ensure
+      collateralAmount >= liquidationThreshold
+
+    choice RepayLoan : ()
+      with
+        repaymentAmount: Decimal
+      controller borrower
+      do
+        if repaymentAmount >= loanAmount
+          then archive self
+          else return ()
+
+    choice LiquidateCollateral : ()
+      with
+        liquidator: Party
+      controller lender
+      do
+        if collateralAmount < liquidationThreshold
+          then archive self
+          else return ()

@@ -7,11 +7,14 @@ import {
   Zap,
   Shield,
   Loader2,
+  User,
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import GradientText from "./gradient-text";
+import { useAuth } from "@/lib/auth-context";
 
 const FloatingLines = dynamic(
   () => import("./floating-lines"),
@@ -24,20 +27,25 @@ export function Hero(): ReactNode {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const { isAuthenticated, token, partyId, displayName } = useAuth();
 
   const handleSubmit = async () => {
     if (!prompt.trim() || isSubmitting) return;
     setIsSubmitting(true);
     setError("");
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/generate`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
-          },
+          headers,
           body: JSON.stringify({ prompt, canton_environment: "sandbox" }),
         }
       );
@@ -167,10 +175,20 @@ export function Hero(): ReactNode {
 
               <div className="mt-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5 text-xs text-white/30">
-                    <Shield className="h-3 w-3" />
-                    <span>Canton Sandbox</span>
-                  </div>
+                  {isAuthenticated ? (
+                    <div className="flex items-center gap-1.5 text-xs text-green-400/80">
+                      <User className="h-3 w-3" />
+                      <span>{displayName || partyId?.split("::")[0]}</span>
+                    </div>
+                  ) : (
+                    <Link
+                      href="/setup"
+                      className="flex items-center gap-1.5 text-xs text-white/30 transition-colors hover:text-purple-400"
+                    >
+                      <Shield className="h-3 w-3" />
+                      <span>Set Up Identity</span>
+                    </Link>
+                  )}
                   <div className="h-3 w-px bg-white/10" />
                   <span className="text-xs text-white/30">
                     Shift+Enter for new line

@@ -1,0 +1,33 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template BillOfLading
+  with
+    shipper      : Party
+    consignee    : Party
+    carrier      : Party
+    goodsDesc    : Text
+    quantity     : Decimal
+    freightCost  : Decimal
+  where
+    signatory shipper
+    observer consignee
+
+    ensure quantity > 0.0 && freightCost >= 0.0
+
+    choice UpdateFreightCost : ()
+      with newFreightCost : Decimal
+      controller shipper
+      do
+        assertMsg "New freight cost must be non-negative" (newFreightCost >= 0.0)
+        create this with freightCost = newFreightCost
+        return ()
+
+    choice TransferConsignee : ContractId BillOfLading
+      with newConsignee : Party
+      controller consignee
+      do
+        create this with consignee = newConsignee

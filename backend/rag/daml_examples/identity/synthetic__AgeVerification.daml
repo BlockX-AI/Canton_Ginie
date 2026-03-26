@@ -1,0 +1,30 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template AgeVerification
+  with
+    verifier : Party
+    subject  : Party
+    age      : Int
+    purpose  : Text
+  where
+    signatory verifier
+    observer  subject
+
+    ensure age >= 0
+
+    choice VerifyAge : Bool
+      with requiredAge : Int
+      controller verifier
+      do
+        return (age >= requiredAge)
+
+    choice UpdatePurpose : ()
+      with newPurpose : Text
+      controller subject
+      do
+        create this with purpose = newPurpose
+        return ()

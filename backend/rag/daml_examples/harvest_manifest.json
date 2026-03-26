@@ -1,0 +1,4647 @@
+{
+  "harvested_at": "2026-03-25T19:33:06Z",
+  "sdk_version": "2.10.3",
+  "stats": {
+    "repos_cloned": 10,
+    "daml_files_found": 1860,
+    "passed_quality_filter": 1032,
+    "passed_compile_gate": 271,
+    "duplicates_skipped": 132,
+    "patterns_saved": 271,
+    "by_category": {
+      "governance": 4,
+      "utilities": 56,
+      "testing": 97,
+      "interfaces": 49,
+      "propose_accept": 11,
+      "payments": 11,
+      "securities": 33,
+      "nft": 1,
+      "defi": 2,
+      "daml_finance": 3,
+      "token_standards": 4
+    },
+    "by_repo": {
+      "daml": {
+        "found": 1128,
+        "kept": 168
+      },
+      "canton": {
+        "found": 232,
+        "kept": 97
+      },
+      "daml-finance": {
+        "found": 281,
+        "kept": 0
+      },
+      "ex-models": {
+        "found": 40,
+        "kept": 1
+      },
+      "cn-quickstart": {
+        "found": 40,
+        "kept": 0
+      },
+      "splice": {
+        "found": 111,
+        "kept": 3
+      },
+      "ex-secure-canton-infra": {
+        "found": 12,
+        "kept": 1
+      },
+      "wallet-sample-app": {
+        "found": 0,
+        "kept": 0
+      },
+      "decentralized-canton-sync": {
+        "found": 0,
+        "kept": 0
+      },
+      "canton-erc20": {
+        "found": 16,
+        "kept": 1
+      }
+    },
+    "quarantined": 629
+  },
+  "patterns": [
+    {
+      "file": "governance/daml__CoinV1.daml",
+      "repo": "daml",
+      "module": "CoinV1",
+      "templates": [
+        "Coin",
+        "CoinProposal"
+      ],
+      "choices": [
+        "CoinProposal_Accept"
+      ],
+      "category": "governance",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 25,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__CoinV2.daml",
+      "repo": "daml",
+      "module": "CoinV2",
+      "templates": [
+        "CoinWithAmount"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__DisjunctionChoices.daml",
+      "repo": "daml",
+      "module": "DisjunctionChoices",
+      "templates": [
+        "FeatureAssignment",
+        "FeatureSuggestion"
+      ],
+      "choices": [
+        "AcceptFeature"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 32,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__PlatformIndependence.daml",
+      "repo": "daml",
+      "module": "PlatformIndependence",
+      "templates": [
+        "Asset"
+      ],
+      "choices": [
+        "Give"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 46,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Old.daml",
+      "repo": "daml",
+      "module": "Old",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__ApplicativeDo.daml",
+      "repo": "daml",
+      "module": "ApplicativeDo",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 25,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Asset.daml",
+      "repo": "daml",
+      "module": "Asset",
+      "templates": [
+        "Asset"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__ChoiceAuthoritySyntax.daml",
+      "repo": "daml",
+      "module": "ChoiceAuthoritySyntax",
+      "templates": [
+        "TrySyntax"
+      ],
+      "choices": [
+        "X_old_just_controller",
+        "X_old_observer_and_controller",
+        "X_new_just_controllerX",
+        "X_new_just_controller",
+        "X_new_observer_and_controllerX",
+        "X_new_observer_and_controller",
+        "X_new_controller_and_observer",
+        "X_new_authority_and_controller",
+        "X_new_observer_authority_and_controllerX",
+        "X_new_observer_authority_and_controller",
+        "X_new_authority_observer_and_controller",
+        "X_new_controller_authority_observer",
+        "X_new_authority_controller_observer"
+      ],
+      "category": "testing",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 88,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__ChoiceObservers.daml",
+      "repo": "daml",
+      "module": "ChoiceObservers",
+      "templates": [
+        "TheTemplate"
+      ],
+      "choices": [
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 41,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__ChoiceSyntaxes.daml",
+      "repo": "daml",
+      "module": "ChoiceSyntaxes",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1",
+        "C2"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 23,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/daml__Choice_no_params_template.daml",
+      "repo": "daml",
+      "module": "Choice_no_params_template",
+      "templates": [
+        "Bond",
+        "BondTransferRequest"
+      ],
+      "choices": [
+        "Transfer",
+        "Split",
+        "Merge",
+        "Accept",
+        "Reject",
+        "Withdraw"
+      ],
+      "category": "propose_accept",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 60,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Choice_superfluous_with.daml",
+      "repo": "daml",
+      "module": "Choice_superfluous_with",
+      "templates": [
+        "W"
+      ],
+      "choices": [
+        "F"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__ContractKeysNotSupported.daml",
+      "repo": "daml",
+      "module": "ContractKeysNotSupported",
+      "templates": [
+        "TemplateWithKey"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/daml__DamlDocFormatting.daml",
+      "repo": "daml",
+      "module": "DamlDocFormatting",
+      "templates": [
+        "Payment"
+      ],
+      "choices": [
+        "AddReceiver"
+      ],
+      "category": "payments",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 20,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__DamlDocHoogle.daml",
+      "repo": "daml",
+      "module": "DamlDocHoogle",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "TCall",
+        "ICall"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 32,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__ExerciseWithoutActors.daml",
+      "repo": "daml",
+      "module": "ExerciseWithoutActors",
+      "templates": [
+        "Foo"
+      ],
+      "choices": [
+        "Bar"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 21,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__ExplicitSerializableBadChoiceResult.daml",
+      "repo": "daml",
+      "module": "ExplicitSerializableBadChoiceResult",
+      "templates": [
+        "Asset"
+      ],
+      "choices": [
+        "Asset_Double"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 26,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__ExplicitSerializableBadList.daml",
+      "repo": "daml",
+      "module": "ExplicitSerializableBadList",
+      "templates": [
+        "Asset"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 20,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__ExplicitSerializableNoInstance.daml",
+      "repo": "daml",
+      "module": "ExplicitSerializableNoInstance",
+      "templates": [
+        "Asset"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 20,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__InterfaceChoiceCollision1.daml",
+      "repo": "daml",
+      "module": "InterfaceChoiceCollision1",
+      "templates": [],
+      "choices": [
+        "MyArchive"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__InterfaceControllerUnusedWarning.daml",
+      "repo": "daml",
+      "module": "InterfaceControllerUnusedWarning",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__InterfaceNameCollision.daml",
+      "repo": "daml",
+      "module": "InterfaceNameCollision",
+      "templates": [],
+      "choices": [
+        "FooBar"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__InterfaceRequiresClashA.daml",
+      "repo": "daml",
+      "module": "InterfaceRequiresClashA",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__InterfaceRequiresClashB.daml",
+      "repo": "daml",
+      "module": "InterfaceRequiresClashB",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__InterfaceSyntax.daml",
+      "repo": "daml",
+      "module": "InterfaceSyntax",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 44,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__InterfaceViewSerializable.daml",
+      "repo": "daml",
+      "module": "InterfaceViewSerializable",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Locations.daml",
+      "repo": "daml",
+      "module": "Locations",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__No_concat_clash.daml",
+      "repo": "daml",
+      "module": "No_concat_clash",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 21,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__RestrictedNameWarnings.daml",
+      "repo": "daml",
+      "module": "RestrictedNameWarnings",
+      "templates": [
+        "TSelf",
+        "TArg"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 30,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__SerializablePolymorphicContractId.daml",
+      "repo": "daml",
+      "module": "SerializablePolymorphicContractId",
+      "templates": [
+        "Foo"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__SimplifyAppliedLambda.daml",
+      "repo": "daml",
+      "module": "SimplifyAppliedLambda",
+      "templates": [
+        "Arithmetic"
+      ],
+      "choices": [
+        "Add"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 29,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/daml__TemplateHeaders.daml",
+      "repo": "daml",
+      "module": "TemplateHeaders",
+      "templates": [
+        "A",
+        "D"
+      ],
+      "choices": [
+        "Transfer"
+      ],
+      "category": "payments",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__TemplateTypeRep2.daml",
+      "repo": "daml",
+      "module": "TemplateTypeRep2",
+      "templates": [
+        "T1"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__UnusedMatchTests.daml",
+      "repo": "daml",
+      "module": "UnusedMatchTests",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "Revoke"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 53,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__UnusedMatchTestsWithKeys.daml",
+      "repo": "daml",
+      "module": "UnusedMatchTestsWithKeys",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "Revoke"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 56,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__PackageAModule.daml",
+      "repo": "daml",
+      "module": "PackageAModule",
+      "templates": [
+        "PackageATemplate"
+      ],
+      "choices": [
+        "Call"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__LfDevNoContractIdsInKeys_Simple.daml",
+      "repo": "daml",
+      "module": "LfDevNoContractIdsInKeys.Simple",
+      "templates": [
+        "Simple"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__QualifiedInterface_Interface.daml",
+      "repo": "daml",
+      "module": "QualifiedInterface.Interface",
+      "templates": [],
+      "choices": [
+        "Split",
+        "Transfer",
+        "GetRich",
+        "Noop"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 51,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Test.daml",
+      "repo": "daml",
+      "module": "Test",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Interfaces.daml",
+      "repo": "daml",
+      "module": "Interfaces",
+      "templates": [
+        "Child"
+      ],
+      "choices": [
+        "Ham",
+        "Useless",
+        "Bar"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 37,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Com_Acme_Templates.daml",
+      "repo": "daml",
+      "module": "Com.Acme.Templates",
+      "templates": [
+        "Bar"
+      ],
+      "choices": [
+        "Bar_SomeChoice"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 27,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Batching.daml",
+      "repo": "daml",
+      "module": "Batching",
+      "templates": [
+        "Example",
+        "BatchFoo"
+      ],
+      "choices": [
+        "Foo",
+        "Run"
+      ],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 47,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__ImplicitSerializable.daml",
+      "repo": "daml",
+      "module": "ImplicitSerializable",
+      "templates": [
+        "Asset"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 23,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Reference.daml",
+      "repo": "daml",
+      "module": "Reference",
+      "templates": [
+        "NameOfTemplate"
+      ],
+      "choices": [
+        "NameOfChoice",
+        "ExampleChoice",
+        "ExamplePreconsumingChoice",
+        "ExamplePostconsumingChoice",
+        "ExampleNonconsumingChoice"
+      ],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 84,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Structure.daml",
+      "repo": "daml",
+      "module": "Structure",
+      "templates": [
+        "NameOfTemplate"
+      ],
+      "choices": [
+        "NameOfChoice",
+        "NameOfChoiceWithObserver"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 48,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Exceptions.daml",
+      "repo": "daml",
+      "module": "Exceptions",
+      "templates": [
+        "Error",
+        "Test",
+        "T"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 54,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Interfaces.daml",
+      "repo": "daml",
+      "module": "Interfaces",
+      "templates": [
+        "NameOfTemplate"
+      ],
+      "choices": [
+        "MyChoice",
+        "MyNonConsumingChoice"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 110,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/daml__LfResults.daml",
+      "repo": "daml",
+      "module": "LfResults",
+      "templates": [],
+      "choices": [],
+      "category": "payments",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 20,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__LfTranslation.daml",
+      "repo": "daml",
+      "module": "LfTranslation",
+      "templates": [
+        "Iou"
+      ],
+      "choices": [
+        "Transfer",
+        "DoNothing"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 38,
+      "compile_passed": true
+    },
+    {
+      "file": "governance/daml__CarbonV1.daml",
+      "repo": "daml",
+      "module": "CarbonV1",
+      "templates": [
+        "CarbonCert",
+        "CarbonCertProposal"
+      ],
+      "choices": [
+        "CarbonCertProposal_Accept"
+      ],
+      "category": "governance",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 27,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__CarbonV2.daml",
+      "repo": "daml",
+      "module": "CarbonV2",
+      "templates": [
+        "CarbonCertWithMethod"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/daml__Iou.daml",
+      "repo": "daml",
+      "module": "Iou",
+      "templates": [
+        "Iou",
+        "IouTransfer"
+      ],
+      "choices": [
+        "Iou_Split",
+        "Iou_Merge",
+        "Iou_Transfer",
+        "Iou_AddObserver",
+        "Iou_RemoveObserver",
+        "IouTransfer_Cancel",
+        "IouTransfer_Reject",
+        "IouTransfer_Accept"
+      ],
+      "category": "payments",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 106,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 47,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/daml__Intro_Asset.daml",
+      "repo": "daml",
+      "module": "Intro.Asset",
+      "templates": [
+        "Asset",
+        "TransferProposal",
+        "TransferApproval"
+      ],
+      "choices": [
+        "Split",
+        "Merge",
+        "ProposeTransfer",
+        "SetObservers",
+        "TransferProposal_Accept",
+        "TransferProposal_Cancel",
+        "TransferProposal_Reject",
+        "TransferApproval_Cancel",
+        "TransferApproval_Reject",
+        "TransferApproval_Transfer"
+      ],
+      "category": "propose_accept",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 147,
+      "compile_passed": true
+    },
+    {
+      "file": "nft/daml__Token.daml",
+      "repo": "daml",
+      "module": "Token",
+      "templates": [
+        "Token"
+      ],
+      "choices": [],
+      "category": "nft",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 31,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T",
+        "S"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 225,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Library_CatalogItem.daml",
+      "repo": "daml",
+      "module": "Library.CatalogItem",
+      "templates": [],
+      "choices": [
+        "CatalogItem_LoanTo",
+        "CatalogItem_ReturnToOwner",
+        "CatalogItem_Disclose"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 49,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__ContractKeys.daml",
+      "repo": "daml",
+      "module": "ContractKeys",
+      "templates": [
+        "WithKey",
+        "WithoutKey"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 28,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Iou.daml",
+      "repo": "daml",
+      "module": "Iou",
+      "templates": [
+        "Iou"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Valuepedia.daml",
+      "repo": "daml",
+      "module": "Valuepedia",
+      "templates": [
+        "C",
+        "HasBucket"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 47,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__ExtraModule.daml",
+      "repo": "daml",
+      "module": "ExtraModule",
+      "templates": [
+        "ExtraTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__A.daml",
+      "repo": "daml",
+      "module": "A",
+      "templates": [
+        "T1"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__A.daml",
+      "repo": "daml",
+      "module": "A",
+      "templates": [
+        "T2"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_ContractKeys.daml",
+      "repo": "daml",
+      "module": "Tests.ContractKeys",
+      "templates": [
+        "NoKey",
+        "PartyKey",
+        "RecordKey",
+        "TupleKey",
+        "NestedTupleKey"
+      ],
+      "choices": [
+        "NoKey_Choice",
+        "PartyKey_Choice",
+        "RecordKey_Choice",
+        "TupleKey_Choice",
+        "NestedTupleKey_Choice"
+      ],
+      "category": "testing",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 83,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_EnumTest.daml",
+      "repo": "daml",
+      "module": "Tests.EnumTest",
+      "templates": [
+        "FooBarTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_Escape.daml",
+      "repo": "daml",
+      "module": "Tests.Escape",
+      "templates": [
+        "EscapeTemplates"
+      ],
+      "choices": [
+        "Void"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 60,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Tests_GenMapTest.daml",
+      "repo": "daml",
+      "module": "Tests.GenMapTest",
+      "templates": [
+        "TemplateWithMap",
+        "GenMapTestTemplate"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 41,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_ListTest.daml",
+      "repo": "daml",
+      "module": "Tests.ListTest",
+      "templates": [
+        "ListTestTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 46,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Tests_Names.daml",
+      "repo": "daml",
+      "module": "Tests.Names",
+      "templates": [
+        "Contract",
+        "ContractId",
+        "ByKey",
+        "CreateAnd",
+        "Exercises"
+      ],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_NumericTest.daml",
+      "repo": "daml",
+      "module": "Tests.NumericTest",
+      "templates": [
+        "NumericTestTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 24,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Tests_OptionalTest.daml",
+      "repo": "daml",
+      "module": "Tests.OptionalTest",
+      "templates": [
+        "OptionalTestTemplate"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 44,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_RecordTest.daml",
+      "repo": "daml",
+      "module": "Tests.RecordTest",
+      "templates": [
+        "Foo",
+        "RecordTestTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 85,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Tests_SimpleInterface.daml",
+      "repo": "daml",
+      "module": "Tests.SimpleInterface",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_Template2.daml",
+      "repo": "daml",
+      "module": "Tests.Template2",
+      "templates": [
+        "TestTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_TextMapTest.daml",
+      "repo": "daml",
+      "module": "Tests.TextMapTest",
+      "templates": [
+        "TemplateWithMap",
+        "TextMapTestTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 47,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Tests_UpgradeTest.daml",
+      "repo": "daml",
+      "module": "Tests.UpgradeTest",
+      "templates": [
+        "UpgradeTestTemplate"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 35,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Tests_VariantTest.daml",
+      "repo": "daml",
+      "module": "Tests.VariantTest",
+      "templates": [
+        "VariantTestTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 46,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Interfaces.daml",
+      "repo": "daml",
+      "module": "Interfaces",
+      "templates": [
+        "Child",
+        "ChildClone"
+      ],
+      "choices": [
+        "Ham",
+        "Useless",
+        "Bar"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 50,
+      "compile_passed": true
+    },
+    {
+      "file": "defi/daml__Stakeholders.daml",
+      "repo": "daml",
+      "module": "Stakeholders",
+      "templates": [
+        "OnlySignatories",
+        "ExplicitObservers"
+      ],
+      "choices": [],
+      "category": "defi",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Wolpertinger.daml",
+      "repo": "daml",
+      "module": "Wolpertinger",
+      "templates": [
+        "Wolpertinger"
+      ],
+      "choices": [
+        "Reproduce"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 51,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__AnotherBar.daml",
+      "repo": "daml",
+      "module": "AnotherBar",
+      "templates": [
+        "AnotherBar"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Bar.daml",
+      "repo": "daml",
+      "module": "Bar",
+      "templates": [
+        "Bar",
+        "Haha"
+      ],
+      "choices": [
+        "AddOne"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 35,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Baz.daml",
+      "repo": "daml",
+      "module": "Baz",
+      "templates": [
+        "Baz"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Npm1.daml",
+      "repo": "daml",
+      "module": "Npm1",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Npm2.daml",
+      "repo": "daml",
+      "module": "Npm2",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__T.daml",
+      "repo": "daml",
+      "module": "T",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Lib_EmptyIfaceOnly.daml",
+      "repo": "daml",
+      "module": "Lib.EmptyIfaceOnly",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Lib_Mod.daml",
+      "repo": "daml",
+      "module": "Lib.Mod",
+      "templates": [
+        "NonTopLevel"
+      ],
+      "choices": [
+        "Something",
+        "Overridden",
+        "PeerIfaceOverload"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 37,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Lib_ModIfaceOnly.daml",
+      "repo": "daml",
+      "module": "Lib.ModIfaceOnly",
+      "templates": [],
+      "choices": [
+        "PeerIfaceOverload"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "daml_finance/daml__JsonEncodingTest.daml",
+      "repo": "daml",
+      "module": "JsonEncodingTest",
+      "templates": [
+        "Account",
+        "KeyedByParty",
+        "KeyedByPartyInt",
+        "KeyedByVariantAndRecord"
+      ],
+      "choices": [],
+      "category": "daml_finance",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 56,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Asset.daml",
+      "repo": "daml",
+      "module": "Asset",
+      "templates": [],
+      "choices": [
+        "GetView"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "Asset"
+      ],
+      "choices": [
+        "Give"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/daml__Iou.daml",
+      "repo": "daml",
+      "module": "Iou",
+      "templates": [
+        "Iou",
+        "IouTransfer"
+      ],
+      "choices": [
+        "Iou_Split",
+        "Iou_Merge",
+        "Iou_Transfer",
+        "Iou_AddObserver",
+        "Iou_RemoveObserver",
+        "IouTransfer_Cancel",
+        "IouTransfer_Reject",
+        "IouTransfer_Accept"
+      ],
+      "category": "payments",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 84,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Dep.daml",
+      "repo": "daml",
+      "module": "Dep",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Dep.daml",
+      "repo": "daml",
+      "module": "Dep",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__DepDep.daml",
+      "repo": "daml",
+      "module": "DepDep",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__DepDep.daml",
+      "repo": "daml",
+      "module": "DepDep",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1",
+        "C2"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 20,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1",
+        "C2"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T",
+        "U"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 21,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 23,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Dep.daml",
+      "repo": "daml",
+      "module": "Dep",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Dep.daml",
+      "repo": "daml",
+      "module": "Dep",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1",
+        "C2"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__DepDep.daml",
+      "repo": "daml",
+      "module": "DepDep",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1",
+        "C2"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "C1",
+        "C2"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T",
+        "U"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 31,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 20,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "T"
+      ],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [
+        "C"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/daml__Main.daml",
+      "repo": "daml",
+      "module": "Main",
+      "templates": [
+        "A"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__CantonLfDev.daml",
+      "repo": "canton",
+      "module": "CantonLfDev",
+      "templates": [
+        "HelloLfDev"
+      ],
+      "choices": [
+        "Ack"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__CantonLfV21.daml",
+      "repo": "canton",
+      "module": "CantonLfV21",
+      "templates": [
+        "HelloLfV21"
+      ],
+      "choices": [
+        "Ack"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__Coins.daml",
+      "repo": "canton",
+      "module": "Coins",
+      "templates": [
+        "CoinsFactoryProposal",
+        "CoinsFactory",
+        "Coin",
+        "CoinTransferProposal"
+      ],
+      "choices": [
+        "CreateFactory",
+        "AddObserver",
+        "ProposeTransfer",
+        "AcceptCoinTransfer",
+        "CreateCoin"
+      ],
+      "category": "propose_accept",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 62,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__AutomaticReassignmentTransactions.daml",
+      "repo": "canton",
+      "module": "AutomaticReassignmentTransactions",
+      "templates": [
+        "Single",
+        "Aggregate",
+        "Inject"
+      ],
+      "choices": [
+        "Inform",
+        "CountThis",
+        "CountPublic",
+        "CountAll",
+        "CountAllAdditionalParty",
+        "CountPublicAll"
+      ],
+      "category": "securities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 62,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__CausalityTest.daml",
+      "repo": "canton",
+      "module": "CausalityTest",
+      "templates": [
+        "SignatoryObserver"
+      ],
+      "choices": [
+        "ArchiveByObserver"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__ConflictTest.daml",
+      "repo": "canton",
+      "module": "ConflictTest",
+      "templates": [
+        "Single",
+        "Many"
+      ],
+      "choices": [
+        "FetchAndArchive",
+        "Delete",
+        "DeleteMany",
+        "FetchOnly",
+        "FetchAsExercise"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 52,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__DamlDebug.daml",
+      "repo": "canton",
+      "module": "DamlDebug",
+      "templates": [
+        "DebugTest"
+      ],
+      "choices": [
+        "Debug",
+        "DebugRaw",
+        "Trace",
+        "TraceRaw",
+        "TraceId"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 49,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__ExceptionsTester.daml",
+      "repo": "canton",
+      "module": "ExceptionsTester",
+      "templates": [
+        "Informees",
+        "ExceptionsTester"
+      ],
+      "choices": [
+        "SignOn",
+        "Close",
+        "Throw",
+        "SimpleRollbackCreate",
+        "RollbackCreate",
+        "RollbackExercise",
+        "RollbackExerciseWithNestedThrow"
+      ],
+      "category": "testing",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 113,
+      "compile_passed": true
+    },
+    {
+      "file": "defi/canton__ExplicitDisclosure.daml",
+      "repo": "canton",
+      "module": "ExplicitDisclosure",
+      "templates": [
+        "PriceQuotation"
+      ],
+      "choices": [
+        "PriceQuotation_Fetch"
+      ],
+      "category": "defi",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 21,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__LocalContract.daml",
+      "repo": "canton",
+      "module": "LocalContract",
+      "templates": [
+        "Local",
+        "Holder"
+      ],
+      "choices": [
+        "GetName",
+        "CreateAndUse"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 36,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Loop.daml",
+      "repo": "canton",
+      "module": "Loop",
+      "templates": [
+        "Helper"
+      ],
+      "choices": [
+        "Loop"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__ManySimpleContracts.daml",
+      "repo": "canton",
+      "module": "ManySimpleContracts",
+      "templates": [
+        "Creator",
+        "TwoParty"
+      ],
+      "choices": [
+        "Spawn"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 30,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Refs.daml",
+      "repo": "canton",
+      "module": "Refs",
+      "templates": [
+        "Refs"
+      ],
+      "choices": [
+        "Refs_Fetch"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__SimpleContractWithPayload.daml",
+      "repo": "canton",
+      "module": "SimpleContractWithPayload",
+      "templates": [
+        "SimpleContractWithPayload"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__SimpleTemplate.daml",
+      "repo": "canton",
+      "module": "SimpleTemplate",
+      "templates": [
+        "SimpleTemplate"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__SimpleKeys.daml",
+      "repo": "canton",
+      "module": "SimpleKeys",
+      "templates": [
+        "SimpleKey"
+      ],
+      "choices": [
+        "FetchWithObservers"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 23,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Account.daml",
+      "repo": "canton",
+      "module": "Account",
+      "templates": [
+        "Account",
+        "SharedAccount",
+        "KeyedByVariantAndRecord",
+        "KeyedByDecimal",
+        "PubSub",
+        "Helper"
+      ],
+      "choices": [
+        "CreateN",
+        "ArchiveAll",
+        "ChangeAmount"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 121,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Disclosure.daml",
+      "repo": "canton",
+      "module": "Disclosure",
+      "templates": [
+        "ToDisclose",
+        "AnotherToDisclose",
+        "Viewport"
+      ],
+      "choices": [
+        "Open_Fetch",
+        "Another_Open_Fetch",
+        "G_Open_Fetch",
+        "CheckVisibility"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 53,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__IIou.daml",
+      "repo": "canton",
+      "module": "IIou",
+      "templates": [
+        "TestIIou"
+      ],
+      "choices": [
+        "Transfer",
+        "Ambiguous"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 33,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Transferrable.daml",
+      "repo": "canton",
+      "module": "Transferrable",
+      "templates": [],
+      "choices": [
+        "Overridden",
+        "Ambiguous",
+        "TransferIt"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 30,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__IFoo.daml",
+      "repo": "canton",
+      "module": "IFoo",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__User.daml",
+      "repo": "canton",
+      "module": "User",
+      "templates": [
+        "User"
+      ],
+      "choices": [
+        "Follow"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 32,
+      "compile_passed": true
+    },
+    {
+      "file": "daml_finance/canton__SubViewsAsset.daml",
+      "repo": "canton",
+      "module": "SubViewsAsset",
+      "templates": [
+        "Asset",
+        "AssetFactory"
+      ],
+      "choices": [
+        "Cycle",
+        "CreateAsset"
+      ],
+      "category": "daml_finance",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 31,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__SubViewsAsset.daml",
+      "repo": "canton",
+      "module": "SubViewsAsset",
+      "templates": [
+        "Asset",
+        "AssetFactory"
+      ],
+      "choices": [
+        "Cycle",
+        "CreateAsset"
+      ],
+      "category": "securities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 33,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Foo.daml",
+      "repo": "canton",
+      "module": "Foo",
+      "templates": [
+        "Foo"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__Foo.daml",
+      "repo": "canton",
+      "module": "Foo",
+      "templates": [
+        "Foo"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__Foo.daml",
+      "repo": "canton",
+      "module": "Foo",
+      "templates": [
+        "Foo"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Dep.daml",
+      "repo": "canton",
+      "module": "Dep",
+      "templates": [
+        "DepT"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__Dep.daml",
+      "repo": "canton",
+      "module": "Dep",
+      "templates": [
+        "DepT"
+      ],
+      "choices": [],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Dep.daml",
+      "repo": "canton",
+      "module": "Dep",
+      "templates": [
+        "DepT"
+      ],
+      "choices": [],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Cycle.daml",
+      "repo": "canton",
+      "module": "Cycle",
+      "templates": [
+        "Cycle"
+      ],
+      "choices": [
+        "Repeat"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__TrailingNone.daml",
+      "repo": "canton",
+      "module": "TrailingNone",
+      "templates": [
+        "TrailingNone"
+      ],
+      "choices": [
+        "ArchiveMe"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/canton__DarReaderTest.daml",
+      "repo": "canton",
+      "module": "DarReaderTest",
+      "templates": [
+        "PayOut",
+        "CallablePayout"
+      ],
+      "choices": [
+        "Call2",
+        "Transfer"
+      ],
+      "category": "payments",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 31,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__AuthTests.daml",
+      "repo": "canton",
+      "module": "AuthTests",
+      "templates": [
+        "T1",
+        "T2",
+        "X1",
+        "X2"
+      ],
+      "choices": [
+        "Choice1",
+        "ChoiceA",
+        "ChoiceB"
+      ],
+      "category": "testing",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 62,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/canton__BasicTests.daml",
+      "repo": "canton",
+      "module": "BasicTests",
+      "templates": [
+        "Simple",
+        "SimpleFetcher",
+        "SimpleNumeric",
+        "SimpleTrailingNone",
+        "SimpleMultiParty",
+        "TypeWithParameters",
+        "PayOut",
+        "CallablePayout",
+        "WithKey",
+        "FetcherByKey",
+        "LookerUpByKey",
+        "FailedFetchByKey",
+        "ExerciseByKey",
+        "Fetched",
+        "Fetcher",
+        "Forkable",
+        "TimeGetter",
+        "ComputeContractKeyAfterEnsureClause",
+        "ComputeContractKeyWhenExecutingCreate",
+        "NoMaintainer",
+        "TypedKey"
+      ],
+      "choices": [
+        "Hello",
+        "DoFetchSimple",
+        "HelloNumeric",
+        "HelloTrailingNone",
+        "HelloMultiParty",
+        "Hello2",
+        "Call",
+        "Transfer",
+        "FetchAfterLookup",
+        "Exercise",
+        "DoFetch",
+        "Fork",
+        "GetTime",
+        "FactorialOfThree",
+        "SumToK",
+        "Fetch",
+        "Lookup",
+        "DontExecuteCreate",
+        "Noop"
+      ],
+      "category": "payments",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 429,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__Demonstrator.daml",
+      "repo": "canton",
+      "module": "Demonstrator",
+      "templates": [
+        "RegistrarRole",
+        "TransferRequest",
+        "CancelledTransfer"
+      ],
+      "choices": [
+        "AcceptTransfer",
+        "AcceptTransferRequest",
+        "CancelTransferRequest"
+      ],
+      "category": "propose_accept",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 57,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__LargeTransaction.daml",
+      "repo": "canton",
+      "module": "LargeTransaction",
+      "templates": [
+        "IntContainer",
+        "ListContainer",
+        "RangeOfInts",
+        "ListUtil"
+      ],
+      "choices": [
+        "ToList",
+        "ToListContainer",
+        "ToListOfIntContainers",
+        "Size"
+      ],
+      "category": "utilities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 61,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__ReplayBenchmark.daml",
+      "repo": "canton",
+      "module": "ReplayBenchmark",
+      "templates": [
+        "T"
+      ],
+      "choices": [
+        "Add",
+        "Sub",
+        "Explode"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 28,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Exceptions.daml",
+      "repo": "canton",
+      "module": "Exceptions",
+      "templates": [
+        "T",
+        "K",
+        "Helper",
+        "GlobalLookups",
+        "NodeSeeds"
+      ],
+      "choices": [
+        "LookupTwice",
+        "LookupAfterCreate",
+        "LookupAfterCreateArchive",
+        "LookupAfterFetch",
+        "LookupAfterArchive",
+        "LookupAfterRollbackCreate",
+        "LookupAfterRollbackLookup",
+        "LookupAfterArchiveAfterRollbackLookup",
+        "CreateAllTypes",
+        "RollbackArchiveTransient",
+        "ArchiveTransient",
+        "RollbackArchiveNonTransient",
+        "ArchiveNonTransient",
+        "RollbackKey",
+        "Key",
+        "ExerciseAfterRollbackCreate",
+        "ThrowInHandler",
+        "ThrowPureInHandler",
+        "ThrowPureInHandlerPattern"
+      ],
+      "category": "utilities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 260,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__InterfaceViews.daml",
+      "repo": "canton",
+      "module": "InterfaceViews",
+      "templates": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5"
+      ],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 70,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Interfaces.daml",
+      "repo": "canton",
+      "module": "Interfaces",
+      "templates": [
+        "T1",
+        "T2"
+      ],
+      "choices": [
+        "C1",
+        "C2",
+        "C4",
+        "OwnChoice"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 58,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__MultiKeys.daml",
+      "repo": "canton",
+      "module": "MultiKeys",
+      "templates": [
+        "Keyed",
+        "KeyOperations"
+      ],
+      "choices": [
+        "RollbackGlobalArchivedCreate",
+        "RollbackExerciseCreateFetchByKey",
+        "RollbackExerciseCreateLookup",
+        "CreateOverwritesLocal",
+        "CreateOverwritesUnknownGlobal",
+        "CreateOverwritesKnownGlobal",
+        "FetchDoesNotOverwriteGlobal",
+        "FetchDoesNotOverwriteLocal",
+        "LocalArchiveOverwritesUnknownGlobal",
+        "LocalArchiveOverwritesKnownGlobal",
+        "GlobalArchiveOverwritesUnknownGlobal",
+        "GlobalArchiveOverwritesKnownGlobal1",
+        "GlobalArchiveOverwritesKnownGlobal2",
+        "RollbackCreateNonRollbackFetchByKey",
+        "RollbackFetchByKeyRollbackCreateNonRollbackFetchByKey",
+        "RollbackFetchByKeyNonRollbackCreate",
+        "RollbackFetchNonRollbackCreate",
+        "RollbackGlobalArchiveNonRollbackCreate",
+        "RollbackCreateNonRollbackGlobalArchive",
+        "RollbackGlobalArchiveUpdates",
+        "RollbackGlobalArchivedLookup"
+      ],
+      "category": "securities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 307,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__ReinterpretTests.daml",
+      "repo": "canton",
+      "module": "ReinterpretTests",
+      "templates": [
+        "MySimple"
+      ],
+      "choices": [
+        "MyHello",
+        "MyThrow",
+        "ProvokeBadOrd"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 38,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__InterfaceTestLib.daml",
+      "repo": "canton",
+      "module": "InterfaceTestLib",
+      "templates": [],
+      "choices": [
+        "Useless"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__CarbonV1.daml",
+      "repo": "canton",
+      "module": "CarbonV1",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 12,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__ContractIdTests.daml",
+      "repo": "canton",
+      "module": "ContractIdTests",
+      "templates": [
+        "Contract",
+        "ContractRef"
+      ],
+      "choices": [
+        "Change"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 30,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__DeeplyNestedValue.daml",
+      "repo": "canton",
+      "module": "DeeplyNestedValue",
+      "templates": [
+        "ContractWithKey",
+        "Handler"
+      ],
+      "choices": [
+        "CreateKey",
+        "FetchByKey",
+        "LookupByKey"
+      ],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 54,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__ExceptionRaceTests.daml",
+      "repo": "canton",
+      "module": "ExceptionRaceTests",
+      "templates": [
+        "DummyContract",
+        "ContractWithKey",
+        "FetchWrapper",
+        "LookupResult",
+        "LookupWrapper",
+        "CreateWrapper",
+        "ExerciseWrapper"
+      ],
+      "choices": [
+        "ContractWithKey_Archive",
+        "ContractWithKey_Exercise",
+        "FetchWrapper_Fetch",
+        "LookupWrapper_Lookup",
+        "CreateWrapper_CreateRollback",
+        "ExerciseWrapper_ExerciseConsumingRollback",
+        "ExerciseWrapper_ExerciseNonConsumingRollback"
+      ],
+      "category": "securities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 115,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Exceptions.daml",
+      "repo": "canton",
+      "module": "Exceptions",
+      "templates": [
+        "T",
+        "WithSimpleKey",
+        "WithKey",
+        "Divulger",
+        "Fetcher",
+        "ProjectionDivulgenceHelper",
+        "RollbackNestingHelper",
+        "WithKeyDelegate",
+        "Informer",
+        "ExceptionTester"
+      ],
+      "choices": [
+        "Consume",
+        "DivulgeProjection",
+        "Rollback",
+        "WithKey_Noop",
+        "Divulge",
+        "Fetch",
+        "Fetch_",
+        "CreateWithKey",
+        "Inform",
+        "Noop",
+        "ThrowUncaught",
+        "ThrowCaught",
+        "RollbackFetch",
+        "RollbackFetchWithExercise",
+        "RollbackConsuming",
+        "RollbackConsumingWithCreate",
+        "RollbackNonConsuming",
+        "RolledBackChoice",
+        "RollbackCreate",
+        "RollbackCreateWithExercise",
+        "DuplicateKey",
+        "FetchKey",
+        "NestedCatch",
+        "NestedCatchChild",
+        "RolledbackArchiveConsuming",
+        "RolledbackArchiveNonConsuming",
+        "RolledbackDuplicateKey",
+        "ProjectionDivulgence",
+        "ProjectionNormalization",
+        "ProjectionNesting",
+        "ProjectionNestingInner",
+        "RollbackGlobalArchivedLookup",
+        "RollbackGlobalArchivedCreate",
+        "RollbackCreateBecomesInactive",
+        "RollbackExerciseCreateLookup"
+      ],
+      "category": "utilities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 415,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__RaceTests.daml",
+      "repo": "canton",
+      "module": "RaceTests",
+      "templates": [
+        "DummyContract",
+        "ContractWithKey",
+        "FetchWrapper",
+        "LookupResult",
+        "LookupWrapper",
+        "CreateWrapper"
+      ],
+      "choices": [
+        "ContractWithKey_Archive",
+        "ContractWithKey_Exercise",
+        "FetchWrapper_Fetch",
+        "LookupWrapper_Lookup",
+        "CreateWrapper_CreateTransient"
+      ],
+      "category": "securities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 71,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__Test.daml",
+      "repo": "canton",
+      "module": "Test",
+      "templates": [
+        "TextKey",
+        "TextKeyOperations",
+        "LocalKeyVisibilityOperations",
+        "Delegated",
+        "Delegation",
+        "ShowDelegated",
+        "MaintainerNotSignatory",
+        "Proposal",
+        "Asset",
+        "MultiPartyContract",
+        "WithKey",
+        "WithKeyCreator",
+        "WithKeyCreatorAlternative"
+      ],
+      "choices": [
+        "TextKeyChoice",
+        "TextKeyDisclose",
+        "Recreate",
+        "ShowIt",
+        "ProposalAccept",
+        "AssetTransfer",
+        "MPAddSignatories",
+        "WithKeyCreator_DiscloseCreate",
+        "TKOLookup",
+        "TKOFetch",
+        "TKOConsumeAndLookup",
+        "TKOFetchAndRecreate",
+        "LocalLookup",
+        "LocalFetch",
+        "CreateAnotherAndArchive",
+        "FetchDelegated",
+        "FetchByKeyDelegated",
+        "LookupByKeyDelegated",
+        "MPFetchOther",
+        "MPFetchOtherByKey",
+        "MPLookupOtherByKey",
+        "WithKey_NoOp",
+        "WithKeyCreatorAlternative_DiscloseCreate"
+      ],
+      "category": "securities",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 284,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Iou.daml",
+      "repo": "canton",
+      "module": "Iou",
+      "templates": [
+        "Iou",
+        "IouTransfer"
+      ],
+      "choices": [
+        "Iou_Split",
+        "Iou_Merge",
+        "Iou_Transfer",
+        "Iou_AddObserver",
+        "Iou_RemoveObserver",
+        "IouTransfer_Cancel",
+        "IouTransfer_Reject",
+        "IouTransfer_Accept",
+        "DateCheckAddDays",
+        "TimestampCheckAddHours",
+        "TextMapCheck"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 121,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__TrailingNonesIface.daml",
+      "repo": "canton",
+      "module": "TrailingNonesIface",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__OngoingStreamPackageUploadTest.daml",
+      "repo": "canton",
+      "module": "OngoingStreamPackageUploadTest",
+      "templates": [
+        "OngoingStreamPackageUploadTestTemplate"
+      ],
+      "choices": [
+        "TestChoice"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__PackageManagementTest.daml",
+      "repo": "canton",
+      "module": "PackageManagementTest",
+      "templates": [
+        "PackageManagementTestTemplate"
+      ],
+      "choices": [
+        "TestChoice"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__ContractIdTests.daml",
+      "repo": "canton",
+      "module": "ContractIdTests",
+      "templates": [
+        "Contract",
+        "ContractRef"
+      ],
+      "choices": [
+        "Change"
+      ],
+      "category": "testing",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__DamlValues.daml",
+      "repo": "canton",
+      "module": "DamlValues",
+      "templates": [
+        "WithTextMap"
+      ],
+      "choices": [
+        "WithTextMap_Expand"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 24,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__DeeplyNestedValue.daml",
+      "repo": "canton",
+      "module": "DeeplyNestedValue",
+      "templates": [
+        "Contract",
+        "Handler"
+      ],
+      "choices": [
+        "Construct",
+        "Destruct",
+        "ConstructThenDestruct",
+        "Create",
+        "Fetch"
+      ],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 59,
+      "compile_passed": true
+    },
+    {
+      "file": "governance/canton__DivulgenceTests.daml",
+      "repo": "canton",
+      "module": "DivulgenceTests",
+      "templates": [
+        "Contract",
+        "Divulgence",
+        "DivulgenceProposal",
+        "DivulgeNotDiscloseTemplate",
+        "Dummy",
+        "DummyFlexibleController"
+      ],
+      "choices": [
+        "Accept",
+        "FlexibleConsume",
+        "Divulge",
+        "CreateAndDisclose",
+        "CanFetch",
+        "DivulgeNoDisclose"
+      ],
+      "category": "governance",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 84,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Interface1.daml",
+      "repo": "canton",
+      "module": "Interface1",
+      "templates": [],
+      "choices": [
+        "MyArchive",
+        "ChoiceI1"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Interface2.daml",
+      "repo": "canton",
+      "module": "Interface2",
+      "templates": [],
+      "choices": [
+        "MyArchive",
+        "ChoiceI2"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 17,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__InterfaceViews.daml",
+      "repo": "canton",
+      "module": "InterfaceViews",
+      "templates": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6"
+      ],
+      "choices": [
+        "ChoiceI",
+        "ChoiceT2"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 113,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Limits.daml",
+      "repo": "canton",
+      "module": "Limits",
+      "templates": [
+        "WithMap",
+        "WithList"
+      ],
+      "choices": [
+        "WithMap_Expand",
+        "WithList_Expand",
+        "WithMap_Noop",
+        "WithList_Noop"
+      ],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 44,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/canton__SemanticTests.daml",
+      "repo": "canton",
+      "module": "SemanticTests",
+      "templates": [
+        "GetCash",
+        "Iou",
+        "FetchIou",
+        "SharedContract",
+        "PaintOffer",
+        "FetchPaintOffer",
+        "PaintCounterOffer",
+        "PaintAgree",
+        "FetchPaintAgree",
+        "Token",
+        "Delegation"
+      ],
+      "choices": [
+        "Call",
+        "Transfer",
+        "FetchIou_Fetch",
+        "SharedContract_Consume1",
+        "SharedContract_Consume2",
+        "SharedContract_BothConsume",
+        "PaintOffer_Accept",
+        "PaintOffer_Counter",
+        "FetchPaintOffer_Fetch",
+        "PaintCounterOffer_Accept",
+        "FetchPaintAgree_Fetch",
+        "Token_Transfer",
+        "Token_Consume",
+        "Delegation_Token_Consume",
+        "Delegation_Divulge_Token",
+        "Delegation_Wrong_Divulge_Token"
+      ],
+      "category": "payments",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 190,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__TimeTests.daml",
+      "repo": "canton",
+      "module": "TimeTests",
+      "templates": [
+        "TimeChecker"
+      ],
+      "choices": [
+        "TimeChecker_CheckTime"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 19,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Upgrade.daml",
+      "repo": "canton",
+      "module": "Upgrade",
+      "templates": [
+        "UA"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 13,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__UpgradeFetch.daml",
+      "repo": "canton",
+      "module": "UpgradeFetch",
+      "templates": [
+        "Fetcher"
+      ],
+      "choices": [
+        "Fetch"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__UpgradeFetch.daml",
+      "repo": "canton",
+      "module": "UpgradeFetch",
+      "templates": [
+        "Fetcher"
+      ],
+      "choices": [
+        "Fetch"
+      ],
+      "category": "securities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Alt.daml",
+      "repo": "canton",
+      "module": "Alt",
+      "templates": [
+        "AltT"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Main.daml",
+      "repo": "canton",
+      "module": "Main",
+      "templates": [
+        "MainT",
+        "MainTSimple"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__ExternalDep.daml",
+      "repo": "canton",
+      "module": "ExternalDep",
+      "templates": [
+        "TemplateFoo",
+        "TemplateBar"
+      ],
+      "choices": [
+        "MyChoice",
+        "SourceTemplate_Args_RetRecord",
+        "MyNonConsumingChoice",
+        "TemplateFoo_NoArgs_RetUnit"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 80,
+      "compile_passed": true
+    },
+    {
+      "file": "daml_finance/canton__JsonEncodingTest.daml",
+      "repo": "canton",
+      "module": "JsonEncodingTest",
+      "templates": [
+        "Account",
+        "KeyedByParty",
+        "KeyedByPartyInt",
+        "KeyedByVariantAndRecord"
+      ],
+      "choices": [],
+      "category": "daml_finance",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 61,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Bench.daml",
+      "repo": "canton",
+      "module": "Bench",
+      "templates": [
+        "InefficientFibonacciResult",
+        "InefficientFibonacci"
+      ],
+      "choices": [
+        "InefficientFibonacci_Compute",
+        "InefficientFibonacci_NcCompute"
+      ],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 39,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Foo.daml",
+      "repo": "canton",
+      "module": "Foo",
+      "templates": [
+        "Divulger",
+        "Foo1",
+        "Foo2",
+        "Foo3",
+        "Dummy"
+      ],
+      "choices": [
+        "Foo1_ConsumingChoice",
+        "Foo2_ConsumingChoice",
+        "Foo3_ConsumingChoice",
+        "DivulgeContractImmediate",
+        "DivulgeConsumingExercise",
+        "Foo1_NonconsumingChoice",
+        "Foo2_NonconsumingChoice",
+        "Foo3_NonconsumingChoice"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 212,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__Canton_Internal_PartyReplication.daml",
+      "repo": "canton",
+      "module": "Canton.Internal.PartyReplication",
+      "templates": [
+        "PartyReplicationProposal",
+        "PartyReplicationAgreement"
+      ],
+      "choices": [
+        "Accept",
+        "Reject",
+        "Done"
+      ],
+      "category": "propose_accept",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 67,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__Canton_Internal_Bong.daml",
+      "repo": "canton",
+      "module": "Canton.Internal.Bong",
+      "templates": [
+        "BongProposal",
+        "Bong",
+        "Explode",
+        "Merge",
+        "Collapse"
+      ],
+      "choices": [
+        "Accept",
+        "AbortBongProposal",
+        "Ack",
+        "AbortBong",
+        "ProcessExplode",
+        "AbortExplode",
+        "ProcessMerge",
+        "AbortMerge",
+        "ProcessCollapse",
+        "AbortCollapse"
+      ],
+      "category": "propose_accept",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 201,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__Canton_Internal_Ping.daml",
+      "repo": "canton",
+      "module": "Canton.Internal.Ping",
+      "templates": [
+        "Ping"
+      ],
+      "choices": [
+        "Respond",
+        "AbortPing"
+      ],
+      "category": "propose_accept",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 27,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__Orchestration.daml",
+      "repo": "canton",
+      "module": "Orchestration",
+      "templates": [
+        "TestRun",
+        "TestProbe",
+        "TestParticipant",
+        "ParticipationRequest"
+      ],
+      "choices": [
+        "ToggleMode",
+        "ToggleRunType",
+        "AddParticipant",
+        "RemoveParticipant",
+        "Acknowledge",
+        "UpdateStats",
+        "ToggleFlag",
+        "Accept",
+        "BulkAddParticipant"
+      ],
+      "category": "propose_accept",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 188,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__Dvp_Asset.daml",
+      "repo": "canton",
+      "module": "Dvp.Asset",
+      "templates": [
+        "Asset",
+        "AssetTransfer",
+        "Registry",
+        "IssuanceProposal",
+        "AssetRequest",
+        "AcsGrowth",
+        "TransferPreapproval"
+      ],
+      "choices": [
+        "DirectTransfer",
+        "UpdatePayload",
+        "GarbageCollectAsset",
+        "ProposeTransfer",
+        "AcceptTransfer",
+        "GarbageCollectTransfer",
+        "GarbageCollectRegistry",
+        "IssueAssets",
+        "AcceptRequest",
+        "GarbageCollectAssetRequest",
+        "Nuke",
+        "CreateProposal",
+        "Send"
+      ],
+      "category": "propose_accept",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 199,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Other_ChoiceAsDatatype.daml",
+      "repo": "canton",
+      "module": "Other.ChoiceAsDatatype",
+      "templates": [
+        "TheTemplate"
+      ],
+      "choices": [
+        "TheChoice"
+      ],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 15,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/canton__Other_StandardTypes.daml",
+      "repo": "canton",
+      "module": "Other.StandardTypes",
+      "templates": [
+        "StandardTypes"
+      ],
+      "choices": [],
+      "category": "utilities",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__Other_Foo.daml",
+      "repo": "canton",
+      "module": "Other.Foo",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__AppUpgrade.daml",
+      "repo": "canton",
+      "module": "AppUpgrade",
+      "templates": [
+        "AppInstall",
+        "AppInstallRequest"
+      ],
+      "choices": [
+        "AppInstall_Accept"
+      ],
+      "category": "propose_accept",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 21,
+      "compile_passed": true
+    },
+    {
+      "file": "propose_accept/canton__AppUpgrade.daml",
+      "repo": "canton",
+      "module": "AppUpgrade",
+      "templates": [
+        "AppInstall",
+        "AppInstallRequest"
+      ],
+      "choices": [
+        "AppInstall_Accept"
+      ],
+      "category": "propose_accept",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 22,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__UpgradeIf.daml",
+      "repo": "canton",
+      "module": "UpgradeIf",
+      "templates": [
+        "UpgradeItVersionStamp"
+      ],
+      "choices": [
+        "IfDispatchChoice",
+        "UpgradeItStamp"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 44,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/canton__Assets.daml",
+      "repo": "canton",
+      "module": "Assets",
+      "templates": [
+        "Iou",
+        "Share"
+      ],
+      "choices": [
+        "TransferIou",
+        "TransferShare"
+      ],
+      "category": "payments",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 28,
+      "compile_passed": true
+    },
+    {
+      "file": "securities/canton__Assets.daml",
+      "repo": "canton",
+      "module": "Assets",
+      "templates": [
+        "Iou",
+        "Share"
+      ],
+      "choices": [
+        "TransferIou",
+        "TransferShare"
+      ],
+      "category": "securities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 39,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/canton__NonConforming.daml",
+      "repo": "canton",
+      "module": "NonConforming",
+      "templates": [
+        "NonConforming",
+        "NonConformingCK",
+        "BankTransfer",
+        "FetchTransfer"
+      ],
+      "choices": [
+        "GetVersion",
+        "GetVersionCK",
+        "BankTransfer_GetPayee",
+        "FetchTransfer_Get"
+      ],
+      "category": "payments",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 64,
+      "compile_passed": true
+    },
+    {
+      "file": "payments/canton__NonConforming.daml",
+      "repo": "canton",
+      "module": "NonConforming",
+      "templates": [
+        "NonConforming",
+        "NonConformingCK",
+        "BankTransfer",
+        "FetchTransfer"
+      ],
+      "choices": [
+        "GetVersion",
+        "GetVersionCK",
+        "BankTransfer_GetPayee",
+        "FetchTransfer_Get"
+      ],
+      "category": "payments",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 75,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Foo.daml",
+      "repo": "canton",
+      "module": "Foo",
+      "templates": [
+        "Foo"
+      ],
+      "choices": [
+        "Foo_Exe"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 16,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__IBar.daml",
+      "repo": "canton",
+      "module": "IBar",
+      "templates": [],
+      "choices": [
+        "IBar_Exe"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__IBaz.daml",
+      "repo": "canton",
+      "module": "IBaz",
+      "templates": [],
+      "choices": [
+        "IBaz_Exe"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 18,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Qux.daml",
+      "repo": "canton",
+      "module": "Qux",
+      "templates": [
+        "Qux"
+      ],
+      "choices": [
+        "Qux_Exe"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "testing/canton__Qux.daml",
+      "repo": "canton",
+      "module": "Qux",
+      "templates": [
+        "Qux"
+      ],
+      "choices": [
+        "Qux_Exe"
+      ],
+      "category": "testing",
+      "complexity": "simple",
+      "has_interfaces": false,
+      "line_count": 14,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__FeaturedAppRightV1.daml",
+      "repo": "canton",
+      "module": "FeaturedAppRightV1",
+      "templates": [],
+      "choices": [
+        "FeaturedAppRight_CreateActivityMarker"
+      ],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 38,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__HoldingV1.daml",
+      "repo": "canton",
+      "module": "HoldingV1",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 10,
+      "compile_passed": true
+    },
+    {
+      "file": "interfaces/canton__HoldingV2.daml",
+      "repo": "canton",
+      "module": "HoldingV2",
+      "templates": [],
+      "choices": [],
+      "category": "interfaces",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 11,
+      "compile_passed": true
+    },
+    {
+      "file": "governance/ex-models__Governance.daml",
+      "repo": "ex-models",
+      "module": "Governance",
+      "templates": [
+        "Constitution",
+        "ConstitutionV2",
+        "ConstituationUpgrade",
+        "Ballot"
+      ],
+      "choices": [
+        "UpdateText",
+        "UpgradeV2",
+        "Execute",
+        "Add",
+        "Decide",
+        "Vote",
+        "CreateBallot"
+      ],
+      "category": "governance",
+      "complexity": "complex",
+      "has_interfaces": false,
+      "line_count": 132,
+      "compile_passed": true
+    },
+    {
+      "file": "token_standards/splice__Splice_Api_FeaturedAppRightV1.daml",
+      "repo": "splice",
+      "module": "Splice.Api.FeaturedAppRightV1",
+      "templates": [],
+      "choices": [
+        "FeaturedAppRight_CreateActivityMarker"
+      ],
+      "category": "token_standards",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 63,
+      "compile_passed": true
+    },
+    {
+      "file": "token_standards/splice__Splice_Api_FeaturedAppRightV2.daml",
+      "repo": "splice",
+      "module": "Splice.Api.FeaturedAppRightV2",
+      "templates": [],
+      "choices": [
+        "FeaturedAppRight_CreateActivityMarker"
+      ],
+      "category": "token_standards",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 72,
+      "compile_passed": true
+    },
+    {
+      "file": "token_standards/splice__Splice_Api_Token_MetadataV1.daml",
+      "repo": "splice",
+      "module": "Splice.Api.Token.MetadataV1",
+      "templates": [],
+      "choices": [],
+      "category": "token_standards",
+      "complexity": "complex",
+      "has_interfaces": true,
+      "line_count": 91,
+      "compile_passed": true
+    },
+    {
+      "file": "utilities/ex-secure-canton-infra__Main.daml",
+      "repo": "ex-secure-canton-infra",
+      "module": "Main",
+      "templates": [
+        "Asset",
+        "DonorConfig"
+      ],
+      "choices": [
+        "Give"
+      ],
+      "category": "utilities",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 42,
+      "compile_passed": true
+    },
+    {
+      "file": "token_standards/canton-erc20__CIP56_Compliance.daml",
+      "repo": "canton-erc20",
+      "module": "CIP56.Compliance",
+      "templates": [
+        "ComplianceRules",
+        "ComplianceProof"
+      ],
+      "choices": [
+        "ToggleWhitelist",
+        "Revoke",
+        "ValidateProof"
+      ],
+      "category": "token_standards",
+      "complexity": "medium",
+      "has_interfaces": false,
+      "line_count": 48,
+      "compile_passed": true
+    }
+  ]
+}

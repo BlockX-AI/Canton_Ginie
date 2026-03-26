@@ -1,0 +1,165 @@
+========================================================================
+   GINIE PLATFORM — FULL SYSTEM AUDIT REPORT
+   Generated: 2026-03-23 17:14:28 UTC
+========================================================================
+
+STEP 1 — SERVICE VALIDATION
+----------------------------------------
+  backend         UP
+  canton          online
+  frontend        UP
+  json_api        UP
+
+STEP 2 — PIPELINE TEST RESULTS
+----------------------------------------
+  #    Label                  Status    Sec  Comp   Ent  Gate  FB   Time
+  ---- ---------------------- -------- ---- ----- ----- ----- --- ------
+  1    escrow                 OK         35    80  53.0     N   N   136s
+  2    loan                   OK         46    75  57.6     N   N   129s
+  3    token_swap             OK         35    80  53.0     N   N   122s
+  4    insurance              OK         53    75  61.8     N   N   122s
+  5    freelancer_payment     OK         35    80  53.0     N   N   136s
+  6    supply_chain           OK         35    90  57.0     N   N   129s
+  7    subscription           OK         53    85  65.8     N   N   129s
+  8    royalty                OK         53    75  61.8     N   N   129s
+  9    voting                 OK         53    60  55.8     N   N   179s
+  10   custody                OK         35    80  53.0     N   N   143s
+  11   settlement             OK         35    65  47.0     N   N   193s
+  12   invoice                FAIL        -     -     -     -   N   171s
+  13   lease                  OK         35    65  47.0     N   N   143s
+  14   warranty               OK         60    80  68.0     N   Y   178s
+  15   carbon_credit          OK         53    65  57.8     N   N   151s
+  16   fundraising            FAIL        -     -     -     -   N   172s
+  17   dividend               OK         60    75  66.0     N   N   129s
+  18   derivatives            OK         35    80  53.0     N   N   165s
+  19   joint_venture          FAIL        -     -     -     -   N   122s
+  20   payment                FAIL        -     -     -     -   N   114s
+
+AGGREGATED METRICS
+----------------------------------------
+  Total contracts:    20
+  Successful:         16 (80.0%)
+  Failed:             4
+  Fallback used:      1
+  Deploy gate PASS:   0
+  Deploy gate FAIL:   16
+  Avg security:       44.4
+  Avg compliance:     75.6
+  Avg enterprise:     56.9
+  Avg duration:       144.5s
+
+STEP 3 — AUDIT ENGINE
+----------------------------------------
+  Tested:  20
+  Valid:   10
+  ISSUE: insurance: exception timed out
+  ISSUE: freelancer_payment: exception timed out
+  ISSUE: supply_chain: exception timed out
+  ISSUE: subscription: exception timed out
+  ISSUE: royalty: exception timed out
+  ISSUE: voting: exception timed out
+  ISSUE: lease: exception timed out
+  ISSUE: fundraising: exception timed out
+  ISSUE: dividend: exception timed out
+  ISSUE: derivatives: exception timed out
+
+STEP 4 — COMPLIANCE ENGINE
+----------------------------------------
+  Profiles tested:  5
+  Profiles valid:   4
+  ISSUE: nist-800-53: exception timed out
+
+STEP 5 — DEPLOYMENT VALIDATION
+----------------------------------------
+  Deployed:   16
+  Verified:   0
+  ISSUE: escrow: contract not verified on ledger
+  ISSUE: loan: contract not verified on ledger
+  ISSUE: token_swap: contract not verified on ledger
+  ISSUE: insurance: contract not verified on ledger
+  ISSUE: freelancer_payment: contract not verified on ledger
+  ISSUE: supply_chain: contract not verified on ledger
+  ISSUE: subscription: contract not verified on ledger
+  ISSUE: royalty: contract not verified on ledger
+  ISSUE: voting: contract not verified on ledger
+  ISSUE: custody: contract not verified on ledger
+  ISSUE: settlement: contract not verified on ledger
+  ISSUE: lease: contract not verified on ledger
+  ISSUE: warranty: contract not verified on ledger
+  ISSUE: carbon_credit: contract not verified on ledger
+  ISSUE: dividend: contract not verified on ledger
+  ISSUE: derivatives: verify error timed out
+
+STEP 6 — LEDGER EXPLORER
+----------------------------------------
+  contracts_count: 0
+  parties_count: 0
+  packages_count: 0
+  verify_works: False
+  ISSUE: Missing contracts in explorer: 16
+  ISSUE: Missing packages: 16
+
+STEP 7 — FRONTEND UX
+----------------------------------------
+  home_page: PASS
+  explorer_page: PASS
+  sandbox_page: PASS
+  api_docs: PASS
+
+STEP 8 — CONCURRENCY
+----------------------------------------
+  Submitted:  5
+  Completed:  5
+  Succeeded:  4
+
+STEP 9 — FAILURE TESTING
+----------------------------------------
+  Tests:  7
+  Passed: 6
+
+ALL ISSUES FOUND
+----------------------------------------
+    1. Contract #12 (invoice): pipeline failed — Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: UNHANDLED_EXCEPTION(9,b18b0d4d): Interpretation error: Error: Unhandled Daml exception: DA.Exception.PreconditionFailed:PreconditionFailed@f20de1e4{ message = \"Template precondition violated: Invoice {seller = 'seller::12200590f89462d80efe4e7c95f1279efc71c31178d241bf6e23d71fc293879f1566', factor = 'factor::12200590f89462d80efe4e7c95f1279efc71c31178d241bf6e23d71fc2
+    2. Contract #16 (fundraising): pipeline failed — Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: UNHANDLED_EXCEPTION(9,f3e43e7f): Interpretation error: Error: Unhandled Daml exception: DA.Exception.PreconditionFailed:PreconditionFailed@f20de1e4{ message = \"Template precondition violated: Fundraising {founder = 'founder::12200590f89462d80efe4e7c95f1279efc71c31178d241bf6e23d71fc293879f1566', investor = 'investor::12200590f89462d80efe4e7c95f1279efc71c31178d241bf
+    3. Contract #19 (joint_venture): pipeline failed — Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: UNHANDLED_EXCEPTION(9,89581315): Interpretation error: Error: Unhandled Daml exception: DA.Exception.PreconditionFailed:PreconditionFailed@f20de1e4{ message = \"Template precondition violated: JointVenture {companyA = 'companya::12200590f89462d80efe4e7c95f1279efc71c31178d241bf6e23d71fc293879f1566', companyB = 'companyb::12200590f89462d80efe4e7c95f1279efc71c31178d24
+    4. Contract #20 (payment): pipeline failed — Contract creation failed — HTTP 400: {"errors":["FAILED_PRECONDITION: UNHANDLED_EXCEPTION(9,bcdc0584): Interpretation error: Error: Unhandled Daml exception: DA.Exception.PreconditionFailed:PreconditionFailed@f20de1e4{ message = \"Template precondition violated: PaymentSplitting {payer = 'payer::12200590f89462d80efe4e7c95f1279efc71c31178d241bf6e23d71fc293879f1566', recipient1 = 'recipient1::12200590f89462d80efe4e7c95f1279efc71c31178d
+    5. Audit: insurance: exception timed out
+    6. Audit: freelancer_payment: exception timed out
+    7. Audit: supply_chain: exception timed out
+    8. Audit: subscription: exception timed out
+    9. Audit: royalty: exception timed out
+   10. Audit: voting: exception timed out
+   11. Audit: lease: exception timed out
+   12. Audit: fundraising: exception timed out
+   13. Audit: dividend: exception timed out
+   14. Audit: derivatives: exception timed out
+   15. Compliance: nist-800-53: exception timed out
+   16. Deploy: escrow: contract not verified on ledger
+   17. Deploy: loan: contract not verified on ledger
+   18. Deploy: token_swap: contract not verified on ledger
+   19. Deploy: insurance: contract not verified on ledger
+   20. Deploy: freelancer_payment: contract not verified on ledger
+   21. Deploy: supply_chain: contract not verified on ledger
+   22. Deploy: subscription: contract not verified on ledger
+   23. Deploy: royalty: contract not verified on ledger
+   24. Deploy: voting: contract not verified on ledger
+   25. Deploy: custody: contract not verified on ledger
+   26. Deploy: settlement: contract not verified on ledger
+   27. Deploy: lease: contract not verified on ledger
+   28. Deploy: warranty: contract not verified on ledger
+   29. Deploy: carbon_credit: contract not verified on ledger
+   30. Deploy: dividend: contract not verified on ledger
+   31. Deploy: derivatives: verify error timed out
+   32. Explorer: Missing contracts in explorer: 16
+   33. Explorer: Missing packages: 16
+
+========================================================================
+  FINAL VERDICT:  NEEDS_FIXES
+========================================================================
+
+RECOMMENDATIONS
+----------------------------------------
+  - Investigate 4 failed contract(s) and improve fallback coverage
+  - Average security score (44.4) below 80 — review common findings
+  - Average compliance score (75.6) below 80 — review control gaps
+  - 16 deployed contracts not verified — check explorer template cache

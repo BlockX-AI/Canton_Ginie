@@ -1,0 +1,43 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template TradeProposal
+  with
+    proposer: Party
+    counterparty: Party
+    tradeAmount: Decimal
+    tradeDescription: Text
+  where
+    signatory proposer
+    observer counterparty
+
+    ensure
+      tradeAmount > 0.0
+
+    choice AcceptTrade : ContractId TradeProposal
+      with
+        acceptanceNote: Text
+      controller counterparty
+        do
+          create this with
+            tradeDescription = tradeDescription <> " - Accepted: " <> acceptanceNote
+
+    choice RejectTrade : ()
+      with
+        rejectionReason: Text
+      controller counterparty
+        do
+          return ()
+
+    choice CounterTrade : ContractId TradeProposal
+      with
+        newTradeAmount: Decimal
+        newTradeDescription: Text
+      controller counterparty
+        do
+          create this with
+            tradeAmount = newTradeAmount
+            tradeDescription = newTradeDescription <> " - Countered"

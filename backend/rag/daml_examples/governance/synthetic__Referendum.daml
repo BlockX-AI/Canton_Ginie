@@ -1,0 +1,47 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template Referendum
+  with
+    initiator : Party
+    observer : Party
+    proposalText : Text
+    deadline : Time
+    votesFor : Int
+    votesAgainst : Int
+  where
+    signatory initiator
+    observer observer
+
+    ensure
+      votesFor >= 0 && votesAgainst >= 0
+
+    choice VoteFor : ()
+      with
+        voter : Party
+      controller voter
+      do
+        create this with votesFor = votesFor + 1
+        return ()
+
+    choice VoteAgainst : ()
+      with
+        voter : Party
+      controller voter
+      do
+        create this with votesAgainst = votesAgainst + 1
+        return ()
+
+    choice ExecuteProposal : ()
+      with
+        executor : Party
+      controller executor
+      do
+        now <- getTime
+        if now > deadline && votesFor > votesAgainst then
+          archive self
+        else
+          return ()

@@ -1,0 +1,3 @@
+# Files to skip during RAG loading (one filename per line)
+# Add filenames here that are known to be broken or unhelpful
+# Supports both relative paths and bare filenames

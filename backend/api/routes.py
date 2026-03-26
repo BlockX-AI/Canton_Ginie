@@ -3,8 +3,8 @@ import json
 import threading
 import structlog
 import redis
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from datetime import datetime
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from datetime import datetime, timezone
 
 from api.models import (
     GenerateRequest,
@@ -15,6 +15,8 @@ from api.models import (
     HealthResponse,
 )
 from config import get_settings
+from sqlalchemy import text as sa_text
+from api.middleware import optional_auth
 from utils.daml_utils import get_daml_sdk_version
 
 logger = structlog.get_logger()
@@ -27,22 +29,113 @@ def _get_redis():
 
 
 def _get_job(job_id: str) -> dict:
+    """Fetch job data: Redis cache first, then PostgreSQL, then in-memory fallback."""
+    # Layer 1: Redis cache (fast path)
     try:
         r = _get_redis()
         data = r.get(f"job:{job_id}")
         if data:
             return json.loads(data)
+    except Exception:
+        pass
+
+    # Layer 2: PostgreSQL (source of truth)
+    try:
+        from db.session import get_db_session
+        from db.models import JobHistory
+        with get_db_session() as session:
+            job = session.query(JobHistory).filter_by(job_id=job_id).first()
+            if job:
+                data = _job_row_to_dict(job)
+                # Backfill Redis cache
+                try:
+                    r = _get_redis()
+                    r.set(f"job:{job_id}", json.dumps(data), ex=3600)
+                except Exception:
+                    pass
+                return data
     except Exception as e:
-        logger.warning("Redis unavailable, using in-memory fallback", error=str(e))
-    return {}
+        logger.debug("DB lookup failed, falling back to in-memory", error=str(e))
+
+    # Layer 3: In-memory fallback
+    return _in_memory_jobs.get(job_id, {})
 
 
 def _set_job(job_id: str, data: dict):
+    """Persist job data to PostgreSQL (source of truth) + Redis (cache) + in-memory (fallback)."""
+    # Always update in-memory for immediate availability
+    _in_memory_jobs[job_id] = data
+
+    # Layer 1: Redis cache
     try:
         r = _get_redis()
         r.set(f"job:{job_id}", json.dumps(data), ex=3600)
+    except Exception:
+        pass
+
+    # Layer 2: PostgreSQL persistence
+    try:
+        from db.session import get_db_session
+        from db.models import JobHistory
+        with get_db_session() as session:
+            job = session.query(JobHistory).filter_by(job_id=job_id).first()
+            if job:
+                job.status = data.get("status", job.status)
+                job.current_step = data.get("current_step", job.current_step)
+                job.progress = data.get("progress", job.progress)
+                job.error_message = data.get("error_message")
+                job.updated_at = datetime.now(timezone.utc)
+                # Store full result on completion/failure
+                if data.get("status") in ("complete", "failed"):
+                    job.result_json = data
+            else:
+                job = JobHistory(
+                    job_id=job_id,
+                    prompt=data.get("prompt", data.get("user_input", "")),
+                    status=data.get("status", "pending"),
+                    current_step=data.get("current_step", "idle"),
+                    progress=data.get("progress", 0),
+                    canton_env=data.get("canton_environment", "sandbox"),
+                    error_message=data.get("error_message"),
+                )
+                session.add(job)
     except Exception as e:
-        logger.warning("Failed to persist job to Redis", error=str(e))
+        logger.debug("DB write failed, data still in Redis/memory", error=str(e))
+
+
+def _save_deployed_contract(job_id: str, deploy_result: dict):
+    """Save deployed contract info to PostgreSQL."""
+    try:
+        from db.session import get_db_session
+        from db.models import DeployedContract
+        with get_db_session() as session:
+            contract = DeployedContract(
+                contract_id=deploy_result.get("contract_id", ""),
+                package_id=deploy_result.get("package_id", ""),
+                template_id=deploy_result.get("template_id", ""),
+                job_id=job_id,
+                party_id=None,
+                canton_env=deploy_result.get("environment", "sandbox"),
+                explorer_link=deploy_result.get("explorer_link", ""),
+            )
+            session.add(contract)
+    except Exception as e:
+        logger.debug("Failed to save deployed contract to DB", error=str(e))
+
+
+def _job_row_to_dict(job) -> dict:
+    """Convert a JobHistory ORM row to a plain dict."""
+    # If we have a full result stored, return that
+    if job.result_json and isinstance(job.result_json, dict):
+        return job.result_json
+    return {
+        "job_id": job.job_id,
+        "status": job.status,
+        "current_step": job.current_step,
+        "progress": job.progress,
+        "error_message": job.error_message,
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+    }
 
 
 _in_memory_jobs: dict = {}
@@ -57,9 +150,9 @@ def _celery_has_workers() -> bool:
         return False
 
 
-def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, canton_url: str):
+def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, canton_url: str, party_id: str = ""):
     """Run pipeline in a dedicated thread — guaranteed to execute immediately."""
-    logger.info("[THREAD] Starting pipeline", job_id=job_id)
+    logger.info("[THREAD] Starting pipeline", job_id=job_id, party_id=party_id or "(anonymous)")
     print(f"[THREAD] Starting pipeline for job {job_id}")
 
     try:
@@ -95,6 +188,7 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
             canton_environment=canton_environment,
             canton_url=canton_url,
             status_callback=_status_callback,
+            party_id=party_id,
         )
 
         if final_state.get("contract_id"):
@@ -121,6 +215,8 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 "audit_reports":     final_state.get("audit_reports", {}),
                 "updated_at":        datetime.utcnow().isoformat(),
             }
+            # Persist deployed contract to PostgreSQL
+            _save_deployed_contract(job_id, final_state)
         else:
             result = {
                 "job_id":         job_id,
@@ -155,11 +251,11 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
         _set_job(job_id, error_data)
 
 
-def _start_pipeline_job(job_id: str, user_input: str, canton_environment: str, canton_url: str):
+def _start_pipeline_job(job_id: str, user_input: str, canton_environment: str, canton_url: str, party_id: str = ""):
     """Launch the pipeline in a daemon thread so it starts immediately."""
     t = threading.Thread(
         target=_run_pipeline_thread,
-        args=(job_id, user_input, canton_environment, canton_url),
+        args=(job_id, user_input, canton_environment, canton_url, party_id),
         daemon=True,
         name=f"pipeline-{job_id[:8]}",
     )
@@ -168,17 +264,21 @@ def _start_pipeline_job(job_id: str, user_input: str, canton_environment: str, c
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_contract(request: GenerateRequest, background_tasks: BackgroundTasks):
+async def generate_contract(request: GenerateRequest, background_tasks: BackgroundTasks, user: dict | None = Depends(optional_auth)):
     settings = get_settings()
     job_id = str(uuid.uuid4())
 
     canton_url = request.canton_url or settings.get_canton_url()
+
+    # Extract authenticated party_id if user is logged in
+    party_id = user.get("sub", "") if user else ""
 
     initial_data = {
         "job_id":       job_id,
         "status":       "queued",
         "current_step": "Job queued...",
         "progress":     5,
+        "party_id":     party_id,
         "updated_at":   datetime.utcnow().isoformat(),
     }
     _in_memory_jobs[job_id] = initial_data
@@ -190,8 +290,9 @@ async def generate_contract(request: GenerateRequest, background_tasks: Backgrou
         user_input=request.prompt,
         canton_environment=request.canton_environment or settings.canton_environment,
         canton_url=canton_url,
+        party_id=party_id,
     )
-    logger.info("Job created and pipeline thread launched", job_id=job_id)
+    logger.info("Job created and pipeline thread launched", job_id=job_id, party_id=party_id or "(anonymous)")
 
     return GenerateResponse(job_id=job_id)
 
@@ -305,27 +406,93 @@ async def health_check():
 
     rag_status = "ready"
     try:
-        from rag.vector_store import get_vector_store
-        get_vector_store(persist_dir=settings.chroma_persist_dir)
+        from rag.vector_store import get_store_stats
+        stats = get_store_stats(persist_dir=settings.chroma_persist_dir)
+        rag_status = f"ready ({stats['patterns_count']} patterns, {stats['signatures_count']} signatures)"
     except Exception:
         rag_status = "not initialized (run /init-rag)"
+
+    db_status = "unknown"
+    try:
+        from db.session import get_engine
+        with get_engine().connect() as conn:
+            conn.execute(sa_text("SELECT 1"))
+            db_status = "connected"
+    except Exception as e:
+        db_status = f"unavailable ({e})"
 
     return HealthResponse(
         daml_sdk=daml_version,
         rag_status=rag_status,
         redis_status=redis_status,
+        db_status=db_status,
     )
+
+
+@router.get("/system/status")
+async def system_status():
+    """System status endpoint for frontend to determine initial app state."""
+    settings = get_settings()
+
+    # Canton connectivity
+    canton_connected = False
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{settings.get_canton_url()}/livez")
+            canton_connected = resp.status_code == 200
+    except Exception:
+        pass
+
+    # Canton storage type
+    canton_storage = "postgres" if settings.canton_db_name else "in-memory"
+
+    # Registered parties count
+    registered_parties_count = 0
+    try:
+        from db.session import get_db_session
+        from db.models import RegisteredParty
+        with get_db_session() as session:
+            registered_parties_count = session.query(RegisteredParty).count()
+    except Exception:
+        pass
+
+    # RAG status
+    rag_document_count = 0
+    rag_ready = False
+    try:
+        from rag.vector_store import get_store_stats
+        stats = get_store_stats(persist_dir=settings.chroma_persist_dir)
+        rag_document_count = stats.get("total_documents", 0)
+        rag_ready = rag_document_count > 0
+    except Exception:
+        pass
+
+    return {
+        "canton_connected": canton_connected,
+        "canton_storage": canton_storage,
+        "canton_url": settings.get_canton_url(),
+        "registered_parties_count": registered_parties_count,
+        "rag_status": "ready" if rag_ready else "not_initialized",
+        "rag_document_count": rag_document_count,
+        "environment": settings.canton_environment,
+    }
 
 
 @router.post("/init-rag")
 async def init_rag():
     from config import get_settings
-    from rag.vector_store import build_vector_store
+    from rag.vector_store import build_vector_store, get_store_stats
     settings = get_settings()
 
     try:
         store = build_vector_store(persist_dir=settings.chroma_persist_dir, force_rebuild=True)
-        count = store._collection.count()
-        return {"status": "ok", "documents_indexed": count}
+        stats = get_store_stats(persist_dir=settings.chroma_persist_dir)
+        return {
+            "status": "ok",
+            "documents_indexed": stats["total_documents"],
+            "patterns_count": stats["patterns_count"],
+            "signatures_count": stats["signatures_count"],
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

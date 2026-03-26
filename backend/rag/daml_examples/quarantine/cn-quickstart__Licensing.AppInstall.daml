@@ -1,0 +1,91 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: 0BSD
+
+-- | Contracts that represent an installation of the app, and grant corresponding
+-- rights to both the app user and the app provider.
+module Licensing.AppInstall where
+
+import Licensing.License
+import Splice.Api.Token.MetadataV1
+import Licensing.Util as Util (require)
+
+-- | Explicit result type to simplify upgrading.
+data AppInstall_CreateLicense_Result = AppInstall_CreateLicense_Result with
+    installId : ContractId AppInstall
+    licenseId : ContractId License
+  deriving (Eq, Show)
+
+
+-- | An installation of the app
+template AppInstall with
+    provider : Party -- ^ Party identifying the app provider
+    user : Party -- ^ Party identifying the app user
+    meta : Metadata -- ^ Machine-readable metadata of this installation.
+    numLicensesCreated : Int -- ^ Number of licenses created using this installation.
+  where
+    signatory provider, user
+
+    -- | Create a license.
+    choice AppInstall_CreateLicense : AppInstall_CreateLicense_Result
+      with
+        params : LicenseParams -- ^ Parameters of the license to be created.
+      controller provider
+      do
+        now <- getTime
+  
+        -- create the license
+        licenseId <- create License with
+          user
+          provider
+          params
+          expiresAt = now
+          licenseNum = numLicensesCreated + 1
+
+        -- count the number of created licenses for ease of tracking
+        installId <- create this with
+          numLicensesCreated = numLicensesCreated + 1
+
+        pure AppInstall_CreateLicense_Result with
+          installId = installId
+          licenseId = licenseId
+
+    -- | Both users and providers can always opt out of the app installation.
+    -- Licenses are not cancelled at the same time, but can be cancelled
+    -- separately.
+    choice  AppInstall_Cancel : ()
+      with
+        actor : Party -- ^ Party initiating the cancellation.
+        meta : Metadata -- ^ Machine-readable metadata of the withdrawal.
+      controller actor
+      do
+        require "Actor is a signatory" (actor `elem` signatory this)
+        pure ()
+
+
+-- | A request by a user to install the app.
+template AppInstallRequest with
+    provider : Party -- ^ Party identifying the app provider
+    user : Party -- ^ Party identifying the app user
+    meta : Metadata -- ^ Metadata of the request. Can be used to correlate the request with other data on the provider side.
+  where
+    signatory user
+    observer provider
+
+    choice AppInstallRequest_Accept : ContractId AppInstall
+      with
+        installMeta : Metadata -- ^ Machine-readable metadata for the installation
+        meta : Metadata -- Metadata of the acceptance choice.
+      controller provider
+      do
+        create AppInstall with
+          provider = provider
+          user = user
+          meta = installMeta
+          numLicensesCreated = 0
+
+    choice AppInstallRequest_Reject : ()
+      with
+        meta : Metadata -- ^ Machine-readable metadata of the rejection.
+      controller provider
+        do
+          pure ()

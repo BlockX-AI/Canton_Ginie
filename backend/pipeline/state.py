@@ -33,6 +33,9 @@ class PipelineState(BaseModel):
     canton_environment: str = "sandbox"
     canton_url: str = ""
 
+    # Authenticated user's party ID (if set, used as primary signatory)
+    party_id: str = ""
+
     class Config:
         arbitrary_types_allowed = True
 

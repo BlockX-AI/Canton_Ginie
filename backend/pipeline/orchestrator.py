@@ -289,12 +289,14 @@ def deploy_node(state: dict) -> dict:
     canton_env = state.get("canton_environment", "sandbox")
     fallback_used = state.get("fallback_used", False)
 
+    party_id = state.get("party_id", "")
     try:
         result = run_deploy_agent(
             dar_path=state.get("dar_path", ""),
             structured_intent=state.get("structured_intent", {}),
             canton_url=canton_url,
             canton_environment=canton_env,
+            party_id=party_id,
         )
 
         if result["success"]:
@@ -548,7 +550,7 @@ async def run_mvp_pipeline(
     }
 
 
-def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbox", canton_url: str = "", status_callback=None) -> dict:
+def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbox", canton_url: str = "", status_callback=None, party_id: str = "") -> dict:
     settings = get_settings()
 
     initial_state = {
@@ -574,6 +576,7 @@ def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbo
         "progress":           10,
         "canton_environment": canton_environment,
         "canton_url":         canton_url or settings.get_canton_url(),
+        "party_id":           party_id,
     }
 
     # Register callback so pipeline nodes can push real-time updates

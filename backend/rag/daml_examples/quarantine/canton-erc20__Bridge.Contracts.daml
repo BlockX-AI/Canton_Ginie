@@ -1,0 +1,161 @@
+-- | Bridge Contracts for Issuer-Centric Canton-EVM Bridge
+--
+-- In the issuer-centric model:
+-- - ISSUER (participant node) controls all operations
+-- - End users do NOT manage Canton keys
+-- - Issuer mints/burns on behalf of users via TokenConfig
+-- - No user "accept" step needed (issuer has authority)
+--
+-- Fingerprint resolution happens via FingerprintMapping in Common.FingerprintAuth
+
+module Bridge.Contracts where
+
+import qualified DA.TextMap as TM
+import Common.Types
+import Splice.Api.Token.MetadataV1 (Metadata(..))
+import CIP56.Token (CIP56Holding)
+import CIP56.Config
+import CIP56.Events (TokenTransferEvent)
+
+-- =============================================================================
+-- DEPOSIT FLOW: EVM → Canton (Issuer-Controlled)
+-- =============================================================================
+--
+-- Flow:
+-- 1. User deposits on EVM with their fingerprint
+-- 2. Middleware creates PendingDeposit (see FingerprintAuth)
+-- 3. Issuer resolves fingerprint → Party via FingerprintMapping
+-- 4. Issuer creates DepositReceipt (see FingerprintAuth)
+-- 5. Issuer mints tokens via TokenConfig.IssuerMint
+
+-- | Direct mint command for issuer (legacy -- prefer using TokenConfig.IssuerMint directly)
+--
+-- After resolving fingerprint to Party, issuer uses this to mint.
+-- No user signature needed - issuer acts on behalf of users.
+template MintCommand
+  with
+    issuer          : Party
+    recipient       : Party
+    tokenConfigCid  : ContractId TokenConfig
+    amount          : Decimal
+    evmTxHash       : Text
+    fingerprint     : Text
+    tokenSymbol     : Text
+    auditObservers  : [Party]
+  where
+    signatory issuer
+    observer recipient, auditObservers
+    
+    -- | Execute the mint via TokenConfig and create audit event
+    choice ExecuteMint : (ContractId CIP56Holding, ContractId CIP56.Events.TokenTransferEvent)
+      with
+        timestamp : Time
+      controller issuer
+      do
+        assertMsg "amount > 0" (amount > 0.0)
+        
+        -- Delegate mint to TokenConfig
+        exercise tokenConfigCid IssuerMint with
+          recipient = recipient
+          amount = amount
+          eventTime = timestamp
+          eventMeta = Some (Metadata (TM.fromList
+            [ ("bridge.externalTxId", evmTxHash)
+            , ("bridge.fingerprint", fingerprint)
+            ]))
+
+-- =============================================================================
+-- WITHDRAWAL FLOW: Canton → EVM (Issuer-Controlled)
+-- =============================================================================
+--
+-- Flow:
+-- 1. Issuer initiates withdrawal on behalf of user (off-chain request)
+-- 2. Issuer burns tokens via TokenConfig and creates WithdrawalEvent
+-- 3. Middleware processes WithdrawalEvent → releases on EVM
+
+-- | Withdrawal request created by issuer on behalf of user
+template WithdrawalRequest
+  with
+    issuer          : Party
+    userParty       : Party
+    tokenConfigCid  : ContractId TokenConfig
+    holdingCid      : ContractId CIP56Holding
+    amount          : Decimal
+    evmDestination  : EvmAddress
+    fingerprint     : Text
+    tokenSymbol     : Text
+    auditObservers  : [Party]
+  where
+    signatory issuer
+    observer userParty, auditObservers
+    
+    -- | Process the withdrawal: burn tokens and create events
+    choice ProcessWithdrawal : (ContractId WithdrawalEvent, ContractId TokenTransferEvent)
+      with
+        timestamp : Time
+      controller issuer
+      do
+        -- Verify holding
+        holding <- fetch holdingCid
+        assertMsg "Holding owner matches" (holding.owner == userParty)
+        assertMsg "Withdrawal amount exceeds holding balance" (holding.amount >= amount)
+        assertMsg "Amount must be positive" (amount > 0.0)
+        
+        -- Delegate burn to TokenConfig
+        (_remainderCid, burnEventCid) <- exercise tokenConfigCid IssuerBurn with
+          holdingCid = holdingCid
+          amount = amount
+          eventTime = timestamp
+          eventMeta = Some (Metadata (TM.fromList
+            [ ("bridge.externalAddress", evmDestination.value)
+            , ("bridge.fingerprint", fingerprint)
+            ]))
+        
+        -- Create withdrawal event for middleware
+        withdrawalCid <- create WithdrawalEvent with
+          issuer = issuer
+          userParty = userParty
+          evmDestination = evmDestination
+          amount = amount
+          fingerprint = fingerprint
+          tokenSymbol = tokenSymbol
+          auditObservers = auditObservers
+          status = Pending
+        
+        pure (withdrawalCid, burnEventCid)
+
+-- | Withdrawal event for middleware to process
+template WithdrawalEvent
+  with
+    issuer          : Party
+    userParty       : Party
+    evmDestination  : EvmAddress
+    amount          : Decimal
+    fingerprint     : Text
+    tokenSymbol     : Text
+    auditObservers  : [Party]
+    status          : WithdrawalStatus
+  where
+    signatory issuer
+    observer userParty, auditObservers
+    
+    choice CompleteWithdrawal : ContractId WithdrawalEvent
+      with
+        evmTxHash : Text
+      controller issuer
+      do
+        create this with status = Completed evmTxHash
+    
+    choice FailWithdrawal : ContractId WithdrawalEvent
+      with
+        reason : Text
+      controller issuer
+      do
+        create this with status = Failed reason
+
+-- | Withdrawal status
+data WithdrawalStatus 
+  = Pending
+  | Completed Text
+  | Failed Text
+  deriving (Eq, Show)

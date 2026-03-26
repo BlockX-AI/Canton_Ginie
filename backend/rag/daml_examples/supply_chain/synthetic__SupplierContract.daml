@@ -1,0 +1,43 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template SupplierContract
+  with
+    supplier       : Party
+    client         : Party
+    contractValue  : Decimal
+    slaDescription : Text
+    slaPenalty     : Decimal
+  where
+    signatory supplier
+    observer  client
+
+    ensure contractValue > 0.0 && slaPenalty >= 0.0
+
+    choice UpdateSLA : ()
+      with
+        newSlaDescription : Text
+        newSlaPenalty     : Decimal
+      controller supplier
+      do
+        assertMsg "SLA penalty must be non-negative" (newSlaPenalty >= 0.0)
+        create this with slaDescription = newSlaDescription, slaPenalty = newSlaPenalty
+        return ()
+
+    choice TerminateContract : ()
+      controller client
+      do
+        archive self
+
+    choice AdjustContractValue : ()
+      with
+        adjustment : Decimal
+      controller supplier
+      do
+        let newContractValue = contractValue + adjustment
+        assertMsg "Contract value must remain positive" (newContractValue > 0.0)
+        create this with contractValue = newContractValue
+        return ()

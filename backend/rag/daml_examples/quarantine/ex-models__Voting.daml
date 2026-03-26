@@ -1,0 +1,85 @@
+-- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Voting where
+
+import DA.Set as S
+import DA.List as L
+import Daml.Script
+
+data Proposal = Proposal
+  with
+    proposer : Party
+    text : Text
+  deriving (Eq, Show)
+
+type BallotKey = (Party, Proposal)
+
+template Ballot
+  with
+    government : Party
+    proposal : Proposal
+    voters : Set Party
+    voted : Set Party
+    votes : [Bool]
+  where
+    signatory government, voted
+    observer voters
+
+    key (government, proposal) : BallotKey
+    maintainer key._1
+
+    choice Add : ()
+      with voter : Party
+      controller government
+      do
+        create this with voters = S.insert voter voters
+        pure ()
+
+    choice Decide : ContractId Decision
+      controller government
+      do
+        assertMsg "All voters must vote" $ size voters == length votes
+        let yays = length $ L.filter (\v -> v) votes
+        let nays = length $ L.filter (\v -> not v) votes
+        assertMsg "Cannot decide on tie" $ yays /= nays
+        let accept = yays > nays
+        create Decision with ..
+
+    choice Vote : ()
+      with
+        voter : Party
+        accept : Bool
+      controller voter
+      do
+        assertMsg "Voter not added" $ member voter voters
+        assertMsg "Voter already voted" $ not $ member voter voted
+        create this with voted = S.insert voter voted; votes = accept :: votes
+        pure ()
+
+template Decision
+  with
+    government : Party
+    proposal : Proposal
+    voters : Set Party
+    accept : Bool
+  where
+    signatory government, voters
+
+validVote = script do
+  g <- allocateParty "Government"
+  a <- allocateParty "A"
+  b <- allocateParty "B"
+  c <- allocateParty "C"
+  p <- allocateParty "Proposer"
+  let proposal = Proposal with proposer = p; text = "My Proposal"
+  let ballotKey = (g, proposal)
+  submit g do createCmd Ballot with government = g; proposal; voters = S.empty; voted = S.empty; votes = []
+  submit g do exerciseByKeyCmd @Ballot ballotKey Add with voter = a
+  submit g do exerciseByKeyCmd @Ballot ballotKey Add with voter = b
+  submit g do exerciseByKeyCmd @Ballot ballotKey Add with voter = c
+  submit a do exerciseByKeyCmd @Ballot ballotKey Vote with voter = a; accept = True
+  submit b do exerciseByKeyCmd @Ballot ballotKey Vote with voter = b; accept = True
+  submit c do exerciseByKeyCmd @Ballot ballotKey Vote with voter = c; accept = True
+  decision <- submit g do exerciseByKeyCmd @Ballot ballotKey Decide
+  return ()

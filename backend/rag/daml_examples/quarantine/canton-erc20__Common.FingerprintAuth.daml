@@ -1,0 +1,160 @@
+-- | Issuer-Centric Fingerprint Resolution for DAML SDK 3.4.x
+--
+-- This module enables EVM→Canton transfers using Canton party fingerprints.
+-- The ISSUER (participant node operator) controls all party management.
+--
+-- KEY INSIGHT: End users do NOT manage Canton keys directly.
+-- The issuer's participant node:
+--   1. Allocates Party IDs for users (via AllocateParty API)
+--   2. Receives the full Party ID including fingerprint in the response
+--   3. Stores the fingerprint → Party mapping
+--   4. Provides users their fingerprint for EVM deposits
+--   5. Resolves fingerprints when processing deposits
+--
+-- Canton Party ID format: "hint::fingerprint"
+-- Example: "Alice::1220f2fe29866fd6a0009ecc8a64ccdc09f1958bd0f801166baaee469d1251b2eb72"
+--
+-- The fingerprint is 32 bytes (64-68 hex chars) - perfect for EVM bytes32!
+--
+-- FLOW:
+-- 1. Issuer allocates Party for user → Gets full Party ID with fingerprint
+-- 2. Issuer creates FingerprintMapping on Canton
+-- 3. Issuer gives user their fingerprint (off-chain)
+-- 4. User deposits on EVM with their fingerprint as bytes32
+-- 5. Middleware sees event → Issuer looks up Party from fingerprint → Mints
+--
+-- This design:
+-- - Issuer-controlled (no user keys on Canton)
+-- - No contract keys (SDK 3.x compatible)
+-- - Simple fingerprint → Party resolution
+-- - Aligns with institutional custody model
+
+module Common.FingerprintAuth where
+
+import Common.Types (ChainRef(..), EvmAddress(..))
+import qualified DA.Text as T
+
+-- =============================================================================
+-- FINGERPRINT MAPPING (Issuer-Controlled)
+-- =============================================================================
+--
+-- Created by the ISSUER when they allocate a Party for a user.
+-- The issuer knows the fingerprint because AllocateParty returns it.
+--
+-- Example workflow:
+--   1. Issuer calls AllocateParty(hint="Alice")
+--   2. Response: party="Alice::1220abc...def"
+--   3. Issuer extracts fingerprint: "1220abc...def"
+--   4. Issuer creates FingerprintMapping { userParty=Alice::..., fingerprint="1220abc...def" }
+
+template FingerprintMapping
+  with
+    issuer      : Party         -- The issuer/operator who allocated the party
+    userParty   : Party         -- The Canton Party assigned to the user
+    fingerprint : Text          -- Extracted from userParty's ID (64-68 hex chars)
+    evmAddress  : Optional EvmAddress  -- User's EVM address (for withdrawals)
+  where
+    signatory issuer
+    observer userParty
+    
+    -- | Update the user's linked EVM address
+    choice UpdateUserEvmAddress : ContractId FingerprintMapping
+      with
+        newAddress : EvmAddress
+      controller issuer
+      do
+        create this with evmAddress = Some newAddress
+    
+    -- | Archive this mapping (user offboarded)
+    choice RemoveMapping : ()
+      controller issuer
+      do pure ()
+
+-- =============================================================================
+-- PENDING DEPOSIT (Created by Middleware)
+-- =============================================================================
+--
+-- Created when middleware sees a DepositToCanton event on EVM.
+-- Contains the RAW fingerprint from the event.
+-- Issuer resolves fingerprint → Party and processes the deposit.
+
+template PendingDeposit
+  with
+    issuer      : Party         -- Bridge issuer/operator
+    fingerprint : Text          -- Raw fingerprint from EVM event (bytes32 as hex)
+    amount      : Decimal
+    evmTxHash   : Text          -- EVM transaction hash (for dedup/audit)
+    tokenId     : Text          -- Token identifier
+    createdAt   : Time          -- Timestamp for expiry logic
+  where
+    signatory issuer
+    
+    -- | Process the deposit by resolving fingerprint to Party
+    --
+    -- Issuer provides the FingerprintMapping ContractId for the recipient.
+    -- DAML verifies the fingerprint matches, then creates a receipt.
+    choice ProcessDeposit : ContractId DepositReceipt
+      with
+        mappingCid : ContractId FingerprintMapping
+      controller issuer
+      do
+        -- Fetch the mapping to get the user's Party
+        mapping <- fetch mappingCid
+        
+        -- Verify issuer owns this mapping
+        assertMsg "Mapping issuer mismatch" (mapping.issuer == issuer)
+        
+        -- CRITICAL: Verify fingerprint matches!
+        assertMsg "Fingerprint mismatch" (mapping.fingerprint == this.fingerprint)
+        
+        -- Create receipt with resolved Party
+        create DepositReceipt with
+          issuer = issuer
+          recipient = mapping.userParty
+          fingerprint = this.fingerprint
+          amount = this.amount
+          evmTxHash = this.evmTxHash
+          tokenId = this.tokenId
+          source = ChainRef with chainName = "Ethereum", eventId = this.evmTxHash
+    
+    -- | Cancel deposit (e.g., invalid fingerprint, timeout)
+    choice CancelDeposit : ()
+      controller issuer
+      do pure ()
+
+-- =============================================================================
+-- DEPOSIT RECEIPT
+-- =============================================================================
+--
+-- Proof of successful deposit processing.
+-- Can be used to trigger actual token minting via CIP56Manager.
+
+template DepositReceipt
+  with
+    issuer      : Party         -- Bridge issuer
+    recipient   : Party         -- Resolved Canton Party
+    fingerprint : Text          -- Original fingerprint (for audit)
+    amount      : Decimal
+    evmTxHash   : Text
+    tokenId     : Text
+    source      : ChainRef
+  where
+    signatory issuer
+    observer recipient
+    
+    -- | Acknowledge receipt (archives it after minting is complete)
+    choice AcknowledgeReceipt : ()
+      controller issuer
+      do pure ()
+
+-- =============================================================================
+-- HELPER FUNCTIONS
+-- =============================================================================
+
+-- | Validate fingerprint format (64-68 hex chars)
+-- Canton fingerprints: 4-char multihash prefix (e.g., "1220") + 64-char SHA-256 = 68 chars
+-- We accept 64-68 to allow flexibility
+isValidFingerprint : Text -> Bool
+isValidFingerprint fp = 
+  let len = T.length fp
+  in len >= 64 && len <= 68

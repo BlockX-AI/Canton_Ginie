@@ -1,0 +1,35 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template FlashLoan
+  with
+    lender: Party
+    borrower: Party
+    loanAmount: Decimal
+    interestRate: Decimal
+  where
+    signatory lender
+    observer borrower
+
+    ensure
+      loanAmount > 0.0
+
+    choice ExecuteLoan : ()
+      with
+        requestor: Party
+      controller requestor
+      do
+        assert (requestor == borrower)
+        return ()
+
+    choice RepayLoan : ()
+      with
+        repaymentAmount: Decimal
+      controller borrower
+      do
+        let totalRepayment = loanAmount * (1.0 + interestRate)
+        assert (repaymentAmount >= totalRepayment)
+        archive self

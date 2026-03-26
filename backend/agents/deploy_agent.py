@@ -138,6 +138,7 @@ def run_deploy_agent(
     structured_intent: dict,
     canton_url: str,
     canton_environment: str,
+    party_id: str = "",
 ) -> dict:
     if not dar_path or not os.path.exists(dar_path):
         return {
@@ -177,14 +178,26 @@ def run_deploy_agent(
             logger.info("DAR uploaded", package_id=package_id)
 
             # Step 3: Allocate parties
+            # If authenticated user has a party_id, use it as primary signatory
             parties = structured_intent.get("parties", ["issuer", "investor"])
             if len(parties) < 2:
                 parties = parties + ["counterparty"]
 
             allocated = {}
-            for party_name in parties[:4]:
-                allocated[party_name] = _allocate_party(client, canton_url, party_name, auth)
-                logger.info("Party allocated", name=party_name, id=allocated[party_name])
+            if party_id:
+                # Use authenticated party as the first/primary signatory
+                primary_name = parties[0] if parties else "issuer"
+                allocated[primary_name] = party_id
+                logger.info("Using authenticated party as primary signatory",
+                            name=primary_name, party_id=party_id)
+                # Allocate remaining parties (counterparties)
+                for party_name in parties[1:4]:
+                    allocated[party_name] = _allocate_party(client, canton_url, party_name, auth)
+                    logger.info("Party allocated", name=party_name, id=allocated[party_name])
+            else:
+                for party_name in parties[:4]:
+                    allocated[party_name] = _allocate_party(client, canton_url, party_name, auth)
+                    logger.info("Party allocated", name=party_name, id=allocated[party_name])
 
             # Step 4: Read generated DAML code to parse template fields
             daml_code = _read_daml_source(dar_path)
@@ -195,6 +208,22 @@ def run_deploy_agent(
 
             # Step 5: Parse fields and build payload with proper defaults
             fields = _parse_template_fields(daml_code) if daml_code else []
+
+            # Ensure enough distinct parties for all Party fields
+            party_field_names = [f["name"] for f in fields if f["type"].strip() == "Party"]
+            extra_needed = len(party_field_names) - len(allocated)
+            if extra_needed > 0:
+                _extra_names = [f"party{i+1}" for i in range(extra_needed)]
+                # Prefer using field names as party hints for readability
+                for idx, fname in enumerate(party_field_names):
+                    if fname not in allocated:
+                        hint = fname.lower().replace("_", "")
+                        try:
+                            allocated[fname] = _allocate_party(client, canton_url, hint, auth)
+                            logger.info("Extra party allocated", name=fname, id=allocated[fname])
+                        except Exception:
+                            pass
+
             payload = _build_payload(fields, allocated)
 
             # If no fields found, use party mapping directly
@@ -373,7 +402,10 @@ def _parse_template_fields(daml_code: str) -> list[dict]:
 def _build_payload(fields: list[dict], party_values: dict) -> dict:
     payload = {}
     party_ids = list(party_values.values())
+    used_party_ids: set[str] = set()
     party_idx = 0
+    numeric_counter = 0
+    date_counter = 0
 
     for field in fields:
         name = field["name"]
@@ -381,23 +413,42 @@ def _build_payload(fields: list[dict], party_values: dict) -> dict:
 
         if name in party_values:
             payload[name] = party_values[name]
+            used_party_ids.add(party_values[name])
         elif ftype == "Party":
-            # Assign allocated party IDs round-robin to all Party fields
-            if party_ids:
-                payload[name] = party_ids[party_idx % len(party_ids)]
+            # Ensure each Party field gets a DISTINCT party ID
+            # (many ensure clauses check party1 /= party2)
+            assigned = None
+            for i in range(len(party_ids)):
+                candidate = party_ids[(party_idx + i) % len(party_ids)]
+                if candidate not in used_party_ids:
+                    assigned = candidate
+                    party_idx = (party_idx + i + 1) % len(party_ids)
+                    break
+            if assigned is None and party_ids:
+                # All parties used — fall back to round-robin
+                assigned = party_ids[party_idx % len(party_ids)]
                 party_idx += 1
+            if assigned:
+                payload[name] = assigned
+                used_party_ids.add(assigned)
             else:
                 payload[name] = name
         elif ftype in ("Decimal", "Numeric") or ftype.startswith("Numeric "):
-            payload[name] = "100.0"
+            # Use positive, distinct values (ensure clauses often check > 0)
+            numeric_counter += 1
+            payload[name] = f"{100.0 * numeric_counter}"
         elif ftype == "Int" or ftype == "Int64":
-            payload[name] = 1
+            numeric_counter += 1
+            payload[name] = max(1, numeric_counter)
         elif ftype == "Text":
             payload[name] = f"sample-{name}"
         elif ftype == "Date":
-            payload[name] = "2024-01-01"
+            # Use distinct future dates (ensure clauses often check end > start)
+            date_counter += 1
+            payload[name] = f"2025-{min(date_counter, 12):02d}-15"
         elif ftype in ("Time", "UTCTime"):
-            payload[name] = "2024-01-01T00:00:00Z"
+            date_counter += 1
+            payload[name] = f"2025-{min(date_counter, 12):02d}-15T00:00:00Z"
         elif ftype == "Bool":
             payload[name] = True
         elif ftype.startswith("["):

@@ -1,0 +1,33 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template GovernanceToken
+  with
+    issuer: Party
+    holder: Party
+    totalSupply: Decimal
+    delegatedTo: Party
+  where
+    signatory issuer
+    observer holder
+
+    ensure
+      totalSupply > 0.0
+
+    choice Delegate : ContractId GovernanceToken
+      with
+        newDelegate: Party
+      controller holder
+      do
+        create this with delegatedTo = newDelegate
+
+    choice Snapshot : Decimal
+      with
+        snapshotDate: Date
+      controller issuer
+      do
+        -- Simulate a snapshot by returning the total supply
+        return totalSupply

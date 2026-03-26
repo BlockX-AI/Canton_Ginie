@@ -1,0 +1,90 @@
+module CIP56.Token where
+
+import qualified DA.TextMap as TM
+import DA.Optional (fromOptional)
+
+import Splice.Api.Token.MetadataV1 (Metadata(..))
+import Splice.Api.Token.HoldingV1 (Holding(..), HoldingView(..), InstrumentId(..), Lock(..))
+
+mkMetadata : [(Text, Text)] -> Metadata
+mkMetadata kvs = Metadata with values = TM.fromList kvs
+
+lookupMeta : Text -> Metadata -> Text
+lookupMeta key m = fromOptional "" (TM.lookup key m.values)
+
+getSymbol : Metadata -> Text
+getSymbol = lookupMeta "splice.chainsafe.io/symbol"
+
+template CIP56Holding
+  with
+    issuer       : Party
+    owner        : Party
+    amount       : Decimal
+    instrumentId : InstrumentId
+    lock         : Optional Lock
+    meta         : Metadata
+  where
+    signatory issuer
+    observer  owner
+
+    interface instance Holding for CIP56Holding where
+      view = HoldingView with
+        owner
+        instrumentId
+        amount
+        lock
+        meta
+
+template CIP56Manager
+  with
+    issuer       : Party
+    instrumentId : InstrumentId
+    meta         : Metadata
+  where
+    signatory issuer
+
+    nonconsuming choice Mint : ContractId CIP56Holding
+      with
+        to     : Party
+        amount : Decimal
+      controller issuer
+      do
+        assertMsg "amount > 0" (amount > 0.0)
+        create CIP56Holding with
+          issuer
+          owner = to
+          amount
+          instrumentId
+          lock = None
+          meta
+
+    nonconsuming choice Burn : Optional (ContractId CIP56Holding)
+      with
+        holdingCid : ContractId CIP56Holding
+        amount : Decimal
+      controller issuer
+      do
+        holding <- fetch holdingCid
+        assertMsg "issuer matches" (holding.issuer == issuer)
+        assertMsg "amount > 0" (amount > 0.0)
+        assertMsg "holding must not be locked" (holding.lock == None)
+        assertMsg "insufficient balance" (holding.amount >= amount)
+        archive holdingCid
+        if holding.amount > amount
+          then do
+            cid <- create CIP56Holding with
+              issuer = holding.issuer
+              owner = holding.owner
+              amount = holding.amount - amount
+              instrumentId = holding.instrumentId
+              lock = holding.lock
+              meta = holding.meta
+            pure (Some cid)
+          else pure None
+
+    choice UpdateMetadata : ContractId CIP56Manager
+      with
+        newMeta : Metadata
+      controller issuer
+      do
+        create this with meta = newMeta

@@ -1,0 +1,32 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template QualityCertificate
+  with
+    inspector    : Party
+    manufacturer : Party
+    productName  : Text
+    inspectionDate : Date
+    qualityScore : Decimal
+  where
+    signatory inspector
+    observer manufacturer
+
+    ensure qualityScore >= 0.0 && qualityScore <= 100.0
+
+    choice PassInspection : ()
+      controller inspector
+      do
+        assertMsg "Quality score must be at least 70 to pass" (qualityScore >= 70.0)
+        return ()
+
+    choice RequestRemediation : ContractId QualityCertificate
+      with
+        newQualityScore : Decimal
+      controller manufacturer
+      do
+        assertMsg "New quality score must be between 0 and 100" (newQualityScore >= 0.0 && newQualityScore <= 100.0)
+        create this with qualityScore = newQualityScore
