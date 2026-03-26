@@ -1,0 +1,34 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template PartnershipProposal
+  with
+    proposer: Party
+    partner: Party
+    proposalDetails: Text
+    stakePercentage: Decimal
+  where
+    signatory proposer
+    observer partner
+
+    ensure
+      stakePercentage > 0.0 && stakePercentage <= 100.0
+
+    choice AcceptProposal : ContractId PartnershipProposal
+      with
+        acceptanceNote: Text
+      controller partner
+      do
+        create this with
+          proposalDetails = proposalDetails <> " - Accepted: " <> acceptanceNote
+
+    choice RejectProposal : ()
+      with
+        rejectionReason: Text
+      controller partner
+      do
+        archive self
+        return ()

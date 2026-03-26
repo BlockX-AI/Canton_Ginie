@@ -1,0 +1,35 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template DaoTreasury
+  with
+    dao: Party
+    auditor: Party
+    balance: Decimal
+  where
+    signatory dao
+    observer auditor
+
+    ensure
+      balance >= 0.0
+
+    choice ProposeSpending : ContractId DaoTreasury
+      with
+        amount: Decimal
+        recipient: Party
+      controller dao
+      do
+        assertMsg "Insufficient funds" (balance >= amount)
+        create this with balance = balance - amount
+
+    choice ApproveSpending : ()
+      with
+        amount: Decimal
+        recipient: Party
+      controller auditor
+      do
+        assertMsg "Approval amount exceeds balance" (balance >= amount)
+        return ()

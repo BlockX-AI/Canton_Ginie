@@ -1,0 +1,45 @@
+-- Copyright (c) 2026, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
+
+-- @SUPPORTS-LF-FEATURE DAML_NUCK
+
+module QueryNByKey where
+
+import DA.ContractKeys
+
+template WithKey
+  with
+    p : Party
+  where
+    signatory p
+    key p : Party
+    maintainer key
+
+template Helper
+  with
+    p : Party
+  where
+    signatory p
+    choice PerformQueryNByKey : ()
+      controller p
+      do contracts <- queryNByKey @WithKey 1 p
+         case contracts of
+           (contract :: _) -> do
+             pure ()
+           [] ->
+             abort "Assertion failed: queryNByKey returned an empty list."
+    choice PerformQueryAllByKey : ()
+      controller p
+      do contracts <- queryAllByKey @WithKey p
+         case contracts of
+           (contract :: _) -> do
+             pure ()
+           [] ->
+             abort "Assertion failed: queryAllByKey returned an empty list."
+
+-- Test just here to assert that queryNByKey compiles
+-- When we have an ledger implementation, assert things actually run
+-- test = script do
+--   p <- allocateParty "p"
+--   submit p $ createAndExerciseCmd (Helper p) PerformQueryNByKey
+--   submit p $ createAndExerciseCmd (Helper p) PerformQueryAllByKey

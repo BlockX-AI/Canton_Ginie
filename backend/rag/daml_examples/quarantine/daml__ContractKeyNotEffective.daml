@@ -1,0 +1,32 @@
+-- @SUPPORTS-LF-FEATURE DAML_FETCH_BY_KEY
+
+-- @ERROR range=28:1-28:19; Attempt to fetch or exercise by key but no contract with that key was found
+module ContractKeyNotEffective where
+
+import Daml.Script
+import DA.Time
+
+template T
+  with
+    p : Party
+  where
+    signatory p
+    key p : Party
+    maintainer key
+
+template FetchTBySelf
+  with
+    p : Party
+  where
+    signatory p
+    choice Call : ()
+      controller p
+      do
+        fetchByKey @T p
+        pure ()
+
+fetchByKeyMustFail = script do
+  p <- allocateParty "alice"
+  p `submit` createCmd (T p)
+  passTime (- seconds 1)
+  p `submit` createAndExerciseCmd (FetchTBySelf p) Call

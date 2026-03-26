@@ -1,0 +1,91 @@
+-- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Onboard where
+
+import Daml.Script
+
+template Task
+  with
+    id : Text
+    description : Text
+    assigner : Party
+    assignee : Party
+    checker : Party
+  where
+    signatory assigner
+    observer assignee, checker
+
+    key (id, assigner, assignee) : (Text, Party, Party)
+    maintainer key._2
+
+    choice SignOff : ()
+      controller checker
+      do return ()
+
+onboarding = script do
+  hr <- allocateParty "HR"
+  [alice, supervisor] <- mapA allocateParty ["Alice", "Supervisor"]
+
+  taskCid <- submit hr do
+    createCmd Task with
+      id = "onboard"
+      description = "Complete the onboarding process"
+      assigner = hr
+      assignee = alice
+      checker = supervisor
+
+  -- PART 2: supervisor splits the task up. Creates his own workflow "SubTasks" below
+  let
+    departmentNames = ["IT", "Engineering", "Operations", "Compliance"]
+    departmentToSubTask dep d = do
+      return $ Task with
+          id = d <> "_onboard"
+          description = "Complete " <> d <> " onboarding"
+          assigner = supervisor
+          assignee = alice
+          checker = dep
+  depParties@[it, eng, ops, com] <- mapA allocateParty departmentNames
+  subtasks <- mapA (uncurry departmentToSubTask) (zip depParties departmentNames)
+  let subtaskKeys = map (\st -> st.id) subtasks
+
+  [itOb, engOb, opsOb, comOb] <- submit supervisor do
+    mapA (\st -> createCmd st) subtasks
+
+  Some task <- queryContractId supervisor taskCid
+  subTasksCid <- submit supervisor do
+    createCmd SubTasks with
+      task
+      subtaskKeys
+
+  -- Alice can't sign complete her onboarding as there are tasks remaining
+  submitMustFail alice do
+    exerciseCmd subTasksCid CompleteTask
+
+  -- Alice completes her tasks one by one and people sign off
+  submit it do exerciseCmd itOb SignOff
+  submit eng do exerciseCmd engOb SignOff
+  submit ops do exerciseCmd opsOb SignOff
+  submit com do exerciseCmd comOb SignOff
+
+  -- Now alice can complete her onboarding
+  submit alice do
+    exerciseCmd subTasksCid CompleteTask
+
+
+template SubTasks
+  with
+    task : Task
+    subtaskKeys : [Text]
+  where
+    signatory task.checker
+    observer task.assignee
+
+    choice CompleteTask : ()
+      controller task.assignee
+      do
+        let stks = map (\stk -> (stk, task.checker, task.assignee)) subtaskKeys
+        subtaskCids <- mapA (lookupByKey @Task) stks
+        assert (all (== None) subtaskCids)
+        (taskCid, _) <- fetchByKey @Task (Prelude.key task)
+        exercise taskCid SignOff

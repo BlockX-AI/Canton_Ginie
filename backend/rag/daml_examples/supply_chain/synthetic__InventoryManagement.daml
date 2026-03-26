@@ -1,0 +1,41 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template InventoryManagement
+  with
+    manager      : Party
+    warehouse    : Party
+    itemName     : Text
+    stockLevel   : Decimal
+    reorderLevel : Decimal
+  where
+    signatory manager
+    observer  warehouse
+
+    ensure stockLevel >= 0.0 && reorderLevel >= 0.0
+
+    choice StockIn : ()
+      with
+        amount : Decimal
+      controller manager
+      do
+        assertMsg "Stock in amount must be positive" (amount > 0.0)
+        create this with stockLevel = stockLevel + amount
+        return ()
+
+    choice StockOut : ()
+      with
+        amount : Decimal
+      controller manager
+      do
+        assertMsg "Stock out amount must be positive and less than current stock" (amount > 0.0 && amount <= stockLevel)
+        create this with stockLevel = stockLevel - amount
+        return ()
+
+    choice CheckReorder : Bool
+      controller warehouse
+      do
+        return (stockLevel <= reorderLevel)

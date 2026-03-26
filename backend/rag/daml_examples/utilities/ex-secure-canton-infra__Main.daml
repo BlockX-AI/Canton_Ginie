@@ -1,0 +1,41 @@
+-- Copyright (c) 2024, Digital Asset (Switzerland) GmbH and/or its affiliates.
+-- All rights reserved.
+
+module Main where
+
+type AssetId = ContractId Asset
+type ConfigId = ContractId DonorConfig
+type AssetKey = (Party, Text)
+
+template Asset
+  with
+    issuer : Party
+    owner  : Party
+    name   : Text
+  where
+    ensure name /= ""
+    signatory issuer
+    observer owner
+
+    key (issuer, name) : AssetKey
+    maintainer key._1
+
+    choice Give: AssetId
+      with
+        newOwner : Party
+      controller owner
+        do
+          create this with owner = newOwner
+
+template DonorConfig
+  with 
+    owner: Party
+    donateTo: Party
+  where
+    signatory owner
+    observer owner
+
+    key owner : Party
+    maintainer key
+
+

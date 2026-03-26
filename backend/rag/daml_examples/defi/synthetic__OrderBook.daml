@@ -1,0 +1,48 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template OrderBook
+  with
+    owner: Party
+    regulator: Party
+    bidPrice: Decimal
+    askPrice: Decimal
+    stockSymbol: Text
+  where
+    signatory owner
+    observer regulator
+
+    ensure
+      bidPrice < askPrice
+
+    choice PlaceBid : ContractId OrderBook
+      with
+        bidder: Party
+        bidAmount: Decimal
+      controller bidder
+      do
+        assert (bidAmount > 0.0)
+        create this with
+          bidPrice = bidAmount
+
+    choice PlaceAsk : ContractId OrderBook
+      with
+        asker: Party
+        askAmount: Decimal
+      controller asker
+      do
+        assert (askAmount > 0.0)
+        create this with
+          askPrice = askAmount
+
+    choice MatchOrder : ()
+      with
+        matcher: Party
+      controller matcher
+      do
+        assert (bidPrice >= askPrice)
+        archive self
+        return ()

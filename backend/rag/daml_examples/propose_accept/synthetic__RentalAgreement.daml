@@ -1,0 +1,38 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template RentalAgreement
+  with
+    landlord: Party
+    tenant: Party
+    propertyAddress: Text
+    monthlyRent: Decimal
+    securityDeposit: Decimal
+  where
+    signatory landlord
+    observer tenant
+
+    ensure
+      monthlyRent > 0.0 && securityDeposit >= 0.0
+
+    choice ProposeAgreement : ContractId RentalAgreement
+      with
+        proposedRent: Decimal
+        proposedDeposit: Decimal
+      controller tenant
+        do
+          assert (proposedRent > 0.0 && proposedDeposit >= 0.0)
+          create this with
+            monthlyRent = proposedRent
+            securityDeposit = proposedDeposit
+
+    choice TerminateAgreement : ()
+      with
+        terminationReason: Text
+      controller landlord
+        do
+          assert (terminationReason /= "")
+          archive self

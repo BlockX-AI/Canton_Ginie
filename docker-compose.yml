@@ -1,0 +1,45 @@
+# docker-compose.yml — Local dev stack for Ginie Canton
+#
+# Usage:
+#   docker-compose up -d        # Start Postgres + Redis
+#   docker-compose down          # Stop
+#   docker-compose down -v       # Stop + delete data volumes
+#
+# Canton sandbox runs OUTSIDE Docker (via `daml sandbox` or Canton binary)
+# because it needs access to local DAML SDK and project files.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ginie-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/init_databases.sh:/docker-entrypoint-initdb.d/00-init-databases.sh
+      - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ginie-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:

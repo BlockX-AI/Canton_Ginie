@@ -1,0 +1,31 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template AccessControl
+  with
+    admin      : Party
+    user       : Party
+    role       : Text
+    isActive   : Bool
+  where
+    signatory admin
+    observer  user
+
+    ensure role /= "" && isActive
+
+    choice GrantRole : ContractId AccessControl
+      with newRole : Text
+      controller admin
+      do
+        assertMsg "New role cannot be empty" (newRole /= "")
+        create this with role = newRole, isActive = True
+
+    choice RevokeRole : ()
+      controller admin
+      do
+        assertMsg "Role is already inactive" isActive
+        create this with isActive = False
+        return ()

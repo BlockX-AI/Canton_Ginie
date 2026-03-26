@@ -1,0 +1,96 @@
+-- | Wayfinder Bridge - EVM Bridge Layer
+--
+-- Thin EVM bridge layer that delegates mint/burn to TokenConfig.
+-- Registration (FingerprintMapping) is handled separately by the API server.
+
+module Wayfinder.Bridge where
+
+import qualified DA.TextMap as TM
+
+import Common.Types (EvmAddress(..))
+import Common.FingerprintAuth
+import Splice.Api.Token.MetadataV1 (Metadata(..))
+import Splice.Api.Token.HoldingV1 (InstrumentId(..))
+import CIP56.Token (CIP56Holding, getSymbol)
+import CIP56.Config
+import CIP56.Events (TokenTransferEvent)
+import Bridge.Contracts
+
+promptInstrumentId : Party -> InstrumentId
+promptInstrumentId admin = InstrumentId with
+  admin
+  id = "PROMPT"
+
+promptMetadata : Metadata
+promptMetadata = Metadata with
+  values = TM.fromList
+    [ ("splice.chainsafe.io/name", "Wayfinder PROMPT")
+    , ("splice.chainsafe.io/symbol", "PROMPT")
+    , ("splice.chainsafe.io/decimals", "18")
+    , ("splice.chainsafe.io/erc20", "0x28d38df637db75533bd3f71426f3410a82041544")
+    ]
+
+template WayfinderBridgeConfig
+  with
+    issuer : Party
+    tokenConfigCid : ContractId TokenConfig
+    auditObservers : [Party]
+  where
+    signatory issuer
+    observer auditObservers
+
+    nonconsuming choice CreatePendingDeposit : ContractId PendingDeposit
+      with
+        fingerprint : Text
+        amount      : Decimal
+        evmTxHash   : Text
+        timestamp   : Time
+      controller issuer
+      do
+        create PendingDeposit with
+          issuer = issuer
+          fingerprint = fingerprint
+          amount = amount
+          evmTxHash = evmTxHash
+          tokenId = "PROMPT"
+          createdAt = timestamp
+
+    nonconsuming choice ProcessDepositAndMint : (ContractId CIP56Holding, ContractId TokenTransferEvent)
+      with
+        depositCid  : ContractId PendingDeposit
+        mappingCid  : ContractId FingerprintMapping
+        timestamp   : Time
+      controller issuer
+      do
+        receiptCid <- exercise depositCid ProcessDeposit with mappingCid = mappingCid
+        receipt <- fetch receiptCid
+
+        exercise tokenConfigCid IssuerMint with
+          recipient = receipt.recipient
+          amount = receipt.amount
+          eventTime = timestamp
+          eventMeta = Some (Metadata (TM.fromList
+            [ ("bridge.externalTxId", receipt.evmTxHash)
+            , ("bridge.fingerprint", receipt.fingerprint)
+            ]))
+
+    nonconsuming choice InitiateWithdrawal : ContractId WithdrawalRequest
+      with
+        mappingCid      : ContractId FingerprintMapping
+        holdingCid      : ContractId CIP56Holding
+        amount          : Decimal
+        evmDestination  : EvmAddress
+      controller issuer
+      do
+        mapping <- fetch mappingCid
+
+        create WithdrawalRequest with
+          issuer = issuer
+          userParty = mapping.userParty
+          tokenConfigCid = tokenConfigCid
+          holdingCid = holdingCid
+          amount = amount
+          evmDestination = evmDestination
+          fingerprint = mapping.fingerprint
+          tokenSymbol = getSymbol promptMetadata
+          auditObservers = auditObservers

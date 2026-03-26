@@ -427,46 +427,76 @@ def verify_contract(contract_id: str):
 
     Returns verification status and contract details if found.
     Useful for confirming successful deployments.
+
+    Strategy:
+      1. Query with each discovered templateId (Canton 2.x requires templateIds)
+      2. Search the results for the matching contractId
+      Falls back to /v1/fetch with templateId when found via job store.
     """
     canton_url = _canton_url()
     headers = {**_auth_header(), "Content-Type": "application/json"}
 
     try:
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.post(
-                f"{canton_url}/v1/fetch",
-                headers=headers,
-                json={"contractId": contract_id},
-            )
+        # Strategy 1: Look up the template_id for this contract from job store
+        from api.routes import _in_memory_jobs
+        job_template_id = None
+        for job_data in _in_memory_jobs.values():
+            if job_data.get("contract_id") == contract_id:
+                job_template_id = job_data.get("template_id", "")
+                break
 
-        if resp.status_code >= 400:
-            return {
-                "verified": False,
-                "contract_id": contract_id,
-                "error": "Contract not found or not accessible",
-                "environment": _canton_env(),
-            }
+        with httpx.Client(timeout=15.0) as client:
+            # If we know the template, try /v1/fetch directly (fast path)
+            if job_template_id:
+                resp = client.post(
+                    f"{canton_url}/v1/fetch",
+                    headers=headers,
+                    json={"contractId": contract_id, "templateId": job_template_id},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    result = data.get("result")
+                    if result:
+                        return {
+                            "verified": True,
+                            "contract_id": contract_id,
+                            "templateId": result.get("templateId", ""),
+                            "signatories": result.get("signatories", []),
+                            "observers": result.get("observers", []),
+                            "payload": result.get("payload", {}),
+                            "environment": _canton_env(),
+                        }
 
-        data = resp.json()
-        result = data.get("result")
+            # Strategy 2: Query with all known template IDs and search for contract
+            template_ids = _discover_template_ids()
+            for tid in template_ids:
+                try:
+                    resp = client.post(
+                        f"{canton_url}/v1/query",
+                        headers=headers,
+                        json={"templateIds": [tid]},
+                    )
+                    if resp.status_code == 200:
+                        for entry in resp.json().get("result", []):
+                            if entry.get("contractId") == contract_id:
+                                return {
+                                    "verified": True,
+                                    "contract_id": contract_id,
+                                    "templateId": entry.get("templateId", ""),
+                                    "signatories": entry.get("signatories", []),
+                                    "observers": entry.get("observers", []),
+                                    "payload": entry.get("payload", {}),
+                                    "environment": _canton_env(),
+                                }
+                except Exception:
+                    continue
 
-        if result:
-            return {
-                "verified": True,
-                "contract_id": contract_id,
-                "templateId": result.get("templateId", ""),
-                "signatories": result.get("signatories", []),
-                "observers": result.get("observers", []),
-                "payload": result.get("payload", {}),
-                "environment": _canton_env(),
-            }
-        else:
-            return {
-                "verified": False,
-                "contract_id": contract_id,
-                "error": "Contract not found on ledger",
-                "environment": _canton_env(),
-            }
+        return {
+            "verified": False,
+            "contract_id": contract_id,
+            "error": "Contract not found on ledger",
+            "environment": _canton_env(),
+        }
 
     except Exception as e:
         return {

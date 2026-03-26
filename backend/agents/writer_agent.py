@@ -2,7 +2,7 @@ import re
 import structlog
 
 from config import get_settings
-from rag.vector_store import search_daml_patterns
+from rag.vector_store import search_daml_patterns, search_signatures
 from utils.llm_client import call_llm
 
 logger = structlog.get_logger()
@@ -319,31 +319,123 @@ def _post_process(code: str, template_name: str, party1: str, party2: str) -> st
 
 
 def fetch_rag_context(structured_intent: dict) -> list[str]:
+    """
+    Tiered retrieval strategy to provide rich context without drowning the LLM:
+
+    Tier 1: 2 full-file examples (most relevant complete templates, ~50-80 lines each)
+    Tier 2: 5 pattern signatures (compact: template + fields + choices, ~10-15 lines each)
+    Tier 3: 3 choice-specific snippets (just the choice blocks for requested features)
+
+    This gives the LLM deep + broad context in ~250-350 lines instead of flooding
+    with 15 full files that would overflow the effective context window.
+    """
     contract_type = structured_intent.get("contract_type", "")
     features = structured_intent.get("features", [])
     description = structured_intent.get("description", "")
+    choices = structured_intent.get("suggested_choices", [])
 
-    queries = [
-        f"{contract_type} daml template canton",
-        f"{' '.join(features[:3])} daml choice",
-        description[:100],
-    ]
+    # Infer category for filtered search (boost relevance)
+    category = _map_contract_type_to_category(contract_type)
 
-    context_docs = []
-    seen = set()
+    context_docs: list[str] = []
+    seen: set[str] = set()
 
-    for query in queries:
+    def _add_unique(content: str):
+        if content and content not in seen:
+            seen.add(content)
+            context_docs.append(content)
+
+    # --- Tier 1: Full file examples (deep context) ---
+    full_file_query = f"{contract_type} {description[:80]} daml template canton"
+    try:
+        results = search_daml_patterns(
+            full_file_query, k=2,
+            chunk_type_filter="full_file",
+            category_filter=category,
+        )
+        for doc in results:
+            _add_unique(doc.page_content)
+    except Exception as e:
+        logger.warning("Tier 1 RAG search failed", error=str(e))
+
+    # Fallback: unfiltered full_file search if category filter returned nothing
+    if not context_docs:
         try:
-            results = search_daml_patterns(query, k=2)
+            results = search_daml_patterns(full_file_query, k=2, chunk_type_filter="full_file")
             for doc in results:
-                content = doc.page_content
-                if content not in seen:
-                    seen.add(content)
-                    context_docs.append(content)
+                _add_unique(doc.page_content)
         except Exception as e:
-            logger.warning("RAG search failed for query", query=query, error=str(e))
+            logger.warning("Tier 1 fallback RAG search failed", error=str(e))
 
-    return context_docs[:4]
+    # --- Tier 2: Pattern signatures (broad structural reference) ---
+    sig_query = f"{contract_type} {' '.join(features[:3])} template with signatory"
+    try:
+        results = search_signatures(sig_query, k=5, category_filter=category)
+        for doc in results:
+            _add_unique(doc.page_content)
+    except Exception as e:
+        logger.warning("Tier 2 signature search failed", error=str(e))
+
+    # Fallback: unfiltered signature search
+    if len(context_docs) < 3:
+        try:
+            results = search_signatures(sig_query, k=5)
+            for doc in results:
+                _add_unique(doc.page_content)
+        except Exception as e:
+            logger.warning("Tier 2 fallback signature search failed", error=str(e))
+
+    # --- Tier 3: Choice-specific snippets ---
+    choice_terms = choices[:3] if choices else features[:2]
+    if choice_terms:
+        choice_query = f"{' '.join(choice_terms)} daml choice controller do create"
+        try:
+            results = search_daml_patterns(choice_query, k=3, chunk_type_filter="choice")
+            for doc in results:
+                _add_unique(doc.page_content)
+        except Exception as e:
+            logger.warning("Tier 3 choice search failed", error=str(e))
+
+    logger.info(
+        "Tiered RAG context assembled",
+        total_docs=len(context_docs),
+        contract_type=contract_type,
+        category=category,
+    )
+    return context_docs
+
+
+# Category mapping for filtered RAG search
+_CONTRACT_TYPE_TO_CATEGORY = {
+    "bond_tokenization": "securities",
+    "equity_token": "securities",
+    "option_contract": "securities",
+    "swap": "defi",
+    "lending": "defi",
+    "cash_payment": "payments",
+    "invoice_payment": "payments",
+    "asset_transfer": "payments",
+    "trade_settlement": "payments",
+    "escrow": "payments",
+    "nft_ownership": "nft",
+    "governance_voting": "governance",
+    "governance_proposal": "governance",
+    "identity_kyc": "identity",
+    "identity_credential": "identity",
+    "supply_chain": "supply_chain",
+    "supply_chain_shipment": "supply_chain",
+    "token_holding": "token_standards",
+    "token_transfer": "token_standards",
+    "auction": "defi",
+    "marketplace": "nft",
+    "crowdfunding": "defi",
+    "approval_chain": "propose_accept",
+}
+
+
+def _map_contract_type_to_category(contract_type: str) -> str | None:
+    """Map a contract_type to a RAG category for filtered search. Returns None if unknown."""
+    return _CONTRACT_TYPE_TO_CATEGORY.get(contract_type)
 
 
 def _extract_daml_code(raw: str) -> str:

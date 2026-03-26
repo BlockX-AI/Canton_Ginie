@@ -1,0 +1,43 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template YieldFarm
+  with
+    farmer: Party
+    platform: Party
+    stakedAmount: Decimal
+    rewardRate: Decimal
+  where
+    signatory farmer
+    observer platform
+
+    ensure
+      stakedAmount >= 0.0
+
+    choice Stake : ContractId YieldFarm
+      with
+        amount: Decimal
+      controller farmer
+      do
+        assertMsg "Stake amount must be positive" (amount > 0.0)
+        create this with stakedAmount = stakedAmount + amount
+
+    choice Unstake : ()
+      with
+        amount: Decimal
+      controller farmer
+      do
+        assertMsg "Unstake amount must be positive" (amount > 0.0)
+        assertMsg "Cannot unstake more than staked" (amount <= stakedAmount)
+        create this with stakedAmount = stakedAmount - amount
+        return ()
+
+    choice ClaimRewards : ()
+      controller farmer
+      do
+        let rewards = stakedAmount * rewardRate
+        create this with stakedAmount = stakedAmount + rewards
+        return ()

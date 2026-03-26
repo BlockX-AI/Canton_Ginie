@@ -1,0 +1,38 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template AssetSwapProposal
+  with
+    proposer: Party
+    acceptor: Party
+    assetDescription: Text
+    proposedValue: Decimal
+  where
+    signatory proposer
+    observer acceptor
+
+    ensure
+      proposedValue > 0.0
+
+    choice AcceptProposal: ContractId AssetSwapProposal
+      with
+        newValue: Decimal
+      controller acceptor
+      do
+        assertMsg "New value must be positive" (newValue > 0.0)
+        create this with proposedValue = newValue
+
+    choice RejectProposal: ()
+      controller acceptor
+      do
+        archive self
+
+    choice UpdateDescription: ContractId AssetSwapProposal
+      with
+        newDescription: Text
+      controller proposer
+      do
+        create this with assetDescription = newDescription

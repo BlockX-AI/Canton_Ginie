@@ -1,0 +1,45 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template Amendment
+  with
+    proposer : Party
+    observer : Party
+    proposalText : Text
+    votesFor : Int
+    votesAgainst : Int
+    totalVotes : Int
+  where
+    signatory proposer
+    observer observer
+
+    ensure
+      votesFor + votesAgainst <= totalVotes
+
+    choice VoteFor : ()
+      with
+        voter : Party
+      controller voter
+      do
+        create this with votesFor = votesFor + 1
+        return ()
+
+    choice VoteAgainst : ()
+      with
+        voter : Party
+      controller voter
+      do
+        create this with votesAgainst = votesAgainst + 1
+        return ()
+
+    choice FinalizeAmendment : ()
+      with
+        finalizer : Party
+      controller finalizer
+      do
+        if votesFor > (totalVotes * 2 / 3)
+          then archive self
+          else return ()

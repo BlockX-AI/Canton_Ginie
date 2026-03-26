@@ -1,0 +1,35 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template WeightedVote
+  with
+    voter : Party
+    observer : Party
+    tokenHoldings : Decimal
+    proposalId : Text
+  where
+    signatory voter
+    observer observer
+
+    ensure
+      tokenHoldings > 0.0
+
+    choice CastVote : ()
+      with
+        voteWeight : Decimal
+      controller voter
+      do
+        assert (voteWeight <= tokenHoldings)
+        return ()
+
+    choice UpdateTokenHoldings : ()
+      with
+        newHoldings : Decimal
+      controller voter
+      do
+        assert (newHoldings >= 0.0)
+        create this with tokenHoldings = newHoldings
+        return ()

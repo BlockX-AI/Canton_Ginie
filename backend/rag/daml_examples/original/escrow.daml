@@ -1,0 +1,126 @@
+module Escrow where
+
+import Daml.Script
+
+-- Escrow contract holding funds until conditions are met
+template Escrow
+  with
+    buyer     : Party
+    seller    : Party
+    escrowAgent: Party
+    amount    : Decimal
+    currency  : Text
+    conditions: Text
+    deadline  : Time
+  where
+    signatory buyer
+    observer  seller, escrowAgent
+
+    ensure amount > 0.0
+
+    choice ConfirmDelivery : ContractId EscrowRelease
+      controller buyer
+      do
+        create EscrowRelease with
+          escrowAgent = escrowAgent
+          recipient   = seller
+          amount      = amount
+          currency    = currency
+          reason      = "Buyer confirmed delivery"
+
+    choice RaiseDispute : ContractId Dispute
+      with reason : Text
+      controller buyer
+      do
+        create Dispute with
+          buyer       = buyer
+          seller      = seller
+          escrowAgent = escrowAgent
+          amount      = amount
+          reason      = reason
+
+    choice CancelEscrow : ContractId EscrowRelease
+      controller escrowAgent
+      do
+        create EscrowRelease with
+          escrowAgent = escrowAgent
+          recipient   = buyer
+          amount      = amount
+          currency    = currency
+          reason      = "Escrow cancelled by agent"
+
+
+-- Release authorization from escrow agent
+template EscrowRelease
+  with
+    escrowAgent : Party
+    recipient   : Party
+    amount      : Decimal
+    currency    : Text
+    reason      : Text
+  where
+    signatory escrowAgent
+    observer  recipient
+
+    choice ExecuteRelease : ()
+      controller recipient
+      do
+        return ()
+
+
+-- Dispute contract for escrow resolution
+template Dispute
+  with
+    buyer       : Party
+    seller      : Party
+    escrowAgent : Party
+    amount      : Decimal
+    reason      : Text
+  where
+    signatory buyer
+    observer  seller, escrowAgent
+
+    choice ResolveForBuyer : ContractId EscrowRelease
+      controller escrowAgent
+      do
+        create EscrowRelease with
+          escrowAgent = escrowAgent
+          recipient   = buyer
+          amount      = amount
+          currency    = "USD"
+          reason      = "Dispute resolved in favor of buyer"
+
+    choice ResolveForSeller : ContractId EscrowRelease
+      controller escrowAgent
+      do
+        create EscrowRelease with
+          escrowAgent = escrowAgent
+          recipient   = seller
+          amount      = amount
+          currency    = "USD"
+          reason      = "Dispute resolved in favor of seller"
+
+
+setup : Script ()
+setup = script do
+  buyer       <- allocateParty "Buyer"
+  seller      <- allocateParty "Seller"
+  escrowAgent <- allocateParty "EscrowAgent"
+
+  now <- getTime
+
+  escrowCid <- submit buyer do
+    createCmd Escrow with
+      buyer       = buyer
+      seller      = seller
+      escrowAgent = escrowAgent
+      amount      = 50000.0
+      currency    = "USD"
+      conditions  = "Deliver goods by shipment #XYZ"
+      deadline    = addRelTime now (days 30)
+
+  releaseCid <- submit buyer do
+    exerciseCmd escrowCid ConfirmDelivery
+
+  submit seller do
+    exerciseCmd releaseCid ExecuteRelease

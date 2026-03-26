@@ -1,0 +1,98 @@
+-- | Unified Token Configuration
+--
+-- Holds the CIP56Manager reference and Splice-standard metadata.
+-- All mint/burn operations go through this template to produce unified audit events.
+-- Bridge-specific logic (deposit validation, withdrawal initiation) remains
+-- in the bridge config, which holds a tokenConfigCid reference and delegates
+-- all mint/burn to TokenConfig.
+
+module CIP56.Config where
+
+import Splice.Api.Token.MetadataV1 (Metadata(..))
+import Splice.Api.Token.HoldingV1 (InstrumentId(..))
+import CIP56.Token
+import CIP56.Events
+
+template TokenConfig
+  with
+    issuer         : Party
+    tokenManagerCid : ContractId CIP56Manager
+    instrumentId   : InstrumentId
+    meta           : Metadata
+    auditObservers : [Party]
+  where
+    signatory issuer
+    observer auditObservers
+
+    nonconsuming choice IssuerMint : (ContractId CIP56Holding, ContractId TokenTransferEvent)
+      with
+        recipient : Party
+        amount : Decimal
+        eventTime : Time
+        eventMeta : Optional Metadata
+      controller issuer
+      do
+        assertMsg "amount must be positive" (amount > 0.0)
+
+        holdingCid <- exercise tokenManagerCid Mint with
+          to = recipient
+          amount = amount
+
+        eventCid <- create TokenTransferEvent with
+          issuer
+          fromParty = None
+          toParty = Some recipient
+          amount
+          instrumentId
+          timestamp = eventTime
+          meta = eventMeta
+          auditObservers
+
+        pure (holdingCid, eventCid)
+
+    nonconsuming choice IssuerBurn : (Optional (ContractId CIP56Holding), ContractId TokenTransferEvent)
+      with
+        holdingCid : ContractId CIP56Holding
+        amount : Decimal
+        eventTime : Time
+        eventMeta : Optional Metadata
+      controller issuer
+      do
+        assertMsg "amount must be positive" (amount > 0.0)
+        holding <- fetch holdingCid
+
+        remainderCid <- exercise tokenManagerCid Burn with holdingCid, amount
+
+        eventCid <- create TokenTransferEvent with
+          issuer
+          fromParty = Some holding.owner
+          toParty = None
+          amount
+          instrumentId
+          timestamp = eventTime
+          meta = eventMeta
+          auditObservers
+
+        pure (remainderCid, eventCid)
+
+    nonconsuming choice GetMetadata : Metadata
+      controller issuer
+      do pure meta
+
+    choice SetMetadata : ContractId TokenConfig
+      with
+        newMeta : Metadata
+      controller issuer
+      do create this with meta = newMeta
+
+    choice AddAuditObserver : ContractId TokenConfig
+      with
+        newObserver : Party
+      controller issuer
+      do create this with auditObservers = newObserver :: auditObservers
+
+    choice RemoveAuditObserver : ContractId TokenConfig
+      with
+        observerToRemove : Party
+      controller issuer
+      do create this with auditObservers = filter (/= observerToRemove) auditObservers

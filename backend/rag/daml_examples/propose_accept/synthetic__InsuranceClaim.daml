@@ -1,0 +1,38 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template InsuranceClaim
+  with
+    claimant: Party
+    insurer: Party
+    claimAmount: Decimal
+    claimDescription: Text
+    adjudicated: Bool
+  where
+    signatory claimant
+    observer insurer
+
+    ensure
+      claimAmount > 0.0
+
+    choice SubmitClaim : ContractId InsuranceClaim
+      with
+        newDescription: Text
+      controller claimant
+        do
+          create this with
+            claimDescription = newDescription
+            adjudicated = False
+
+    choice AdjudicateClaim : ContractId InsuranceClaim
+      with
+        approvedAmount: Decimal
+      controller insurer
+        do
+          assert (approvedAmount <= claimAmount)
+          create this with
+            claimAmount = approvedAmount
+            adjudicated = True

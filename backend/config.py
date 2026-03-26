@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     database_url: str = "postgresql://postgres:password@localhost:5432/ginie_daml"
 
+    # Canton sandbox PostgreSQL storage (separate DB from Ginie app)
+    canton_db_host: str = "localhost"
+    canton_db_port: int = 5432
+    canton_db_name: str = "canton_sandbox"
+    canton_db_user: str = "postgres"
+    canton_db_password: str = "password"
+
     canton_sandbox_url: str = "http://localhost:7575"
     canton_devnet_url: str = "https://canton.network/ledger"
     canton_mainnet_url: str = "https://main.canton.network/ledger"
@@ -39,6 +46,11 @@ class Settings(BaseSettings):
     max_fix_attempts: int = 3
     llm_model: str = "gpt-4o"
     llm_temperature: float = 0.1
+
+    # Auth / JWT
+    jwt_secret: str = "ginie-local-dev-secret-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expiry_days: int = 7
 
     def get_canton_url(self) -> str:
         mapping = {

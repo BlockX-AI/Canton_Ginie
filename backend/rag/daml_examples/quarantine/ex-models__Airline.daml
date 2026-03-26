@@ -1,0 +1,205 @@
+-- Copyright (c) 2019 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+{-# LANGUAGE ApplicativeDo #-}
+module Airline where
+
+import DA.Assert
+import DA.Optional
+import DA.TextMap as TM
+import Daml.Script
+
+data Class = Coach | Business | First deriving (Eq, Show, Ord)
+
+template FlightInvite
+  with
+    ticket : Ticket
+  where
+    signatory ticket.airline
+    observer ticket.passenger
+
+    choice Accept_Invite : (ContractId Ticket, ContractId Flight)
+      with
+        flightCid : ContractId Flight
+      controller ticket.passenger
+      do
+        flight <- fetch flightCid
+        ticket.flightNumber === flight.flightNumber
+        ticket.airline === flight.airline
+
+        flightCid <- exercise flightCid AddPassenger with
+          passenger = ticket.passenger
+        ticketCid <- create ticket
+
+        return (ticketCid, flightCid)
+
+
+template Ticket
+  with
+    ticketClass : Class
+    ticketRef : Text
+    flightNumber : Text
+    airline : Party
+    passenger : Party
+    seatChoice : Bool
+  where
+    signatory airline, passenger
+
+    choice CheckIn : (ContractId BoardingPass, ContractId Flight)
+      with
+        flightCid : ContractId Flight
+        seat : Text
+      controller if seatChoice then passenger else airline
+      do
+        flight <- fetch flightCid
+        flight.flightNumber === flightNumber
+        flight.airline === airline
+        assert $ fromSome (TM.lookup seat flight.seatClasses) <= ticketClass
+        boardingPasssCid <- create BoardingPass with
+          seatNumber = seat
+          ticket = this
+        newFlightCid <- exercise flightCid AssignSeat with
+          passenger; seat; ticketRef
+        return (boardingPasssCid, newFlightCid)
+
+template BoardingPass
+  with
+    ticket : Ticket
+    seatNumber : Text
+  where
+    signatory ticket.airline, ticket.passenger
+
+template Flight
+  with
+    seatClasses : TextMap Class
+    allocation : TextMap Text
+    flightNumber : Text
+    airline : Party
+    invitedPassengers : [Party]
+    passengers : [Party]
+  where
+    signatory airline, passengers
+    observer invitedPassengers
+
+    choice AssignSeat : ContractId Flight
+      with
+        passenger : Party
+        ticketRef : Text
+        seat : Text
+      controller [passenger, airline]
+      do
+        None === TM.lookup seat allocation
+
+        create this with
+          allocation = insert seat ticketRef allocation
+
+    choice AddPassenger : ContractId Flight
+      with
+        passenger : Party
+      controller [airline, passenger]
+      do
+        assert (passenger `elem` invitedPassengers)
+        create this with passengers = passenger :: passengers
+
+    choice TakeOff : ()
+      controller airline
+      do
+        length passengers === TM.size allocation
+        return ()
+
+dajet = script do
+  da <- allocateParty "DA"
+  passengers@[p1, p2, p3, p4, p5]
+    <- mapA allocateParty ["P1", "P2", "P3", "P4", "P5"]
+  let
+    flightNumber = "DA Force One"
+    classes = [Coach, Coach, Business, Business, First]
+    seatClasses = TM.fromList
+      [ ("1A", First)
+      , ("1B", First)
+      , ("2A", Business)
+      , ("2B", Business)
+      , ("3A", Coach)
+      , ("3B", Coach) ]
+    tickets = map
+      (\(seq, passenger, ticketClass) ->
+        Ticket with
+          ticketClass
+          ticketRef = show seq
+          flightNumber
+          airline = da
+          passenger
+          seatChoice = ticketClass > Coach
+      )
+      (zip3 [1..5] passengers classes)
+
+  (inviteCids, flightCid) <- submit da do
+    inviteCids <- mapA (\ticket -> createCmd FlightInvite with ticket) tickets
+    flightCid <- createCmd Flight with
+      seatClasses
+      allocation = TM.empty
+      flightNumber
+      airline = da
+      invitedPassengers = passengers
+      passengers = []
+    return (inviteCids, flightCid)
+
+  ([t1, t2, t3, t4, t5], flightCid) <- foldr
+    (\(passenger, inviteCid) acc -> do
+      (ticketCids, flightCid) <- acc
+      (ticketCid, flightCid) <- submit passenger do
+        exerciseCmd inviteCid Accept_Invite with flightCid
+      return (ticketCid :: ticketCids, flightCid) )
+    (return ([], flightCid))
+    (zip passengers inviteCids)
+
+  submitMustFail da do exerciseCmd flightCid TakeOff
+  submitMustFail p1 do
+    exerciseCmd t1 CheckIn with
+      flightCid
+      seat = "1A"
+  submitMustFail da do
+    exerciseCmd t1 CheckIn with
+      flightCid
+      seat = "1A"
+  submitMustFail p2 do
+    exerciseCmd t3 CheckIn with
+      flightCid
+      seat = "1A"
+
+  (_, flightCid) <- submit da do
+    exerciseCmd t1 CheckIn with
+      flightCid
+      seat = "3A"
+
+  submitMustFail da do
+    exerciseCmd t2 CheckIn with
+      flightCid
+      seat = "3A"
+
+  (_, flightCid) <- submit da do
+    exerciseCmd t2 CheckIn with
+      flightCid
+      seat = "3B"
+
+  submitMustFail da do
+    exerciseCmd t3 CheckIn with
+      flightCid
+      seat = "2A"
+
+  (_, flightCid) <- submit p3 do
+    exerciseCmd t3 CheckIn with
+      flightCid
+      seat = "2A"
+
+  (_, flightCid) <- submit p4 do
+    exerciseCmd t4 CheckIn with
+      flightCid
+      seat = "2B"
+
+  (_, flightCid) <- submit p5 do
+    exerciseCmd t5 CheckIn with
+      flightCid
+      seat = "1A"
+
+  submit da do exerciseCmd flightCid TakeOff

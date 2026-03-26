@@ -1,0 +1,46 @@
+module Main where
+
+import DA.Time
+import DA.Date
+import DA.Text
+
+template LiquidityPool
+  with
+    provider: Party
+    regulator: Party
+    totalLiquidity: Decimal
+    feePercentage: Decimal
+  where
+    signatory provider
+    observer regulator
+
+    ensure
+      totalLiquidity >= 0.0 && feePercentage >= 0.0 && feePercentage <= 100.0
+
+    choice Deposit : ContractId LiquidityPool
+      with
+        depositor: Party
+        amount: Decimal
+      controller depositor
+      do
+        assertMsg "Deposit amount must be positive" (amount > 0.0)
+        create this with totalLiquidity = totalLiquidity + amount
+
+    choice Withdraw : ContractId LiquidityPool
+      with
+        withdrawer: Party
+        amount: Decimal
+      controller withdrawer
+      do
+        assertMsg "Insufficient liquidity" (amount <= totalLiquidity)
+        create this with totalLiquidity = totalLiquidity - amount
+
+    choice DistributeFees : ()
+      with
+        distributor: Party
+      controller distributor
+      do
+        let feeAmount = totalLiquidity * feePercentage / 100.0
+        assertMsg "No fees to distribute" (feeAmount > 0.0)
+        create this with totalLiquidity = totalLiquidity - feeAmount
+        return ()
