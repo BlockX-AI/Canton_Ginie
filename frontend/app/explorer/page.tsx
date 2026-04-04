@@ -18,7 +18,6 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Database,
   Activity,
 } from "lucide-react";
@@ -69,18 +68,18 @@ function CopyButton({ text }: { text: string }) {
       className="ml-1 shrink-0 rounded-md p-1 text-white/30 transition-colors hover:bg-white/10 hover:text-white/60"
       title="Copy"
     >
-      {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+      {copied ? <Check className="h-3 w-3 text-accent" /> : <Copy className="h-3 w-3" />}
     </button>
   );
 }
 
-function truncate(s: string, n: number = 24): string {
+function truncate(s: string, n = 24): string {
   return s.length > n ? s.slice(0, n) + "..." : s;
 }
 
 function StatusDot({ online }: { online: boolean }) {
   return (
-    <span className={`inline-block h-2.5 w-2.5 rounded-full ${online ? "bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-red-400 shadow-[0_0_6px_rgba(239,68,68,0.5)]"}`} />
+    <span className={`inline-block h-2.5 w-2.5 rounded-full ${online ? "bg-accent shadow-[0_0_6px_rgba(34,197,94,0.5)]" : "bg-red-400 shadow-[0_0_6px_rgba(239,68,68,0.5)]"}`} />
   );
 }
 
@@ -105,16 +104,17 @@ function ContractsTab() {
         body: JSON.stringify({}),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      setContracts(data.contracts || []);
-    } catch (e: any) {
-      setError(e.message || "Failed to fetch contracts");
+      const data: unknown = await resp.json();
+      const parsed = data as { contracts?: Contract[] };
+      setContracts(parsed.contracts ?? []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch contracts");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchContracts(); }, []);
+  useEffect(() => { void fetchContracts(); }, []);
 
   const filtered = contracts.filter(
     (c) =>
@@ -125,7 +125,7 @@ function ContractsTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-accent" />
         <span className="ml-3 text-white/50">Querying ledger...</span>
       </div>
     );
@@ -136,7 +136,7 @@ function ContractsTab() {
       <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 text-center">
         <XCircle className="mx-auto h-8 w-8 text-red-400" />
         <p className="mt-2 text-sm text-red-300">{error}</p>
-        <button onClick={fetchContracts} className="mt-3 rounded-lg bg-white/5 px-4 py-2 text-xs text-white/60 hover:bg-white/10">
+        <button onClick={() => void fetchContracts()} className="mt-3 rounded-lg bg-white/5 px-4 py-2 text-xs text-white/60 hover:bg-white/10">
           Retry
         </button>
       </div>
@@ -145,7 +145,6 @@ function ContractsTab() {
 
   return (
     <div>
-      {/* Search bar */}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
@@ -154,10 +153,10 @@ function ContractsTab() {
             placeholder="Search by contract ID or template..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-indigo-500/50 focus:outline-none"
+            className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-accent/50 focus:outline-none"
           />
         </div>
-        <button onClick={fetchContracts} className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-white/50 hover:bg-white/10 hover:text-white">
+        <button onClick={() => void fetchContracts()} className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-white/50 hover:bg-white/10 hover:text-white">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
@@ -169,7 +168,6 @@ function ContractsTab() {
         </div>
       ) : (
         <div className="space-y-2">
-          {/* Header */}
           <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
             <div className="col-span-3">Contract ID</div>
             <div className="col-span-5">Template ID</div>
@@ -182,7 +180,7 @@ function ContractsTab() {
               <div
                 className={`grid cursor-pointer grid-cols-12 gap-4 rounded-lg border px-4 py-3 transition-all ${
                   selected?.contractId === c.contractId
-                    ? "border-indigo-500/40 bg-indigo-500/10"
+                    ? "border-accent/40 bg-accent/10"
                     : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]"
                 }`}
                 onClick={() => setSelected(selected?.contractId === c.contractId ? null : c)}
@@ -192,7 +190,7 @@ function ContractsTab() {
                   <CopyButton text={c.contractId} />
                 </div>
                 <div className="col-span-5">
-                  <span className="font-mono text-xs text-indigo-300">{truncate(c.templateId, 50)}</span>
+                  <span className="font-mono text-xs text-accent">{truncate(c.templateId, 50)}</span>
                 </div>
                 <div className="col-span-2 flex items-center gap-1">
                   <Users className="h-3 w-3 text-white/30" />
@@ -207,10 +205,8 @@ function ContractsTab() {
                 </div>
               </div>
 
-              {/* Expanded detail */}
               {selected?.contractId === c.contractId && (
                 <div className="mx-2 mt-1 space-y-4 rounded-b-lg border border-t-0 border-white/5 bg-white/[0.02] p-5">
-                  {/* Contract ID */}
                   <div>
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Contract ID</h4>
                     <div className="mt-1 flex items-center">
@@ -218,22 +214,18 @@ function ContractsTab() {
                       <CopyButton text={c.contractId} />
                     </div>
                   </div>
-
-                  {/* Template */}
                   <div>
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Template</h4>
                     <div className="mt-1 flex items-center">
-                      <code className="break-all font-mono text-xs text-indigo-300">{c.templateId}</code>
+                      <code className="break-all font-mono text-xs text-accent">{c.templateId}</code>
                       <CopyButton text={c.templateId} />
                     </div>
                   </div>
-
-                  {/* Signatories */}
                   <div>
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Signatories</h4>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {c.signatories.map((s, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-3 py-1 text-xs text-green-300 border border-green-500/20">
+                        <span key={i} className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1 text-xs text-accent border border-accent/20">
                           <Shield className="h-3 w-3" />
                           {truncate(s, 30)}
                           <CopyButton text={s} />
@@ -241,8 +233,6 @@ function ContractsTab() {
                       ))}
                     </div>
                   </div>
-
-                  {/* Observers */}
                   {c.observers.length > 0 && (
                     <div>
                       <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Observers</h4>
@@ -257,11 +247,9 @@ function ContractsTab() {
                       </div>
                     </div>
                   )}
-
-                  {/* Payload */}
                   <div>
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Contract Payload</h4>
-                    <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-white/5 bg-black/40 p-4 font-mono text-xs text-white/60 scrollbar-hide">
+                    <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-white/5 bg-black/40 p-4 font-mono text-xs text-white/60">
                       {JSON.stringify(c.payload, null, 2)}
                     </pre>
                   </div>
@@ -271,7 +259,6 @@ function ContractsTab() {
           ))}
         </div>
       )}
-
       <div className="mt-4 text-center text-xs text-white/30">{filtered.length} contract{filtered.length !== 1 ? "s" : ""} on ledger</div>
     </div>
   );
@@ -288,21 +275,22 @@ function PartiesTab() {
     try {
       const resp = await fetch(`${API_URL}/ledger/parties`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      setParties(data.parties || []);
-    } catch (e: any) {
-      setError(e.message);
+      const data: unknown = await resp.json();
+      const parsed = data as { parties?: Party[] };
+      setParties(parsed.parties ?? []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch parties");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchParties(); }, []);
+  useEffect(() => { void fetchParties(); }, []);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-accent" />
         <span className="ml-3 text-white/50">Fetching parties...</span>
       </div>
     );
@@ -321,13 +309,12 @@ function PartiesTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <span className="text-sm text-white/40">{parties.length} parties on ledger</span>
-        <button onClick={fetchParties} className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/50 hover:bg-white/10 hover:text-white">
+        <button onClick={() => void fetchParties()} className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/50 hover:bg-white/10 hover:text-white">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
 
       <div className="space-y-2">
-        {/* Header */}
         <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
           <div className="col-span-3">Display Name</div>
           <div className="col-span-7">Identifier</div>
@@ -337,7 +324,7 @@ function PartiesTab() {
         {parties.map((p, idx) => (
           <div key={idx} className="grid grid-cols-12 gap-4 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3 hover:border-white/10 hover:bg-white/[0.04] transition-all">
             <div className="col-span-3 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-xs font-bold text-indigo-300">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
                 {(p.displayName || "?").charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-medium text-white/80">{p.displayName || "—"}</span>
@@ -348,7 +335,7 @@ function PartiesTab() {
             </div>
             <div className="col-span-2 flex items-center justify-end">
               {p.isLocal ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2.5 py-1 text-[10px] font-medium text-green-400 border border-green-500/20">
+                <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-1 text-[10px] font-medium text-accent border border-accent/20">
                   <CheckCircle2 className="h-3 w-3" /> Local
                 </span>
               ) : (
@@ -376,23 +363,24 @@ function PackagesTab() {
     try {
       const resp = await fetch(`${API_URL}/ledger/packages`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      setPackages(data.packages || []);
-    } catch (e: any) {
-      setError(e.message);
+      const data: unknown = await resp.json();
+      const parsed = data as { packages?: string[] };
+      setPackages(parsed.packages ?? []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch packages");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchPackages(); }, []);
+  useEffect(() => { void fetchPackages(); }, []);
 
   const filtered = packages.filter((p) => p.toLowerCase().includes(searchTerm.toLowerCase()));
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-accent" />
         <span className="ml-3 text-white/50">Fetching packages...</span>
       </div>
     );
@@ -417,10 +405,10 @@ function PackagesTab() {
             placeholder="Search packages..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-indigo-500/50 focus:outline-none"
+            className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-accent/50 focus:outline-none"
           />
         </div>
-        <button onClick={fetchPackages} className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-white/50 hover:bg-white/10 hover:text-white">
+        <button onClick={() => void fetchPackages()} className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-white/50 hover:bg-white/10 hover:text-white">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
@@ -435,8 +423,8 @@ function PackagesTab() {
           {filtered.map((pkg, idx) => (
             <div key={idx} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3 hover:border-white/10 hover:bg-white/[0.04] transition-all">
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/20">
-                  <Package className="h-4 w-4 text-purple-300" />
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20">
+                  <Package className="h-4 w-4 text-accent" />
                 </div>
                 <code className="font-mono text-xs text-white/70">{pkg}</code>
               </div>
@@ -445,15 +433,23 @@ function PackagesTab() {
           ))}
         </div>
       )}
-
       <div className="mt-4 text-center text-xs text-white/30">{filtered.length} package{filtered.length !== 1 ? "s" : ""} uploaded</div>
     </div>
   );
 }
 
+interface VerifyResult {
+  verified: boolean;
+  error?: string;
+  templateId?: string;
+  signatories?: string[];
+  payload?: Record<string, unknown>;
+  environment?: string;
+}
+
 function VerifyTab() {
   const [contractId, setContractId] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
 
   const verify = async () => {
@@ -462,10 +458,10 @@ function VerifyTab() {
     setResult(null);
     try {
       const resp = await fetch(`${API_URL}/ledger/verify/${encodeURIComponent(contractId)}`);
-      const data = await resp.json();
-      setResult(data);
-    } catch (e: any) {
-      setResult({ verified: false, error: e.message });
+      const data: unknown = await resp.json();
+      setResult(data as VerifyResult);
+    } catch (e: unknown) {
+      setResult({ verified: false, error: e instanceof Error ? e.message : "Unknown error" } satisfies VerifyResult);
     } finally {
       setLoading(false);
     }
@@ -481,13 +477,13 @@ function VerifyTab() {
             placeholder="Paste contract ID to verify..."
             value={contractId}
             onChange={(e) => setContractId(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && verify()}
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white placeholder:text-white/30 focus:border-indigo-500/50 focus:outline-none"
+            onKeyDown={(e) => { if (e.key === "Enter") void verify(); }}
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white placeholder:text-white/30 focus:border-accent/50 focus:outline-none"
           />
           <button
-            onClick={verify}
+            onClick={() => void verify()}
             disabled={loading || !contractId.trim()}
-            className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40"
+            className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-accent/80 disabled:opacity-40"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
           </button>
@@ -495,14 +491,14 @@ function VerifyTab() {
       </div>
 
       {result && (
-        <div className={`rounded-xl border p-6 ${result.verified ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5"}`}>
+        <div className={`rounded-xl border p-6 ${result.verified ? "border-accent/20 bg-accent/5" : "border-red-500/20 bg-red-500/5"}`}>
           <div className="flex items-center gap-3">
             {result.verified ? (
               <>
-                <CheckCircle2 className="h-8 w-8 text-green-400" />
+                <CheckCircle2 className="h-8 w-8 text-accent" />
                 <div>
-                  <h3 className="text-lg font-semibold text-green-300">Contract Verified</h3>
-                  <p className="text-sm text-green-300/60">This contract exists and is active on the Canton ledger</p>
+                  <h3 className="text-lg font-semibold text-accent">Contract Verified</h3>
+                  <p className="text-sm text-accent/60">This contract exists and is active on the Canton ledger</p>
                 </div>
               </>
             ) : (
@@ -510,7 +506,7 @@ function VerifyTab() {
                 <XCircle className="h-8 w-8 text-red-400" />
                 <div>
                   <h3 className="text-lg font-semibold text-red-300">Not Found</h3>
-                  <p className="text-sm text-red-300/60">{result.error || "Contract not found on ledger"}</p>
+                  <p className="text-sm text-red-300/60">{result.error ?? "Contract not found on ledger"}</p>
                 </div>
               </>
             )}
@@ -520,15 +516,15 @@ function VerifyTab() {
             <div className="mt-6 space-y-4">
               <div>
                 <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Template</h4>
-                <code className="mt-1 block font-mono text-xs text-indigo-300">{result.templateId}</code>
+                <code className="mt-1 block font-mono text-xs text-accent">{result.templateId ?? ""}</code>
               </div>
 
-              {result.signatories?.length > 0 && (
+              {result.signatories && result.signatories.length > 0 && (
                 <div>
                   <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Signatories</h4>
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {result.signatories.map((s: string, i: number) => (
-                      <span key={i} className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-3 py-1 text-xs text-green-300 border border-green-500/20">
+                    {result.signatories.map((s, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1 text-xs text-accent border border-accent/20">
                         <Shield className="h-3 w-3" />
                         {truncate(s, 30)}
                       </span>
@@ -540,7 +536,7 @@ function VerifyTab() {
               {result.payload && (
                 <div>
                   <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Payload</h4>
-                  <pre className="mt-1 max-h-48 overflow-auto rounded-lg border border-white/5 bg-black/40 p-4 font-mono text-xs text-white/60 scrollbar-hide">
+                  <pre className="mt-1 max-h-48 overflow-auto rounded-lg border border-white/5 bg-black/40 p-4 font-mono text-xs text-white/60">
                     {JSON.stringify(result.payload, null, 2)}
                   </pre>
                 </div>
@@ -566,21 +562,21 @@ export default function ExplorerPage() {
   useEffect(() => {
     fetch(`${API_URL}/ledger/status`)
       .then((r) => r.json())
-      .then(setLedgerStatus)
+      .then((d: unknown) => setLedgerStatus(d as LedgerStatus))
       .catch(() => setLedgerStatus({ status: "offline", canton_url: "", environment: "", parties: 0, packages: 0, error: "Cannot reach backend" }));
   }, []);
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; count?: number }[] = [
     { key: "contracts", label: "Contracts", icon: <FileText className="h-4 w-4" /> },
-    { key: "parties", label: "Parties", icon: <Users className="h-4 w-4" />, count: ledgerStatus?.parties ?? undefined },
-    { key: "packages", label: "Packages", icon: <Package className="h-4 w-4" />, count: ledgerStatus?.packages ?? undefined },
+    { key: "parties", label: "Parties", icon: <Users className="h-4 w-4" />, ...(ledgerStatus?.parties != null ? { count: ledgerStatus.parties } : {}) },
+    { key: "packages", label: "Packages", icon: <Package className="h-4 w-4" />, ...(ledgerStatus?.packages != null ? { count: ledgerStatus.packages } : {}) },
     { key: "verify", label: "Verify", icon: <Shield className="h-4 w-4" /> },
   ];
 
   return (
-    <div className="min-h-screen bg-[#03040A]">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-white/5 bg-[#03040A]/80 backdrop-blur-xl sticky top-0 z-50">
+      <div className="border-b border-white/5 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-2 text-white/50 hover:text-white transition-colors">
@@ -589,12 +585,11 @@ export default function ExplorerPage() {
             </Link>
             <div className="h-5 w-px bg-white/10" />
             <div className="flex items-center gap-2">
-              <Database className="h-5 w-5 text-indigo-400" />
+              <Database className="h-5 w-5 text-accent" />
               <h1 className="text-lg font-semibold text-white">Ledger Explorer</h1>
             </div>
           </div>
 
-          {/* Status badge */}
           {ledgerStatus && (
             <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-1.5">
               <StatusDot online={ledgerStatus.status === "online"} />
@@ -615,19 +610,19 @@ export default function ExplorerPage() {
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
             <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-                  <Activity className="h-5 w-5 text-green-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+                  <Activity className="h-5 w-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{ledgerStatus.status === "online" ? "Online" : "Offline"}</p>
+                  <p className="text-2xl font-bold text-white">Online</p>
                   <p className="text-[10px] uppercase tracking-wider text-white/30">Ledger Status</p>
                 </div>
               </div>
             </div>
             <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10">
-                  <Users className="h-5 w-5 text-indigo-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+                  <Users className="h-5 w-5 text-accent" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">{ledgerStatus.parties >= 0 ? ledgerStatus.parties : "—"}</p>
@@ -637,8 +632,8 @@ export default function ExplorerPage() {
             </div>
             <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10">
-                  <Package className="h-5 w-5 text-purple-400" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+                  <Package className="h-5 w-5 text-accent" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-white">{ledgerStatus.packages >= 0 ? ledgerStatus.packages : "—"}</p>
@@ -668,7 +663,7 @@ export default function ExplorerPage() {
               onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all ${
                 activeTab === tab.key
-                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                  ? "bg-accent text-black shadow-lg shadow-accent/20"
                   : "text-white/40 hover:bg-white/5 hover:text-white/70"
               }`}
             >
@@ -676,7 +671,7 @@ export default function ExplorerPage() {
               {tab.label}
               {tab.count !== undefined && (
                 <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  activeTab === tab.key ? "bg-white/20 text-white" : "bg-white/5 text-white/30"
+                  activeTab === tab.key ? "bg-black/20 text-black" : "bg-white/5 text-white/30"
                 }`}>
                   {tab.count}
                 </span>

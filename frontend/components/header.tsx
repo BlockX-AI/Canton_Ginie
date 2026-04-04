@@ -1,279 +1,275 @@
 "use client";
 
-import {
-  motion,
-  AnimatePresence,
-  useScroll,
-  useMotionValueEvent,
-} from "motion/react";
-import Link from "next/link";
+import { ChevronDown, User, Database } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
 
-const navLinks = [
-  { href: "#features", label: "Features" },
-  { href: "#how-it-works", label: "How It Works" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#faq", label: "FAQ" },
-];
+const menus = {
+  products: [
+    { label: "Contract Generator", description: "AI-powered DAML code generation" },
+    { label: "Ledger Explorer", description: "Browse contracts and parties on Canton" },
+    { label: "Security Auditor", description: "Automated compliance and vulnerability checks" },
+    { label: "Party Manager", description: "Ed25519 identity and key management" },
+  ],
+  resources: [
+    { label: "Documentation", description: "Guides and API reference" },
+    { label: "Canton Network", description: "Learn about the Canton protocol" },
+    { label: "DAML Docs", description: "Official DAML language reference" },
+    { label: "GitHub", description: "Source code and contributions" },
+  ],
+};
 
-const authLinks = [
-  { href: "https://github.com/Satyam-10124/Ginie_Daml", label: "GitHub" },
-  { href: "#", label: "Docs" },
-];
+const ease = [0.23, 1, 0.32, 1] as const;
 
-export function Header(): ReactNode {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isHidden, setIsHidden] = useState(false);
-  const { scrollY } = useScroll();
-  const { isAuthenticated, displayName, partyId, logout } = useAuth();
-
-  useMotionValueEvent(scrollY, "change", (latest) => {
-    const previous = scrollY.getPrevious() ?? 0;
-
-    if (latest > previous && latest > 50) {
-      setIsHidden(true);
-    } else {
-      setIsHidden(false);
-    }
-  });
-
-  const toggleMenu = () => setIsOpen(!isOpen);
-  const closeMenu = () => setIsOpen(false);
-
+function HamburgerIcon({ isOpen }: { isOpen: boolean }): ReactNode {
   return (
-    <>
-      <div
-        className="pointer-events-none fixed top-0 left-0 z-40 h-32 w-full"
-        style={{
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          maskImage:
-            "linear-gradient(to bottom, black 0%, black 20%, rgba(0,0,0,0.8) 40%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0.1) 80%, transparent 100%)",
-          WebkitMaskImage:
-            "linear-gradient(to bottom, black 0%, black 20%, rgba(0,0,0,0.8) 40%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0.1) 80%, transparent 100%)",
-        }}
-        aria-hidden="true"
+    <div className="w-8 h-4 relative flex flex-col justify-between cursor-pointer">
+      <motion.span
+        className="block h-0.5 w-full bg-foreground origin-center rounded-full"
+        animate={isOpen ? { rotate: 45, y: 4.5 } : { rotate: 0, y: 0 }}
+        transition={{ duration: 0.25, ease }}
       />
+      <motion.span
+        className="block h-0.5 w-full bg-foreground origin-center rounded-full"
+        animate={isOpen ? { rotate: -45, y: -9.5 } : { rotate: 0, y: 0 }}
+        transition={{ duration: 0.25, ease }}
+      />
+    </div>
+  );
+}
 
-      <motion.header
-        className="fixed top-0 z-50 w-full mix-blend-difference"
-        initial={{ y: -20, opacity: 0, filter: "blur(10px)" }}
-        animate={{
-          y: isHidden && !isOpen ? "-100%" : 0,
-          opacity: 1,
-          filter: isHidden && !isOpen ? "blur(8px)" : "blur(0px)",
-        }}
-        transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+function DesktopDropdown({ 
+  label, 
+  menuKey, 
+  isOpen, 
+  onOpen, 
+  onClose 
+}: { 
+  label: string; 
+  menuKey: keyof typeof menus; 
+  isOpen: boolean; 
+  onOpen: () => void; 
+  onClose: () => void; 
+}): ReactNode {
+  return (
+    <div className="relative" onMouseEnter={onOpen} onMouseLeave={onClose}>
+      <button 
+        className="flex items-center gap-1 px-4 py-2 max-[1200px]:px-3 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors rounded-full hover:bg-foreground/5"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
       >
-        <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{
-              duration: 0.5,
-              delay: 0.1,
-              ease: [0.25, 0.46, 0.45, 0.94],
-            }}
-          >
-            <Link
-              href="/"
-              className="focus-ring flex items-center gap-2"
-              aria-label="Ginie DAML home"
-            >
-              <span className="text-2xl font-bold tracking-tight text-white">
-                Ginie<span className="text-purple-400">.</span>
-              </span>
-            </Link>
-          </motion.div>
-
-          <nav
-            className="hidden items-center gap-3 lg:flex"
-            aria-label="Main navigation"
-          >
-            {navLinks.map((link, index) => (
-              <motion.div
-                key={link.href}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.4,
-                  delay: 0.15 + index * 0.05,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                }}
-              >
-                <Link
-                  href={link.href}
-                  className="focus-ring rounded-md px-2.5 py-1 font-medium text-white transition-colors hover:bg-white/10 hover:text-white"
-                >
-                  {link.label}
-                </Link>
-              </motion.div>
-            ))}
-
-            <motion.div
-              className="mx-4 h-px w-5 bg-white/30"
-              role="separator"
-              aria-orientation="vertical"
-              initial={{ opacity: 0, scaleX: 0 }}
-              animate={{ opacity: 1, scaleX: 1 }}
-              transition={{ duration: 0.4, delay: 0.4, ease: "easeOut" }}
-            />
-
-            {authLinks.map((link, index) => (
-              <motion.div
-                key={link.label}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.4,
-                  delay: 0.45 + index * 0.05,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                }}
-              >
-                <Link
-                  href={link.href}
-                  className="focus-ring rounded-md px-2.5 py-1 font-medium text-white transition-colors hover:bg-white/10 hover:text-white"
-                >
-                  {link.label}
-                </Link>
-              </motion.div>
-            ))}
-
-            <motion.div
-              className="mx-4 h-px w-5 bg-white/30"
-              role="separator"
-              aria-orientation="vertical"
-              initial={{ opacity: 0, scaleX: 0 }}
-              animate={{ opacity: 1, scaleX: 1 }}
-              transition={{ duration: 0.4, delay: 0.55, ease: "easeOut" }}
-            />
-
-            {isAuthenticated ? (
-              <motion.div
-                className="flex items-center gap-2"
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.6 }}
-              >
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 text-xs font-medium text-green-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                  {displayName || partyId?.split("::")[0] || "Connected"}
-                </span>
-                <button
-                  onClick={() => logout()}
-                  className="focus-ring rounded-md px-2 py-1 text-xs text-white/40 transition-colors hover:text-white/70"
-                >
-                  Logout
-                </button>
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.6 }}
-              >
-                <Link
-                  href="/setup"
-                  className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300 transition-colors hover:border-purple-500/50 hover:bg-purple-500/20"
-                >
-                  Set Up Identity
-                </Link>
-              </motion.div>
-            )}
-          </nav>
-
-          <button
-            type="button"
-            onClick={toggleMenu}
-            className="focus-ring relative flex h-10 w-10 items-center justify-center lg:hidden"
-            aria-label={isOpen ? "Close menu" : "Open menu"}
-            aria-expanded={isOpen}
-          >
-            <span className="sr-only">
-              {isOpen ? "Close menu" : "Open menu"}
-            </span>
-            <span
-              className={`absolute h-0.5 w-5 bg-white transition-transform duration-300 ${
-                isOpen ? "rotate-45" : "rotate-0"
-              }`}
-            />
-            <span
-              className={`absolute h-5 w-0.5 bg-white transition-transform duration-300 ${
-                isOpen ? "rotate-45" : "rotate-0"
-              }`}
-            />
-          </button>
-        </div>
-      </motion.header>
-
-      <AnimatePresence mode="sync">
+        {label}
+        <ChevronDown className="w-4 h-4" aria-hidden="true" />
+      </button>
+      <AnimatePresence>
         {isOpen && (
           <motion.div
-            key="mobile-menu"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-black/95 backdrop-blur-xl lg:hidden"
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            transition={{ duration: 0.2, ease }}
+            className="absolute top-full left-0 pt-2 w-72"
           >
-            <nav
-              className="mx-auto flex h-full max-w-7xl flex-col items-start gap-4 px-4 pt-32 sm:px-6"
-              aria-label="Mobile navigation"
-            >
-              {navLinks.map((link, index) => (
-                <motion.div
-                  key={link.href}
-                  initial={{ opacity: 0, x: -40, filter: "blur(10px)" }}
-                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-                  transition={{
-                    duration: 0.4,
-                    delay: 0.05 + index * 0.08,
-                    ease: [0.25, 0.46, 0.45, 0.94],
-                  }}
-                >
-                  <Link
-                    href={link.href}
-                    onClick={closeMenu}
-                    className="focus-ring block text-6xl text-white transition-colors hover:text-white sm:text-6xl"
-                  >
-                    {link.label}
-                  </Link>
-                </motion.div>
+            <div className="bg-frame border border-border rounded-2xl shadow-lg overflow-hidden p-2">
+              {menus[menuKey].map((item) => (
+                <a key={item.label} href="#" className="block px-4 py-3 rounded-xl hover:bg-muted transition-colors">
+                  <div className="text-sm font-medium text-foreground">{item.label}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{item.description}</div>
+                </a>
               ))}
-
-              <motion.div
-                initial={{ opacity: 0, scaleX: 0 }}
-                animate={{ opacity: 1, scaleX: 1 }}
-                transition={{ duration: 0.5, delay: 0.4, ease: "easeOut" }}
-                className="my-4 h-px w-20 origin-left bg-white/30"
-                role="separator"
-              />
-
-              {authLinks.map((link, index) => (
-                <motion.div
-                  key={link.label}
-                  initial={{ opacity: 0, x: -40, filter: "blur(10px)" }}
-                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-                  transition={{
-                    duration: 0.4,
-                    delay: 0.45 + index * 0.08,
-                    ease: [0.25, 0.46, 0.45, 0.94],
-                  }}
-                >
-                  <Link
-                    href={link.href}
-                    onClick={closeMenu}
-                    className="focus-ring block text-6xl text-white transition-colors hover:text-white sm:text-6xl"
-                  >
-                    {link.label}
-                  </Link>
-                </motion.div>
-              ))}
-            </nav>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </div>
+  );
+}
+
+function MobileExpandable({ 
+  label, 
+  menuKey, 
+  isExpanded, 
+  onToggle, 
+  onClose 
+}: { 
+  label: string; 
+  menuKey: keyof typeof menus; 
+  isExpanded: boolean; 
+  onToggle: () => void; 
+  onClose: () => void; 
+}): ReactNode {
+  return (
+    <div className="border-b border-foreground/10">
+      <button
+        className="flex items-center justify-between py-4 w-full text-base font-medium text-foreground"
+        onClick={onToggle}
+        aria-expanded={isExpanded}
+      >
+        {label}
+        <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
+        </motion.div>
+      </button>
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pb-2 space-y-1">
+              {menus[menuKey].map((item) => (
+                <a
+                  key={item.label}
+                  href="#"
+                  className="block py-2 text-sm text-foreground/80 hover:text-foreground"
+                  onClick={onClose}
+                >
+                  {item.label}
+                </a>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+const CornerSVG = ({ className }: { className: string }) => (
+  <svg className={className} width="50" height="50" viewBox="0 0 50 50" fill="none" aria-hidden="true">
+    <path d="M5.50871e-06 0C-0.00788227 37.3001 8.99616 50.0116 50 50H5.50871e-06V0Z" fill="currentColor" />
+  </svg>
+);
+
+export function Header(): ReactNode {
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
+  const { isAuthenticated, displayName } = useAuth();
+
+  const closeMobile = () => setMobileMenuOpen(false);
+  const toggleExpanded = (key: string) => setMobileExpanded(mobileExpanded === key ? null : key);
+
+  return (
+    <motion.header
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ duration: 0.5, ease }}
+      className="fixed shadow-2xl/20 rounded-b-4xl top-2.5 left-1/2 -translate-x-1/2 w-full max-w-5xl max-[1200px]:max-w-2xl bg-frame z-9998 max-[850px]:top-0 max-[850px]:left-0 max-[850px]:right-0 max-[850px]:translate-x-0 max-[850px]:w-full max-[850px]:max-w-none max-[850px]:rounded-none max-[850px]:rounded-b-4xl max-[850px]:overflow-hidden"
+    >
+      <div className="h-20 max-[850px]:h-18 flex items-center justify-between px-4 max-[850px]:px-6">
+          <a href="/" className="flex items-center gap-2 ml-4 max-[850px]:ml-0">
+          
+          <span style={{ fontFamily: "EB Garamond, serif" }} className="text-2xl md:text-3xl font-semibold text-accent leading-0 max-[1200px]:hidden max-[850px]:inline">Ginie</span>
+        </a>
+
+        <nav className="flex items-center gap-1 max-[1200px]:gap-0 max-[850px]:hidden">
+          <DesktopDropdown
+            label="Products"
+            menuKey="products"
+            isOpen={activeMenu === "products"}
+            onOpen={() => setActiveMenu("products")}
+            onClose={() => setActiveMenu(null)}
+          />
+          <DesktopDropdown
+            label="Resources"
+            menuKey="resources"
+            isOpen={activeMenu === "resources"}
+            onOpen={() => setActiveMenu("resources")}
+            onClose={() => setActiveMenu(null)}
+          />
+          <a href="#pricing" className="px-4 py-2 max-[1200px]:px-3 text-sm font-medium text-foreground/80 hover:text-foreground transition-colors rounded-full hover:bg-foreground/5">
+            Pricing
+          </a>
+        </nav>
+
+        <div className="flex items-center gap-4 max-[850px]:hidden">
+          <a href="/explorer" className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 border border-accent/20 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 transition-colors">
+            <Database className="w-3.5 h-3.5" />
+            Ledger Explorer
+          </a>
+          {isAuthenticated ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1.5 text-sm font-medium text-foreground">
+              <User className="w-3.5 h-3.5" />
+              {displayName || "Party"}
+            </span>
+          ) : (
+            <a href="/setup" className="text-sm font-medium text-foreground/80 hover:text-foreground transition-colors">
+              Sign in
+            </a>
+          )}
+        </div>
+
+        <button
+          className="hidden max-[850px]:flex items-center justify-center w-10 h-10"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileMenuOpen}
+        >
+          <HamburgerIcon isOpen={mobileMenuOpen} />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease }}
+            className="hidden max-[850px]:block overflow-hidden"
+          >
+            <div className="px-6 pb-4">
+              <nav className="space-y-0">
+                <a href="#" className="flex items-center justify-between py-4 text-base font-medium text-foreground border-b border-foreground/10" onClick={closeMobile}>
+                  Customers
+                </a>
+                <MobileExpandable
+                  label="Products"
+                  menuKey="products"
+                  isExpanded={mobileExpanded === "products"}
+                  onToggle={() => toggleExpanded("products")}
+                  onClose={closeMobile}
+                />
+                <MobileExpandable
+                  label="Resources"
+                  menuKey="resources"
+                  isExpanded={mobileExpanded === "resources"}
+                  onToggle={() => toggleExpanded("resources")}
+                  onClose={closeMobile}
+                />
+                <a href="#pricing" className="flex items-center justify-between py-4 text-base font-medium text-foreground" onClick={closeMobile}>
+                  Pricing
+                </a>
+              </nav>
+
+              <div className="flex flex-col gap-3 pt-8 pb-2">
+                <a href="/explorer" className="inline-flex items-center gap-1.5 text-base font-medium text-accent" onClick={closeMobile}>
+                  <Database className="w-4 h-4" />
+                  Ledger Explorer
+                </a>
+                {isAuthenticated ? (
+                  <span className="inline-flex items-center gap-1.5 text-base font-medium text-foreground">
+                    <User className="w-4 h-4" />
+                    {displayName || "Party"}
+                  </span>
+                ) : (
+                  <a href="/setup" className="text-base font-medium text-foreground" onClick={closeMobile}>
+                    Sign in
+                  </a>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <CornerSVG className="absolute top-0 -left-12.25 rotate-180 text-frame pointer-events-none max-[850px]:hidden" />
+      <CornerSVG className="absolute top-0 -right-12.25 rotate-90 text-frame pointer-events-none max-[850px]:hidden" />
+    </motion.header>
   );
 }

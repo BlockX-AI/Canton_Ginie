@@ -1,34 +1,39 @@
 import type { Metadata } from "next";
-import { siteConfig as config } from "./config";
 
-const metaConfig = {
-  name: config.name,
-  description: config.description,
-  url: config.url,
+export const siteConfig = {
+  name: "Ginie DAML",
+  description:
+    "AI-powered DAML contract generation and deployment on Canton Network. From idea to Canton in minutes.",
+  url: "https://ginie.dev",
   ogImage: "/og-image.png",
-  creator: config.twitter,
+  creator: "@BlockXAI",
   authors: [
     {
-      name: "Ginie DAML",
-      url: "https://ginie-daml.com",
+      name: "BlockXAI",
+      url: "https://github.com/BlockXAI",
     },
   ],
   keywords: [
     "DAML",
-    "Canton",
+    "Canton Network",
     "smart contracts",
     "blockchain",
-    "AI",
-    "contract generation",
-    "distributed ledger",
-    "DLT",
-    "automated contracts",
-    "legal tech",
+    "AI code generation",
+    "digital assets",
   ],
-};
+} as const;
 
-export const siteConfig = {
-  ...metaConfig,
+export const baseMetadata: Metadata = {
+  metadataBase: new URL(siteConfig.url),
+  title: {
+    default: siteConfig.name,
+    template: `%s | ${siteConfig.name}`,
+  },
+  description: siteConfig.description,
+  keywords: [...siteConfig.keywords],
+  authors: [...siteConfig.authors],
+  creator: siteConfig.creator,
+  publisher: siteConfig.name,
   robots: {
     index: true,
     follow: true,
@@ -44,27 +49,27 @@ export const siteConfig = {
     canonical: "/",
   },
   openGraph: {
-    type: "website" as const,
+    type: "website",
     locale: "en_US",
-    url: metaConfig.url,
-    title: metaConfig.name,
-    description: metaConfig.description,
-    siteName: metaConfig.name,
+    url: siteConfig.url,
+    title: siteConfig.name,
+    description: siteConfig.description,
+    siteName: siteConfig.name,
     images: [
       {
-        url: metaConfig.ogImage,
+        url: siteConfig.ogImage,
         width: 1200,
         height: 630,
-        alt: metaConfig.name,
+        alt: siteConfig.name,
       },
     ],
   },
   twitter: {
-    card: "summary_large_image" as const,
-    title: metaConfig.name,
-    description: metaConfig.description,
-    images: [metaConfig.ogImage],
-    creator: metaConfig.creator,
+    card: "summary_large_image",
+    title: siteConfig.name,
+    description: siteConfig.description,
+    images: [siteConfig.ogImage],
+    creator: siteConfig.creator,
   },
   icons: {
     icon: "/favicon.ico",
@@ -72,27 +77,6 @@ export const siteConfig = {
     apple: "/apple-icon.png",
   },
   manifest: "/site.webmanifest",
-};
-
-export const baseMetadata: Metadata = {
-  metadataBase: new URL(metaConfig.url),
-  title: {
-    default: metaConfig.name,
-    template: `%s — ${metaConfig.name}`,
-  },
-  description: metaConfig.description,
-  keywords: metaConfig.keywords,
-  authors: metaConfig.authors,
-  creator: metaConfig.creator,
-  robots: {
-    index: true,
-    follow: true,
-  },
-  alternates: siteConfig.alternates,
-  openGraph: siteConfig.openGraph,
-  twitter: siteConfig.twitter,
-  icons: siteConfig.icons,
-  manifest: siteConfig.manifest,
 };
 
 export function createMetadata({

@@ -1,7 +1,7 @@
 "use client";
 
-import { SmoothScroll } from "@/components/smooth-scroll";
 import { ReducedMotionProvider } from "@/lib/motion";
+import { SmoothScroll } from "@/components/smooth-scroll";
 import { AuthProvider } from "@/lib/auth-context";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
@@ -10,7 +10,7 @@ export function Providers({ children }: { children: ReactNode }): ReactNode {
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="dark"
+      defaultTheme="system"
       enableSystem
       disableTransitionOnChange
     >

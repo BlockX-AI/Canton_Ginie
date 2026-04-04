@@ -1,196 +1,154 @@
 "use client";
 
-import type { ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
 import { motion } from "motion/react";
-import { Check, Rocket, Zap, Building2 } from "lucide-react";
+import { Check } from "lucide-react";
+import HlsVideo from "./HlsVideo";
+import type { ReactNode } from "react";
 
-interface PricingPlan {
-  name: string;
-  description: string;
-  price: string;
-  period: string;
-  note?: string;
-  features: string[];
-  cta: string;
-  popular?: boolean;
-  icon: LucideIcon;
-}
+const HLS_SRC = "https://stream.mux.com/NcU3HlHeF7CUL86azTTzpy3Tlb00d6iF3BmCdFslMJYM.m3u8";
 
-const plans: PricingPlan[] = [
+const plans = [
   {
-    name: "Starter",
-    description: "For individual developers and experiments",
-    price: "Free",
-    period: "",
-    icon: Rocket,
-    features: [
-      "10 contract generations/month",
-      "Canton Sandbox deployment",
-      "DAML source code export",
-      "Community support",
-      "1 project",
-    ],
-    cta: "Get started",
+    name: "Sandbox",
+    price: 0,
+    monthlyPrice: 0,
+    description: "Free forever on local Canton sandbox",
+    features: ["Unlimited Contracts", "Local Sandbox Deploy", "Security Audit Reports", "Community Support"],
+    popular: false,
   },
   {
-    name: "Pro",
-    description: "Best for startups and dev teams",
-    price: "$79",
-    period: "/mo",
-    note: "Cancel or pause any time",
-    icon: Zap,
-    features: [
-      "Unlimited contract generations",
-      "Canton Devnet deployment",
-      "Auto-compilation & error fixing",
-      "Priority support & delivery",
-      "5 team members",
-      "REST API access",
-    ],
-    cta: "Upgrade plan",
+    name: "DevNet",
+    price: 49,
+    monthlyPrice: 69,
+    description: "For teams building production-ready DAML apps",
+    features: ["10 Party Identities", "Canton DevNet Deploy", "RAG Pattern Library", "Priority Support"],
     popular: true,
   },
   {
-    name: "Enterprise",
-    description: "For large teams and institutions",
-    price: "Custom",
-    period: "",
-    icon: Building2,
-    features: [
-      "Everything in Pro",
-      "Canton Mainnet deployment",
-      "Custom contract templates",
-      "Dedicated account manager",
-      "SSO & advanced security",
-      "SLA & on-prem Canton nodes",
-    ],
-    cta: "Contact sales",
+    name: "MainNet",
+    price: 199,
+    monthlyPrice: 249,
+    description: "Full Canton Network deployment at scale",
+    features: ["Unlimited Parties", "Canton MainNet Deploy", "Custom Pattern Training", "Dedicated SLA"],
+    popular: false,
   },
 ];
 
-function PricingCard({ plan }: { plan: PricingPlan }) {
-  const Icon = plan.icon;
+const ease = [0.23, 1, 0.32, 1] as const;
 
-  const cardContent = (
-    <div
-      className={`relative flex h-full flex-col rounded-3xl bg-background p-3 ${
-        plan.popular ? "" : "border border-foreground/10"
-      }`}
+function PricingCard({
+  plan,
+  index,
+}: {
+  plan: (typeof plans)[0];
+  index: number;
+}): ReactNode {
+  const isPopular = plan.popular;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.6, ease, delay: index * 0.1 }}
+      className="relative"
     >
-      <div className="mb-6 flex items-start justify-between">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
-          <Icon className="h-5 w-5 text-foreground" />
+      <div
+        className={`relative flex h-full flex-col rounded-2xl p-6 sm:p-8 ${
+          isPopular
+            ? "bg-accent/60 backdrop-blur-lg border-t-2 border-b-2 border-white/10"
+            : "bg-white/6 backdrop-blur-md border-t-2 border-b-2 border-white/10"
+        }`}
+        style={{ minHeight: 240 }}
+      >
+        {isPopular && (
+          <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+            <span className="inline-block rounded-full bg-accent px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-black/50">
+              Most Popular
+            </span>
+          </div>
+        )}
+        <h3 className={`text-xl font-semibold ${isPopular ? 'text-black' : 'text-white'}`} style={{ fontFamily: 'EB Garamond, serif', letterSpacing: '-0.01em' }}>{plan.name}</h3>
+
+        <div className="mt-4">
+          <div className="flex items-end gap-3">
+            <span className={`text-5xl font-bold tracking-tight ${isPopular ? 'text-black' : 'text-white'}`}>
+              {plan.price === 0 ? "Free" : `$${plan.price}`}
+            </span>
+            {plan.price > 0 && <span className="mb-1 text-sm text-white/70">/month</span>}
+          </div>
+          <p className="mt-2 text-sm text-white/70">
+            {plan.price === 0 ? "No credit card required" : `Billed annually, or $${plan.monthlyPrice}/mo billed monthly`}
+          </p>
         </div>
-        {plan.popular && (
-          <span className="rounded-full border border-accent/50 bg-accent/20 px-4 py-1.5 text-sm font-medium text-accent">
-            Most popular
-          </span>
-        )}
-      </div>
 
-      <h3 className="text-xl font-semibold text-foreground">{plan.name}</h3>
-      <p className="mt-1 text-sm text-muted-foreground">{plan.description}</p>
+          <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition-colors ${
+            isPopular
+              ? "bg-black text-white hover:brightness-95"
+              : "bg-white/6 text-white hover:bg-white/8"
+          }`}
+        >
+          Launch App
+        </motion.button>
 
-      <div className="mt-6 flex items-baseline gap-1">
-        <span className="text-5xl font-semibold tracking-tight text-foreground">
-          {plan.price}
-        </span>
-        {plan.period && (
-          <span className="text-lg text-muted-foreground">{plan.period}</span>
-        )}
-        {plan.note && (
-          <span className="ml-auto text-right text-sm text-muted-foreground">
-            {plan.note}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-8 flex-1">
-        <div className="flex h-full flex-col rounded-xl bg-muted/50 p-6">
-          <ul className="flex-1 space-y-4">
+        <div className="mt-8">
+          <p className="text-sm font-medium text-white/70">Includes:</p>
+          <ul className="mt-4 space-y-3">
             {plan.features.map((feature) => (
-              <li key={feature} className="flex items-start gap-3">
-                <Check className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
-                <span className="text-sm text-foreground">{feature}</span>
+              <li key={feature} className="flex items-center gap-3">
+                <Check
+                  className={`h-4 w-4 shrink-0 ${isPopular ? 'text-black' : 'text-white'}`}
+                  strokeWidth={2.5}
+                />
+                <span className={`text-sm ${isPopular ? 'text-black' : 'text-white/90'}`}>{feature}</span>
               </li>
             ))}
           </ul>
-
-          <button
-            type="button"
-            className={`mt-6 w-full cursor-pointer rounded-full py-4 text-base font-semibold transition-all ${
-              plan.popular
-                ? "bg-accent text-accent-foreground hover:opacity-90"
-                : "bg-foreground text-background hover:bg-foreground/70"
-            }`}
-          >
-            {plan.cta}
-          </button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
-
-  if (plan.popular) {
-    return (
-      <div className="relative">
-        <motion.div
-          className="pointer-events-none absolute left-1/2 top-1/2 h-[70%] w-[70%] rounded-full bg-accent-light opacity-50 blur-3xl"
-          animate={{
-            x: ["-50%", "-30%", "-70%", "-40%", "-60%", "-50%"],
-            y: ["-50%", "-70%", "-30%", "-60%", "-40%", "-50%"],
-            scale: [1, 1.2, 0.9, 1.1, 0.95, 1],
-          }}
-          transition={{
-            duration: 12,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: "easeInOut",
-            times: [0, 0.2, 0.4, 0.6, 0.8, 1],
-          }}
-        />
-        <motion.div
-          className="pointer-events-none absolute left-1/2 top-1/2 h-[50%] w-[50%] rounded-full bg-accent opacity-40 blur-3xl"
-          animate={{
-            x: ["-50%", "-70%", "-30%", "-60%", "-40%", "-50%"],
-            y: ["-50%", "-30%", "-70%", "-40%", "-60%", "-50%"],
-            scale: [1, 0.9, 1.15, 0.95, 1.1, 1],
-          }}
-          transition={{
-            duration: 10,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: "easeInOut",
-            times: [0, 0.2, 0.4, 0.6, 0.8, 1],
-          }}
-        />
-        <div className="absolute -inset-px rounded-[1.52rem] bg-linear-to-br from-accent to-accent-light opacity-25" />
-        <div className="relative">{cardContent}</div>
-      </div>
-    );
-  }
-
-  return cardContent;
 }
 
 export function Pricing(): ReactNode {
   return (
-    <section className="px-4 py-20 sm:px-6 md:py-28 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-16">
-          <p className="text-4xl font-medium tracking-tight text-foreground">
-            Simple, transparent pricing
-          </p>
-        </div>
+    <section id="pricing" className="relative w-full bg-black text-white px-6 py-20 sm:py-28 scroll-mt-24 overflow-hidden">
+      {/* HLS background behind pricing */}
+      <HlsVideo
+        src={HLS_SRC}
+        className="absolute inset-0 w-full h-full object-cover z-0"
+        style={{ filter: "saturate(0) brightness(0.35)" }}
+      />
 
-        <div className="grid gap-8 lg:grid-cols-3">
-          {plans.map((plan) => (
-            <PricingCard key={plan.name} plan={plan} />
+      <div className="absolute top-0 left-0 right-0 z-10" style={{ height: 180, background: "linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)" }} />
+      <div className="absolute bottom-0 left-0 right-0 z-10" style={{ height: 180, background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)" }} />
+
+      <div className="mx-auto max-w-5xl relative z-20">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, ease }}
+          className="mb-12 text-center sm:mb-16"
+        >
+        
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl" style={{ fontFamily: 'EB Garamond, serif', letterSpacing: '-0.02em' }}>
+            Simple, transparent pricing
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-base text-white/70 sm:text-lg">
+            Start free on sandbox. Scale to DevNet and MainNet when you&apos;re
+            ready.
+          </p>
+        </motion.div>
+
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+          {plans.map((plan, index) => (
+            <PricingCard key={plan.name} plan={plan} index={index} />
           ))}
         </div>
-
-        <p className="mx-auto mt-12 max-w-2xl text-center text-lg text-muted-foreground">
-          Start free and scale as you grow. No hidden fees, no surprises.
-        </p>
       </div>
     </section>
   );

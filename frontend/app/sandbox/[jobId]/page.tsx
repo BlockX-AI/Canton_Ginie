@@ -19,14 +19,14 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Workflow,
+  FolderTree,
+  ExternalLink,
   Database,
 } from "lucide-react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
-
-const MetallicPaint = dynamic(() => import("@/components/metallic-paint"), {
-  ssr: false,
-});
+import type { ReactNode } from "react";
+import { MermaidDiagram } from "@/components/mermaid-diagram";
 
 interface JobStatus {
   job_id: string;
@@ -60,6 +60,9 @@ interface JobResult {
   compliance_score?: number | null;
   enterprise_score?: number | null;
   deploy_gate?: boolean | null;
+  deployment_note?: string;
+  diagram_mermaid?: string;
+  project_files?: Record<string, string>;
   audit_reports?: {
     json?: string;
     markdown?: string;
@@ -67,7 +70,7 @@ interface JobResult {
   };
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text }: { text: string }): ReactNode {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -76,11 +79,11 @@ function CopyButton({ text }: { text: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
-      className="ml-2 shrink-0 rounded-md p-1.5 text-white/30 transition-colors hover:bg-white/10 hover:text-white/60"
+      className="ml-2 shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       title="Copy"
     >
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-green-400" />
+        <Check className="h-3.5 w-3.5 text-green-500" />
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}
@@ -96,7 +99,7 @@ const pipelineSteps = [
   { label: "Deploying", minProgress: 85 },
 ];
 
-function ScoreRing({ score, label, size = 80 }: { score: number; label: string; size?: number }) {
+function ScoreRing({ score, label, size = 80 }: { score: number; label: string; size?: number }): ReactNode {
   const radius = (size - 8) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
@@ -104,31 +107,33 @@ function ScoreRing({ score, label, size = 80 }: { score: number; label: string; 
 
   return (
     <div className="flex flex-col items-center gap-1">
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={4} />
-        <circle
-          cx={size / 2} cy={size / 2} r={radius} fill="none"
-          stroke={color} strokeWidth={4} strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          className="transition-all duration-1000 ease-out"
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-lg font-bold text-white">{score}</span>
+      <div className="relative">
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" className="text-border" strokeWidth={4} />
+          <circle
+            cx={size / 2} cy={size / 2} r={radius} fill="none"
+            stroke={color} strokeWidth={4} strokeLinecap="round"
+            strokeDasharray={circumference} strokeDashoffset={offset}
+            className="transition-all duration-1000 ease-out"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-lg font-bold text-foreground">{score}</span>
+        </div>
       </div>
-      <span className="text-[10px] font-medium uppercase tracking-wider text-white/40">{label}</span>
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
     </div>
   );
 }
 
-function SeverityBadge({ severity }: { severity: string }) {
+function SeverityBadge({ severity }: { severity: string }): ReactNode {
   const colors: Record<string, string> = {
-    CRITICAL: "bg-red-500/20 text-red-400 border-red-500/30",
-    HIGH: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-    MEDIUM: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-    LOW: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-    INFO: "bg-gray-500/20 text-gray-400 border-gray-500/30",
-    OPT: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    CRITICAL: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+    HIGH: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
+    MEDIUM: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
+    LOW: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30",
+    INFO: "bg-gray-500/15 text-gray-600 dark:text-gray-400 border-gray-500/30",
+    OPT: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30",
   };
   return (
     <span className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${colors[severity] || colors.INFO}`}>
@@ -144,7 +149,7 @@ export default function SandboxPage() {
 
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [result, setResult] = useState<JobResult | null>(null);
-  const [showCode, setShowCode] = useState(false);
+  const [activeTab, setActiveTab] = useState<"code" | "diagram" | "files">("code");
   const [showFindings, setShowFindings] = useState(false);
   const [auditFindings, setAuditFindings] = useState<AuditFinding[]>([]);
 
@@ -156,9 +161,7 @@ export default function SandboxPage() {
 
     const pollStatus = async () => {
       try {
-        const response = await fetch(`${API_URL}/status/${jobId}`, {
-          headers: { "ngrok-skip-browser-warning": "true" },
-        });
+        const response = await fetch(`${API_URL}/status/${jobId}`);
         if (!response.ok) {
           if (response.status === 404) {
             router.push("/");
@@ -185,15 +188,12 @@ export default function SandboxPage() {
 
     const fetchResult = async () => {
       try {
-        const response = await fetch(`${API_URL}/result/${jobId}`, {
-          headers: { "ngrok-skip-browser-warning": "true" },
-        });
+        const response = await fetch(`${API_URL}/result/${jobId}`);
         if (!response.ok) return;
 
         const resultData: JobResult = await response.json();
         setResult(resultData);
 
-        // Parse audit findings from report JSON
         if (resultData.audit_reports?.json) {
           try {
             const parsed = JSON.parse(resultData.audit_reports.json);
@@ -213,22 +213,12 @@ export default function SandboxPage() {
     status?.status === "queued" || status?.status === "running";
 
   return (
-    <div className="min-h-screen bg-[#03040A]">
-      {/* Subtle grid background */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          backgroundImage:
-            "radial-gradient(rgba(168,85,247,0.03) 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
-        }}
-      />
-
-      <div className="relative mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="min-h-screen bg-background">
+      <div className="relative mx-auto max-w-3xl px-6 pt-32 pb-20">
         {/* Back nav */}
         <Link
           href="/"
-          className="group mb-8 inline-flex items-center gap-2 text-sm text-white/40 transition-colors hover:text-white/70"
+          className="group mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
           Back to Home
@@ -236,25 +226,25 @@ export default function SandboxPage() {
 
         {/* Page header */}
         <div className="mb-10">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300">
-            <Sparkles className="h-3 w-3" />
+          <div className="mb-3 inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted px-3 py-1 text-xs font-medium text-foreground">
+            <Sparkles className="h-3 w-3 text-accent" />
             Canton Sandbox
           </div>
-          <h1 className="text-3xl font-bold text-white sm:text-4xl">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             {status?.status === "complete"
               ? "Contract Deployed"
               : status?.status === "failed"
                 ? "Deployment Failed"
                 : "Deploying Contract"}
           </h1>
-          <p className="mt-2 text-sm text-white/40">
+          <p className="mt-2 text-sm text-muted-foreground font-mono">
             Job {jobId.substring(0, 8)}...
           </p>
         </div>
 
         {/* Pipeline Steps */}
         {status && (
-          <div className="mb-8">
+          <div className="mb-10">
             <div className="flex items-center justify-between gap-1">
               {pipelineSteps.map((step, i) => {
                 const active = (status.progress ?? 0) >= step.minProgress;
@@ -266,16 +256,16 @@ export default function SandboxPage() {
                 return (
                   <div key={step.label} className="flex flex-1 flex-col items-center gap-1.5">
                     <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold transition-all duration-500 ${
+                      className={`flex h-9 w-9 items-center justify-center rounded-full border text-xs font-bold transition-all duration-500 ${
                         status.status === "complete"
-                          ? "border-green-500/50 bg-green-500/20 text-green-400"
+                          ? "border-green-500/50 bg-green-500/15 text-green-600 dark:text-green-400"
                           : status.status === "failed" && active && !current
-                            ? "border-red-500/30 bg-red-500/10 text-red-400"
+                            ? "border-red-500/30 bg-red-500/10 text-red-500"
                             : current && isProcessing
-                              ? "border-purple-400 bg-purple-500/20 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.3)]"
+                              ? "border-accent bg-accent/20 text-foreground shadow-[0_0_12px_rgba(168,217,70,0.2)]"
                               : active
-                                ? "border-purple-500/40 bg-purple-500/15 text-purple-400"
-                                : "border-white/8 bg-white/3 text-white/20"
+                                ? "border-accent/40 bg-accent/10 text-foreground/70"
+                                : "border-border bg-muted text-muted-foreground"
                       }`}
                     >
                       {status.status === "complete" ? (
@@ -289,10 +279,10 @@ export default function SandboxPage() {
                     <span
                       className={`text-[10px] font-medium transition-colors ${
                         current && isProcessing
-                          ? "text-purple-300"
+                          ? "text-foreground"
                           : active
-                            ? "text-white/50"
-                            : "text-white/15"
+                            ? "text-foreground/60"
+                            : "text-muted-foreground/50"
                       }`}
                     >
                       {step.label}
@@ -305,19 +295,19 @@ export default function SandboxPage() {
             {/* Progress bar */}
             <div className="mt-6">
               <div className="mb-2 flex justify-between text-xs">
-                <span className="text-white/40">{status.current_step}</span>
-                <span className="font-mono text-white/50">
+                <span className="text-muted-foreground">{status.current_step}</span>
+                <span className="font-mono text-foreground/60">
                   {status.progress}%
                 </span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
                 <div
                   className={`h-full rounded-full transition-all duration-700 ease-out ${
                     status.status === "complete"
-                      ? "bg-gradient-to-r from-green-500 to-emerald-400"
+                      ? "bg-green-500"
                       : status.status === "failed"
-                        ? "bg-gradient-to-r from-red-600 to-red-400"
-                        : "bg-gradient-to-r from-purple-600 via-fuchsia-500 to-purple-600 bg-[length:200%_100%] animate-[shimmer_2s_linear_infinite]"
+                        ? "bg-red-500"
+                        : "bg-accent"
                   }`}
                   style={{ width: `${status.progress}%` }}
                 />
@@ -325,8 +315,8 @@ export default function SandboxPage() {
             </div>
 
             {status.error_message && (
-              <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-                <p className="text-sm text-red-300">{status.error_message}</p>
+              <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+                <p className="text-sm text-red-600 dark:text-red-400">{status.error_message}</p>
               </div>
             )}
           </div>
@@ -339,16 +329,16 @@ export default function SandboxPage() {
             <div className="overflow-hidden rounded-2xl border border-green-500/20 bg-green-500/5 p-6">
               <div className="flex items-start gap-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/20">
-                  <CheckCircle2 className="h-5 w-5 text-green-400" />
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-green-100">
+                  <h3 className="text-lg font-semibold text-foreground">
                     Successfully Deployed to Canton
                   </h3>
-                  <p className="mt-1 text-sm text-green-300/60">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     Your contract is live on the Canton ledger
                     {result.fallback_used && (
-                      <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-300">
+                      <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-600 dark:text-yellow-400">
                         Fallback template used
                       </span>
                     )}
@@ -359,22 +349,22 @@ export default function SandboxPage() {
 
             {/* Security & Compliance Dashboard */}
             {(result.security_score != null || result.compliance_score != null) && (
-              <div className="rounded-2xl border border-white/8 bg-white/3 p-6">
+              <div className="rounded-2xl border border-border bg-muted p-6">
                 <div className="mb-4 flex items-center gap-2">
                   {result.deploy_gate !== false ? (
-                    <ShieldCheck className="h-5 w-5 text-green-400" />
+                    <ShieldCheck className="h-5 w-5 text-green-500" />
                   ) : (
-                    <ShieldAlert className="h-5 w-5 text-yellow-400" />
+                    <ShieldAlert className="h-5 w-5 text-yellow-500" />
                   )}
-                  <h3 className="text-sm font-semibold text-white">
+                  <h3 className="text-sm font-semibold text-foreground">
                     Enterprise Security &amp; Compliance
                   </h3>
                   {result.deploy_gate !== false ? (
-                    <span className="ml-auto rounded-full bg-green-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-green-400 border border-green-500/20">
+                    <span className="ml-auto rounded-full bg-green-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-green-600 dark:text-green-400 border border-green-500/20">
                       DEPLOY READY
                     </span>
                   ) : (
-                    <span className="ml-auto rounded-full bg-yellow-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-yellow-400 border border-yellow-500/20">
+                    <span className="ml-auto rounded-full bg-yellow-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
                       REVIEW RECOMMENDED
                     </span>
                   )}
@@ -383,17 +373,17 @@ export default function SandboxPage() {
                 {/* Score cards */}
                 <div className="grid grid-cols-3 gap-4">
                   {result.security_score != null && (
-                    <div className="relative flex flex-col items-center rounded-xl border border-white/6 bg-white/3 p-4">
+                    <div className="relative flex flex-col items-center rounded-xl border border-border bg-background p-4">
                       <ScoreRing score={result.security_score} label="Security" />
                     </div>
                   )}
                   {result.compliance_score != null && (
-                    <div className="relative flex flex-col items-center rounded-xl border border-white/6 bg-white/3 p-4">
+                    <div className="relative flex flex-col items-center rounded-xl border border-border bg-background p-4">
                       <ScoreRing score={result.compliance_score} label="Compliance" />
                     </div>
                   )}
                   {result.enterprise_score != null && (
-                    <div className="relative flex flex-col items-center rounded-xl border border-white/6 bg-white/3 p-4">
+                    <div className="relative flex flex-col items-center rounded-xl border border-border bg-background p-4">
                       <ScoreRing score={Math.round(result.enterprise_score)} label="Enterprise" />
                     </div>
                   )}
@@ -404,24 +394,24 @@ export default function SandboxPage() {
                   <div className="mt-4">
                     <button
                       onClick={() => setShowFindings(!showFindings)}
-                      className="flex w-full items-center justify-between rounded-lg border border-white/6 bg-white/3 px-4 py-2.5 text-xs font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white/80"
+                      className="flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <span className="flex items-center gap-2">
                         <AlertTriangle className="h-3.5 w-3.5" />
                         {auditFindings.length} Security Finding{auditFindings.length !== 1 ? "s" : ""}
                         <span className="flex gap-1 ml-1">
                           {auditFindings.filter(f => f.severity === "CRITICAL").length > 0 && (
-                            <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
+                            <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-600 dark:text-red-400">
                               {auditFindings.filter(f => f.severity === "CRITICAL").length} CRIT
                             </span>
                           )}
                           {auditFindings.filter(f => f.severity === "HIGH").length > 0 && (
-                            <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[9px] font-bold text-orange-400">
+                            <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-[9px] font-bold text-orange-600 dark:text-orange-400">
                               {auditFindings.filter(f => f.severity === "HIGH").length} HIGH
                             </span>
                           )}
                           {auditFindings.filter(f => f.severity === "MEDIUM").length > 0 && (
-                            <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-bold text-yellow-400">
+                            <span className="rounded bg-yellow-500/15 px-1.5 py-0.5 text-[9px] font-bold text-yellow-600 dark:text-yellow-400">
                               {auditFindings.filter(f => f.severity === "MEDIUM").length} MED
                             </span>
                           )}
@@ -435,27 +425,27 @@ export default function SandboxPage() {
                         {auditFindings.map((finding, i) => (
                           <div
                             key={finding.id || i}
-                            className="rounded-lg border border-white/6 bg-[#0a0b14] p-3"
+                            className="rounded-xl border border-border bg-background p-3"
                           >
                             <div className="mb-1 flex items-center gap-2">
                               <SeverityBadge severity={finding.severity} />
-                              <span className="text-xs font-medium text-white/80">{finding.title}</span>
+                              <span className="text-xs font-medium text-foreground/80">{finding.title}</span>
                             </div>
                             {finding.description && (
-                              <p className="mb-1 text-[11px] leading-relaxed text-white/40">
+                              <p className="mb-1 text-[11px] leading-relaxed text-muted-foreground">
                                 {finding.description}
                               </p>
                             )}
                             {finding.recommendation && (
-                              <p className="text-[11px] text-purple-300/60">
-                                <span className="font-semibold text-purple-300/80">Fix: </span>
+                              <p className="text-[11px] text-accent/80">
+                                <span className="font-semibold text-accent">Fix: </span>
                                 {finding.recommendation}
                               </p>
                             )}
                             {finding.references && finding.references.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {finding.references.map((ref, j) => (
-                                  <span key={j} className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-mono text-white/30">
+                                  <span key={j} className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground">
                                     {ref}
                                   </span>
                                 ))}
@@ -473,15 +463,15 @@ export default function SandboxPage() {
             {/* IDs */}
             <div className="space-y-3">
               {result.contract_id && (
-                <div className="rounded-xl border border-white/8 bg-white/3 p-4">
+                <div className="rounded-2xl border border-border bg-muted p-4">
                   <div className="mb-2 flex items-center gap-2">
-                    <FileText className="h-3.5 w-3.5 text-purple-400" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                    <FileText className="h-3.5 w-3.5 text-accent" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Contract ID
                     </span>
                   </div>
                   <div className="flex items-start justify-between">
-                    <p className="break-all font-mono text-xs leading-relaxed text-white/70">
+                    <p className="break-all font-mono text-xs leading-relaxed text-foreground/70">
                       {result.contract_id}
                     </p>
                     <CopyButton text={result.contract_id} />
@@ -489,15 +479,15 @@ export default function SandboxPage() {
                 </div>
               )}
               {result.package_id && (
-                <div className="rounded-xl border border-white/8 bg-white/3 p-4">
+                <div className="rounded-2xl border border-border bg-muted p-4">
                   <div className="mb-2 flex items-center gap-2">
-                    <Package className="h-3.5 w-3.5 text-fuchsia-400" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                    <Package className="h-3.5 w-3.5 text-accent" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Package ID
                     </span>
                   </div>
                   <div className="flex items-start justify-between">
-                    <p className="break-all font-mono text-xs leading-relaxed text-white/70">
+                    <p className="break-all font-mono text-xs leading-relaxed text-foreground/70">
                       {result.package_id}
                     </p>
                     <CopyButton text={result.package_id} />
@@ -506,20 +496,61 @@ export default function SandboxPage() {
               )}
             </div>
 
-            {/* Generated Code */}
-            {result.generated_code && (
-              <div>
-                <button
-                  onClick={() => setShowCode(!showCode)}
-                  className="mb-3 flex items-center gap-2 text-sm font-medium text-white/50 transition-colors hover:text-white/80"
-                >
-                  <Code2 className="h-4 w-4" />
-                  {showCode ? "Hide" : "View"} Generated DAML Code
-                </button>
+            {/* Deployment Note */}
+            {result.deployment_note && (
+              <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4">
+                <p className="text-sm text-foreground/80">{result.deployment_note}</p>
+              </div>
+            )}
 
-                {showCode && (
+            {/* Tabbed Code / Diagram / Project Files */}
+            {(result.generated_code || result.diagram_mermaid || result.project_files) && (
+              <div>
+                {/* Tab bar */}
+                <div className="mb-3 flex items-center gap-1 rounded-xl border border-border bg-muted p-1">
+                  <button
+                    onClick={() => setActiveTab("code")}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                      activeTab === "code"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Code2 className="h-3.5 w-3.5" />
+                    Code
+                  </button>
+                  {result.diagram_mermaid && (
+                    <button
+                      onClick={() => setActiveTab("diagram")}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                        activeTab === "diagram"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Workflow className="h-3.5 w-3.5" />
+                      Contract Flow
+                    </button>
+                  )}
+                  {result.project_files && Object.keys(result.project_files).length > 1 && (
+                    <button
+                      onClick={() => setActiveTab("files")}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                        activeTab === "files"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <FolderTree className="h-3.5 w-3.5" />
+                      Files ({Object.keys(result.project_files).length})
+                    </button>
+                  )}
+                </div>
+
+                {/* Tab content */}
+                {activeTab === "code" && result.generated_code && (
                   <div className="relative">
-                    <pre className="scrollbar-hide overflow-x-auto rounded-xl border border-white/8 bg-[#0a0b14] p-5 text-sm leading-relaxed text-purple-200/80">
+                    <pre className="max-h-[500px] overflow-auto rounded-2xl border border-border bg-muted p-5 text-sm leading-relaxed text-foreground/80 font-mono">
                       <code>{result.generated_code}</code>
                     </pre>
                     <div className="absolute right-3 top-3">
@@ -527,24 +558,45 @@ export default function SandboxPage() {
                     </div>
                   </div>
                 )}
+
+                {activeTab === "diagram" && result.diagram_mermaid && (
+                  <MermaidDiagram chart={result.diagram_mermaid} />
+                )}
+
+                {activeTab === "files" && result.project_files && (
+                  <div className="space-y-3">
+                    {Object.entries(result.project_files).map(([filename, code]) => (
+                      <div key={filename} className="rounded-2xl border border-border bg-muted">
+                        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+                          <span className="font-mono text-xs text-foreground/70">{filename}</span>
+                          <CopyButton text={code} />
+                        </div>
+                        <pre className="max-h-64 overflow-auto p-4 text-xs leading-relaxed text-foreground/80 font-mono">
+                          <code>{code}</code>
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Actions */}
-            <div className="flex items-center gap-3 border-t border-white/8 pt-6">
+            <div className="flex items-center gap-3 border-t border-border pt-6">
               <Link
                 href="/"
-                className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 px-6 py-3 text-sm font-semibold text-white transition-all hover:from-purple-500 hover:to-fuchsia-500 hover:shadow-[0_0_24px_rgba(168,85,247,0.3)]"
+                className="group inline-flex items-center gap-2 rounded-xl bg-foreground px-6 py-3 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
               >
                 Generate Another
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
               <Link
                 href="/explorer"
-                className="group inline-flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-6 py-3 text-sm font-semibold text-indigo-300 transition-all hover:bg-indigo-500/20 hover:text-indigo-200"
+                className="group inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent/20"
               >
-                <Database className="h-4 w-4" />
-                Ledger Explorer
+                <Database className="h-4 w-4 text-accent" />
+                Canton Ledger Explorer
+                <ExternalLink className="h-3.5 w-3.5 text-accent transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
           </div>
@@ -556,14 +608,14 @@ export default function SandboxPage() {
             <div className="overflow-hidden rounded-2xl border border-red-500/20 bg-red-500/5 p-6">
               <div className="flex items-start gap-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/20">
-                  <XCircle className="h-5 w-5 text-red-400" />
+                  <XCircle className="h-5 w-5 text-red-500" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-red-100">
+                  <h3 className="text-lg font-semibold text-foreground">
                     Generation Failed
                   </h3>
                   {result.error_message && (
-                    <p className="mt-2 text-sm text-red-300/70">
+                    <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                       {result.error_message}
                     </p>
                   )}
@@ -571,15 +623,15 @@ export default function SandboxPage() {
               </div>
 
               {result.compile_errors && result.compile_errors.length > 0 && (
-                <div className="mt-4 rounded-xl border border-red-500/10 bg-[#0a0b14] p-4">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-400/60">
+                <div className="mt-4 rounded-xl border border-border bg-muted p-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-500/60">
                     Compilation Errors
                   </p>
                   <div className="space-y-1">
                     {result.compile_errors.map((error, i) => (
                       <p
                         key={i}
-                        className="font-mono text-xs text-red-300/60"
+                        className="font-mono text-xs text-red-600/70 dark:text-red-400/70"
                       >
                         {typeof error === "string"
                           ? error
@@ -591,53 +643,34 @@ export default function SandboxPage() {
               )}
             </div>
 
-            <Link
-              href="/"
-              className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 px-6 py-3 text-sm font-semibold text-white transition-all hover:from-purple-500 hover:to-fuchsia-500 hover:shadow-[0_0_24px_rgba(168,85,247,0.3)]"
-            >
-              Try Again
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/"
+                className="group inline-flex items-center gap-2 rounded-xl bg-foreground px-6 py-3 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
+              >
+                Try Again
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+              <Link
+                href="/explorer"
+                className="group inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent/20"
+              >
+                <Database className="h-4 w-4 text-accent" />
+                Ledger Explorer
+                <ExternalLink className="h-3.5 w-3.5 text-accent transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </div>
           </div>
         )}
 
         {/* Loading state */}
         {!status && (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-white/8 bg-white/3 py-16">
-            <Loader2 className="mb-4 h-10 w-10 animate-spin text-purple-400" />
-            <p className="text-sm text-white/40">Loading job status...</p>
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-muted py-16">
+            <Loader2 className="mb-4 h-10 w-10 animate-spin text-accent" />
+            <p className="text-sm text-muted-foreground">Loading job status...</p>
           </div>
         )}
-
-        {/* Metallic Paint Effect */}
-        <div className="mt-16 flex justify-center">
-          <div style={{ width: '400px', height: '400px' }}>
-            <MetallicPaint
-              imageSrc="/g-logo.svg"
-              seed={42}
-              scale={4}
-              patternSharpness={1}
-              noiseScale={0.5}
-              speed={0.59}
-              liquid={0.88}
-              mouseAnimation={false}
-              brightness={2}
-              contrast={0.5}
-              refraction={0.012}
-              blur={0.015}
-              chromaticSpread={2}
-              fresnel={1}
-              angle={0}
-              waveAmplitude={1}
-              distortion={1}
-              contour={0.2}
-              lightColor="#ffffff"
-              darkColor="#000000"
-              tintColor="#feb3ff"
-            />
-          </div>
-        </div>
       </div>
-    </div>
+    </main>
   );
 }

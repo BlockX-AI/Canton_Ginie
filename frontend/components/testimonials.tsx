@@ -1,261 +1,205 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback, type ReactNode } from "react";
-import { motion, useSpring, useMotionValue } from "motion/react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
+import { useState, useEffect, type ReactNode } from "react";
 
-interface Testimonial {
-  badge: string;
-  company: string;
-  quote: string;
-  name: string;
-  role: string;
-  image: string;
-  stats: {
-    label: string;
-    value: string;
-  }[];
-}
-
-const testimonials: Testimonial[] = [
+const testimonials = [
   {
-    badge: "DeFi Protocol",
-    company: "ChainVault Labs",
     quote:
-      "Ginie completely transformed how we build DAML contracts. What used to take our team weeks of manual coding now happens in minutes. The AI understands Canton's type system perfectly and produces contracts that compile on the first try.",
-    name: "Sarah Chen",
-    role: "Head of Engineering",
-    image: "https://images.unsplash.com/photo-1574108233269-86d1199d28de?q=80&w=774&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    stats: [
-      { label: "Contract Deployment", value: "10x faster" },
-      { label: "Compilation Errors", value: "-90%" },
-      { label: "Team Size", value: "8 engineers" },
-    ],
+      "Ginie cut our DAML contract development time from weeks to minutes. We described a multi-party bond contract in plain English and had it compiled and deployed on Canton within five minutes.",
+    name: "Priya Sharma",
+    title: "Blockchain Lead @ Digital Securities Inc",
+    avatar:
+      "https://images.unsplash.com/photo-1600481453173-55f6a844a4ea?q=80&w=750&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    color: "#22c55e",
+    company: "Digital Securities Inc",
   },
   {
-    badge: "FinTech Startup",
-    company: "Quantum Ledger",
     quote:
-      "As a startup without dedicated DAML developers, Ginie has been a game-changer. We deploy smart contracts for bonds, escrows, and token swaps without writing a single line of DAML manually. The ROI is incredible.",
-    name: "Marcus Rodriguez",
-    role: "Co-founder & CTO",
-    image: "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?q=80&w=1740&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    stats: [
-      { label: "Dev Cost Savings", value: "$200k/year" },
-      { label: "Time to Deploy", value: "Minutes" },
-      { label: "Contracts Deployed", value: "350+" },
-    ],
+      "The built-in security audit caught three potential vulnerabilities in our escrow contract before it went live. That alone saved us from a costly audit engagement.",
+    name: "Marcus Chen",
+    title: "CTO @ Canton Ventures",
+    avatar:
+      "https://images.unsplash.com/photo-1530466015235-1d47696ea847?q=80&w=1674&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    color: "#22c55e",
+    company: "Canton Ventures",
   },
   {
-    badge: "Enterprise",
-    company: "GlobalTrade Inc",
     quote:
-      "Rolling out Ginie across our blockchain team was seamless. The automated compilation and deployment pipeline ensures every contract—from simple agreements to complex multi-party workflows—deploys flawlessly to Canton.",
-    name: "Roy Park",
-    role: "VP of Engineering",
-    image: "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-    stats: [
-      { label: "Deploy Success Rate", value: "99.5%" },
-      { label: "Team Members", value: "50+" },
-      { label: "Monthly Contracts", value: "2,000+" },
-    ],
+      "We onboarded our entire team with Ed25519 identities in under ten minutes. The setup wizard made key generation and party registration completely painless.",
+    name: "Elena Rodriguez",
+    title: "Engineering Manager @ LedgerOps",
+    avatar:
+      "https://images.unsplash.com/photo-1705408115324-6bd2cbfa4d93?q=80&w=774&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    color: "#22c55e",
+    company: "LedgerOps",
+  },
+  {
+    quote:
+      "The RAG-powered code generation produces surprisingly idiomatic DAML. It understands templates, choices, and signatory patterns better than most junior developers.",
+    name: "James Okafor",
+    title: "Principal Engineer @ BlockXAI",
+    avatar:
+      "https://images.unsplash.com/photo-1564172556663-2bef9580fc44?q=80&w=774&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+    color: "#22c55e",
+    company: "BlockXAI",
   },
 ];
 
-function TestimonialCard({ testimonial, isActive }: { testimonial: Testimonial; isActive: boolean }) {
-  return (
-    <div className={`flex h-full w-full flex-col rounded-3xl p-6 sm:p-8 lg:flex-row lg:gap-12 lg:p-12 transition-colors duration-300 ${isActive ? 'bg-accent/20' : 'bg-muted'}`}>
-      <div className="flex flex-1 flex-col">
-        <span className="w-fit rounded-full bg-background px-3 py-1 text-xs font-medium text-muted-foreground sm:px-4 sm:py-1.5 sm:text-sm">
-          {testimonial.badge}
-        </span>
-
-        <h3 className="mt-4 text-2xl font-semibold tracking-tight text-foreground sm:mt-6 sm:text-4xl lg:text-5xl">
-          {testimonial.company}
-        </h3>
-
-        <p className="mt-4 flex-1 text-base leading-relaxed text-foreground/80 sm:mt-6 sm:text-lg lg:mt-8 lg:text-xl">
-          &ldquo;{testimonial.quote}&rdquo;
-        </p>
-
-        <div className="mt-6 flex items-center gap-3 sm:mt-8">
-          <Image
-            src={testimonial.image}
-            alt={testimonial.name}
-            width={40}
-            height={40}
-            className="h-10 w-10 rounded-full object-cover lg:hidden"
-          />
-          <div>
-            <p className="text-sm font-medium text-foreground sm:text-base">
-              {testimonial.name}
-            </p>
-            <p className="text-xs text-muted-foreground sm:text-sm lg:hiddenleading-snug">
-              {testimonial.role}
-            </p>
-          </div>
-        </div>
-
-        <p className="mt-4 text-xs font-medium uppercase text-muted-foreground/60 lg:mt-6">
-          {testimonial.company}
-        </p>
-      </div>
-
-      <div className="hidden flex-col lg:flex lg:w-72">
-        <div className="relative h-60 w-40 overflow-hidden rounded-full">
-          <Image
-            src={testimonial.image}
-            alt={testimonial.name}
-            fill
-            className="object-cover"
-          />
-        </div>
-
-        <div className="mt-2 pt-6">
-          <p className="text-xs font-medium uppercase text-muted-foreground">
-            {testimonial.role}
-          </p>
-          <p className="mt-1 text-lg font-semibold text-foreground leading-snug">
-            {testimonial.name}
-          </p>
-        </div>
-
-        <div className="mt-6 border-t border-foreground/10 pt-8">
-          <p className="text-xs font-medium uppercase text-muted-foreground">
-            How they use Ginie
-          </p>
-          <div className="mt-4 space-y-2">
-            {testimonial.stats.map((stat) => (
-              <div key={stat.label} className="flex justify-between">
-                <span className="text-sm text-muted-foreground">
-                  {stat.label}
-                </span>
-                <span className="text-sm font-semibold text-foreground">
-                  {stat.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const companies = [
+  { name: "Digital Securities Inc", logo: "/mock-logos/commandr.svg" },
+  { name: "Canton Ventures", logo: "/mock-logos/interlock.svg" },
+  { name: "LedgerOps", logo: "/mock-logos/focalpoint.svg" },
+  { name: "BlockXAI", logo: "/mock-logos/acmecorp.svg" },
+];
 
 export function Testimonials(): ReactNode {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [measurements, setMeasurements] = useState({ cardWidth: 0, gap: 24 });
-  
-  const x = useMotionValue(0);
-  const springX = useSpring(x, { stiffness: 80, damping: 20 });
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  const measure = useCallback(() => {
-    if (containerRef.current) {
-      const containerWidth = containerRef.current.offsetWidth;
-      const gap = 24;
-      const peekWidth = 0;
-      const cardWidth = containerWidth - peekWidth;
-      setMeasurements({ cardWidth, gap });
-    }
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % testimonials.length);
+    }, 10000);
+
+    return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [measure]);
-
-  useEffect(() => {
-    const { cardWidth, gap } = measurements;
-    if (cardWidth > 0) {
-      x.set(-currentIndex * (cardWidth + gap));
-    }
-  }, [currentIndex, measurements, x]);
-
-  const paginate = (direction: number) => {
-    setCurrentIndex((prev) => {
-      const next = prev + direction;
-      if (next < 0) return 0;
-      if (next >= testimonials.length) return testimonials.length - 1;
-      return next;
-    });
-  };
-
-  const goToSlide = (index: number) => {
-    setCurrentIndex(index);
-  };
-
-  const { cardWidth, gap } = measurements;
-
   return (
-    <section className="overflow-hidden py-20 md:py-28">
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl mb-12">
-          <p className="text-4xl font-medium tracking-tight text-foreground">
-            Trusted by blockchain teams worldwide
-          </p>
-        </div>
-      </div>
+    <section className="w-full bg-black   border-accent/15 px-6 pt-32 pb-0">
+      <div className="mx-auto max-w-5xl">
+        <motion.h2
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+          className="mb-16 text-4xl leading-tight font-medium text-white sm:text-5xl lg:mb-20 lg:text-6xl"
+          style={{ fontFamily: "EB Garamond, serif" }}
+        >
+          Trusted by Canton developers
+        </motion.h2>
 
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div ref={containerRef} className="mx-auto max-w-7xl">
-          <div className="overflow-visible">
-          <motion.div
-            className="flex"
-            style={{ x: springX, gap }}
-          >
+        <div className="mb-16 grid gap-8 lg:mb-20 lg:grid-cols-2 lg:gap-12">
+          <div className="flex items-center justify-start gap-4 lg:gap-6" role="tablist" aria-label="Testimonials">
             {testimonials.map((testimonial, index) => (
-              <div
-                key={testimonial.company}
-                className="shrink-0"
-                style={{ width: cardWidth || "90%" }}
-              >
-                <TestimonialCard testimonial={testimonial} isActive={index === currentIndex} />
-              </div>
-            ))}
-          </motion.div>
-        </div>
-
-        <div className="mt-8 flex items-center justify-between">
-          <div className="flex gap-2">
-            {testimonials.map((_, index) => (
-              <button
+              <motion.div
                 key={index}
-                type="button"
-                onClick={() => goToSlide(index)}
-                className={`h-2 cursor-pointer rounded-full transition-all duration-300 ${
-                  index === currentIndex
-                    ? "w-8 bg-foreground"
-                    : "w-2 bg-foreground/30 hover:bg-foreground/50"
-                }`}
-                aria-label={`Go to testimonial ${index + 1}`}
-              />
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{
+                  scale: activeIndex === index ? 1.1 : 0.9,
+                  opacity: activeIndex === index ? 1 : 0.6,
+                }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                className="relative"
+                role="tab"
+                aria-selected={activeIndex === index}
+                tabIndex={activeIndex === index ? 0 : -1}
+                onClick={() => setActiveIndex(index)}
+                style={{ cursor: 'pointer' }}
+              >
+                <div
+                  className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full transition-colors duration-500 sm:h-16 sm:w-16 lg:h-20 lg:w-20"
+                  style={{
+                    backgroundColor:
+                      activeIndex === index ? testimonial.color : undefined,
+                  }}
+                >
+                  <Image
+                    src={testimonial.avatar}
+                    alt={testimonial.name}
+                    width={64}
+                    height={64}
+                    className="h-8 w-8 rounded-full object-cover grayscale sm:h-12 sm:w-12 lg:h-16 lg:w-16"
+                  />
+                </div>
+
+                {activeIndex === index && (
+                  <svg
+                    className="absolute -inset-2 h-[calc(100%+16px)] w-[calc(100%+16px)] -rotate-90"
+                    viewBox="0 0 100 100"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="48"
+                      fill="none"
+                      stroke={testimonial.color}
+                      strokeWidth="1.5"
+                      opacity="0.2"
+                    />
+                    <motion.circle
+                      key={`progress-${activeIndex}`}
+                      cx="50"
+                      cy="50"
+                      r="48"
+                      fill="none"
+                      stroke={testimonial.color}
+                      strokeWidth="1.5"
+                      strokeDasharray={`${2 * Math.PI * 48}`}
+                      initial={{ strokeDashoffset: 2 * Math.PI * 48 }}
+                      animate={{ strokeDashoffset: 0 }}
+                      transition={{ duration: 10, ease: "linear" }}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+              </motion.div>
             ))}
           </div>
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => paginate(-1)}
-              disabled={currentIndex === 0}
-              className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-muted/75 text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
-              aria-label="Previous testimonial"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => paginate(1)}
-              disabled={currentIndex === testimonials.length - 1}
-              className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-muted/75 text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
-              aria-label="Next testimonial"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
+          <div className="flex flex-col justify-center" role="tabpanel" aria-live="polite">
+            <AnimatePresence mode="wait">
+              {testimonials[activeIndex] && (
+                <motion.div
+                  key={activeIndex}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <blockquote className="mb-6 text-xl leading-relaxed text-white/80">
+                    &ldquo;{testimonials[activeIndex].quote}&rdquo;
+                  </blockquote>
+                  <div className="text-base font-medium text-white sm:text-lg">
+                    {testimonials[activeIndex].name},{" "}
+                    <span className="text-white/70">
+                      {testimonials[activeIndex].title}
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
+
+        <div className="flex items-center justify-between gap-6 lg:gap-8">
+          {companies.map((company, index) => {
+            const isActive = testimonials[activeIndex]?.company === company.name;
+            return (
+              <motion.div
+                key={company.name}
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: index * 0.1 }}
+                animate={{ scale: isActive ? 1.1 : 1 }}
+                className="flex items-center"
+              >
+                <Image
+                  src={company.logo}
+                  alt={`${company.name} logo`}
+                  width={120}
+                  height={40}
+                  className={`h-8 w-auto object-contain brightness-0 transition-all duration-300 sm:h-10 dark:invert ${
+                    isActive
+                      ? "opacity-100 dark:opacity-100"
+                      : "opacity-30 hover:opacity-60 dark:opacity-20 dark:hover:opacity-50"
+                  }`}
+                />
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </section>

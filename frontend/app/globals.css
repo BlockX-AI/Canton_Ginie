@@ -3,32 +3,41 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
+  --background: #f5f5f5;
   --foreground: #0a0a0a;
   --muted: #f5f5f5;
   --muted-foreground: #737373;
   --border: #e5e5e5;
-  --ring: #6366F1;
-  --accent: #6366F1;
-  --accent-light: #A5B4FC;
-  --accent-foreground: #ffffff;
+  --ring: #0066ff;
+  --frame: #ffffff;
+  --accent: #a8d946;
+  --card-primary: #a8d946;
+  --card-secondary: #e8f5c8;
+  --card-foreground: #171717;
+  --card-foreground-muted: #525252;
+  --phone-screen: #f5f5f5;
   --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 .dark {
-  --background: #03040A;
+  --background: #141414;
   --foreground: #fafafa;
-  --muted: #18181b;
-  --muted-foreground: #a1a1aa;
-  --border: #27272a;
-  --ring: #6366F1;
-  --accent: #6366F1;
-  --accent-light: #A5B4FC;
-  --accent-foreground: #ffffff;
+  --muted: #171717;
+  --muted-foreground: #a3a3a3;
+  --border: #262626;
+  --ring: #3b82f6;
+  --frame: #000;
+  --accent: #a8d946;
+  --card-primary: #a8d946;
+  --card-secondary: #2a3a1a;
+  --card-foreground: #fafafa;
+  --card-foreground-muted: #d4d4d4;
+  --phone-screen: #f5f5f5;
 }
 
 @theme inline {
+  --color-frame: var(--frame);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
@@ -36,8 +45,11 @@
   --color-border: var(--border);
   --color-ring: var(--ring);
   --color-accent: var(--accent);
-  --color-accent-light: var(--accent-light);
-  --color-accent-foreground: var(--accent-foreground);
+  --color-card-primary: var(--card-primary);
+  --color-card-secondary: var(--card-secondary);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-foreground-muted: var(--card-foreground-muted);
+  --color-phone-screen: var(--phone-screen);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
@@ -57,6 +69,7 @@ body {
   overscroll-behavior-x: none;
 }
 
+/* Custom text selection */
 ::selection {
   background-color: var(--accent);
   color: white;
@@ -106,74 +119,121 @@ body {
   outline-offset: 2px;
 }
 
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+.site-frame {
+  display: block;
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background-color: var(--frame);
 }
 
-.no-focus-ring:focus-visible {
-  outline: none;
+.site-frame--top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
 }
 
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+.site-frame--bottom {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
 }
 
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
+.site-frame--left {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 10px;
 }
 
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
+.site-frame--right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+}
+
+/* Corner decorations */
+.site-corner {
+  display: block;
+  position: fixed;
+  z-index: 9998;
+  pointer-events: none;
+  color: var(--frame);
+}
+
+.site-corner--top-left {
+  transform: rotate(90deg);
+  top: 10px;
+  left: 10px;
+}
+
+.site-corner--top-right {
+  top: 10px;
+  right: 10px;
+  transform: rotate(180deg);
+}
+
+.site-corner--bottom-left {
+  bottom: 10px;
+  left: 10px;
+  transform: rotate(0deg);
+}
+
+.site-corner--bottom-right {
+  bottom: 10px;
+  right: 10px;
+  transform: rotate(270deg);
+}
+
+/* Hide frame and corners on mobile */
+@media (max-width: 850px) {
+  .site-frame,
+  .site-corner {
+    display: none;
+  }
+}
+
+/* Partners carousel */
+.partner-carousel {
+  width: 100%;
   overflow: hidden;
 }
 
-.line-clamp-3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.partner-track {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  animation: scroll 20s linear infinite;
 }
 
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+.partner-track > * {
+  white-space: nowrap;
 }
 
-@keyframes glitch {
-  0% { clip-path: inset(20% 0 50% 0); }
-  5% { clip-path: inset(10% 0 60% 0); }
-  10% { clip-path: inset(15% 0 55% 0); }
-  15% { clip-path: inset(25% 0 35% 0); }
-  20% { clip-path: inset(30% 0 40% 0); }
-  25% { clip-path: inset(40% 0 20% 0); }
-  30% { clip-path: inset(10% 0 60% 0); }
-  35% { clip-path: inset(15% 0 55% 0); }
-  40% { clip-path: inset(25% 0 35% 0); }
-  45% { clip-path: inset(30% 0 40% 0); }
-  50% { clip-path: inset(20% 0 50% 0); }
-  55% { clip-path: inset(10% 0 60% 0); }
-  60% { clip-path: inset(15% 0 55% 0); }
-  65% { clip-path: inset(25% 0 35% 0); }
-  70% { clip-path: inset(30% 0 40% 0); }
-  75% { clip-path: inset(40% 0 20% 0); }
-  80% { clip-path: inset(20% 0 50% 0); }
-  85% { clip-path: inset(10% 0 60% 0); }
-  90% { clip-path: inset(15% 0 55% 0); }
-  95% { clip-path: inset(25% 0 35% 0); }
-  100% { clip-path: inset(30% 0 40% 0); }
+@keyframes scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
-@theme {
-  --animate-glitch-after: glitch var(--after-duration) infinite linear alternate-reverse;
-  --animate-glitch-before: glitch var(--before-duration) infinite linear alternate-reverse;
+@media (prefers-reduced-motion: reduce) {
+  .partner-track {
+    animation: none;
+  }
+}
+
+/* Liquid glass card used by stats section */
+.liquid-glass {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  border-top: 2px solid rgba(255,255,255,0.06);
+  border-bottom: 2px solid rgba(255,255,255,0.06);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+}
+
+@media (max-width: 640px) {
+  .liquid-glass { padding: 2rem !important; }
 }

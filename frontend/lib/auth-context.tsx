@@ -42,6 +42,34 @@ const defaultState: AuthState = {
   fingerprint: null,
 };
 
+const STORAGE_KEY = "ginie_auth";
+
+function saveToStorage(s: AuthState) {
+  try {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    }
+  } catch { /* ignore */ }
+}
+
+function loadFromStorage(): AuthState {
+  try {
+    if (typeof window !== "undefined") {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw) as AuthState;
+    }
+  } catch { /* ignore */ }
+  return defaultState;
+}
+
+function clearStorage() {
+  try {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+  } catch { /* ignore */ }
+}
+
 const AuthContext = createContext<AuthContextValue>({
   ...defaultState,
   login: () => {},
@@ -52,15 +80,25 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(defaultState);
 
+  // Restore from sessionStorage on mount
+  useEffect(() => {
+    const stored = loadFromStorage();
+    if (stored.isAuthenticated) {
+      setState(stored);
+    }
+  }, []);
+
   const login = useCallback(
     (token: string, partyId: string, displayName: string, fingerprint: string) => {
-      setState({
+      const next: AuthState = {
         isAuthenticated: true,
         token,
         partyId,
         displayName,
         fingerprint,
-      });
+      };
+      setState(next);
+      saveToStorage(next);
     },
     [],
   );
@@ -80,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     setState(defaultState);
+    clearStorage();
   }, [state.token]);
 
   const refreshToken = useCallback(async () => {
