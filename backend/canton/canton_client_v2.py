@@ -8,7 +8,19 @@ import structlog
 
 
 def make_sandbox_jwt(act_as: list[str], read_as: list[str] | None = None) -> str:
-    """Generate an unsigned JWT accepted by the Canton wildcard auth service."""
+    """Generate an unsigned JWT accepted by the Canton wildcard auth service.
+
+    WARNING: This produces an `alg=none` token and must ONLY be used in sandbox mode.
+    For devnet/mainnet, use a real signed token via CANTON_TOKEN env var.
+    """
+    from config import get_settings
+    settings = get_settings()
+    if settings.canton_environment != "sandbox":
+        raise RuntimeError(
+            "make_sandbox_jwt() called in non-sandbox environment "
+            f"({settings.canton_environment}). Use CANTON_TOKEN env var instead."
+        )
+
     def _b64url(s: str) -> str:
         return base64.urlsafe_b64encode(s.encode()).rstrip(b"=").decode()
 
@@ -21,6 +33,9 @@ def make_sandbox_jwt(act_as: list[str], read_as: list[str] | None = None) -> str
         "admin": True,
         "exp": 9999999999,
     }, separators=(",", ":")))
+
+    _log = structlog.get_logger()
+    _log.warning("Using unsigned JWT (alg=none) — sandbox mode only", act_as=act_as)
     return f"{header}.{payload}."
 
 logger = structlog.get_logger()

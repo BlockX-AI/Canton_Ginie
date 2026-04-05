@@ -10,9 +10,11 @@ Endpoints:
 """
 
 import structlog
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Optional
+
+from api.rate_limiter import limiter
 
 from auth.crypto import generate_challenge, verify_signature, compute_fingerprint
 from auth.jwt_manager import create_user_jwt, refresh_user_jwt, create_canton_jwt
@@ -75,43 +77,46 @@ class PartyListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @auth_router.post("/challenge", response_model=ChallengeResponse)
-async def create_challenge():
+@limiter.limit("10/minute")
+async def create_challenge(request: Request):
     """Generate a random challenge for the client to sign with their Ed25519 key."""
     result = generate_challenge()
     return ChallengeResponse(**result)
 
 
 @auth_router.post("/verify", response_model=VerifyResponse)
-async def verify_challenge(request: VerifyRequest):
+@limiter.limit("10/minute")
+async def verify_challenge(request: Request, body: VerifyRequest = Depends()):
     """Verify an Ed25519 signature against the challenge.
 
     This ONLY verifies the signature — it does NOT register a party or issue a JWT.
     Separating verify from register means if Canton party allocation fails,
     the user doesn't need to re-sign the challenge.
     """
-    ok = verify_signature(request.challenge, request.signature, request.public_key)
+    ok = verify_signature(body.challenge, body.signature, body.public_key)
     if not ok:
         raise HTTPException(status_code=401, detail="Signature verification failed")
 
-    fingerprint = compute_fingerprint(request.public_key)
+    fingerprint = compute_fingerprint(body.public_key)
     return VerifyResponse(verified=True, fingerprint=fingerprint)
 
 
 @auth_router.post("/register", response_model=RegisterResponse)
-async def register_and_authenticate(request: RegisterRequest):
+@limiter.limit("10/minute")
+async def register_and_authenticate(request: Request, body: RegisterRequest = Depends()):
     """Register a party on Canton and issue a JWT.
 
     The client should call /auth/verify first to confirm their key works,
     then call this endpoint to register the party and get a JWT.
     """
     settings = get_settings()
-    fingerprint = compute_fingerprint(request.public_key)
+    fingerprint = compute_fingerprint(body.public_key)
 
     try:
         result = await register_party(
-            party_name=request.party_name,
+            party_name=body.party_name,
             fingerprint=fingerprint,
-            canton_url=request.canton_url,
+            canton_url=body.canton_url,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -121,13 +126,13 @@ async def register_and_authenticate(request: RegisterRequest):
     token = create_user_jwt(
         party_id=result["party_id"],
         fingerprint=fingerprint,
-        display_name=request.party_name,
+        display_name=body.party_name,
     )
 
     return RegisterResponse(
         token=token,
         party_id=result["party_id"],
-        display_name=request.party_name,
+        display_name=body.party_name,
         fingerprint=fingerprint,
         expires_in_days=settings.jwt_expiry_days,
     )

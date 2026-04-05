@@ -2,6 +2,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from pathlib import Path
 import os
+import secrets
+import structlog
+
+_logger = structlog.get_logger()
 
 _ENV_FILE = str(Path(__file__).parent / ".env.ginie")
 
@@ -48,9 +52,12 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.1
 
     # Auth / JWT
-    jwt_secret: str = "ginie-local-dev-secret-change-in-production"
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expiry_days: int = 7
+
+    # CORS
+    cors_origins: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://canton.ginie.xyz"
 
     def get_canton_url(self) -> str:
         mapping = {
@@ -61,6 +68,23 @@ class Settings(BaseSettings):
         return mapping.get(self.canton_environment, self.canton_sandbox_url)
 
 
+_DEFAULT_SECRET = "ginie-local-dev-secret-change-in-production"
+
+
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+
+    # --- JWT secret validation ---
+    if not s.jwt_secret or s.jwt_secret == _DEFAULT_SECRET:
+        if s.canton_environment != "sandbox":
+            raise RuntimeError(
+                "FATAL: JWT_SECRET is not set or is the default value. "
+                "A strong, unique secret is REQUIRED for non-sandbox environments. "
+                "Set JWT_SECRET in backend/.env.ginie"
+            )
+        # Sandbox: auto-generate a random secret per startup
+        s.jwt_secret = secrets.token_hex(32)
+        _logger.warning("JWT_SECRET not configured — generated ephemeral secret (sandbox only)")
+
+    return s

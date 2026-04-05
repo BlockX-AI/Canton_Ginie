@@ -3,8 +3,10 @@ import json
 import threading
 import structlog
 import redis
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 from datetime import datetime, timezone
+
+from api.rate_limiter import limiter
 
 from api.models import (
     GenerateRequest,
@@ -139,6 +141,7 @@ def _job_row_to_dict(job) -> dict:
 
 
 _in_memory_jobs: dict = {}
+_jobs_lock = threading.Lock()
 
 
 def _celery_has_workers() -> bool:
@@ -153,7 +156,6 @@ def _celery_has_workers() -> bool:
 def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, canton_url: str, party_id: str = ""):
     """Run pipeline in a dedicated thread — guaranteed to execute immediately."""
     logger.info("[THREAD] Starting pipeline", job_id=job_id, party_id=party_id or "(anonymous)")
-    print(f"[THREAD] Starting pipeline for job {job_id}")
 
     try:
         # Immediately mark as running
@@ -162,9 +164,10 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
             "status":       "running",
             "current_step": "Initializing pipeline...",
             "progress":     10,
-            "updated_at":   datetime.utcnow().isoformat(),
+            "updated_at":   datetime.now(timezone.utc).isoformat(),
         }
-        _in_memory_jobs[job_id] = running_state
+        with _jobs_lock:
+            _in_memory_jobs[job_id] = running_state
         _set_job(job_id, running_state)
         logger.info("[THREAD] Job status set to running", job_id=job_id)
 
@@ -174,9 +177,10 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 "status":       status,
                 "current_step": step,
                 "progress":     progress,
-                "updated_at":   datetime.utcnow().isoformat(),
+                "updated_at":   datetime.now(timezone.utc).isoformat(),
             }
-            _in_memory_jobs[jid] = {**_in_memory_jobs.get(jid, {}), **update}
+            with _jobs_lock:
+                _in_memory_jobs[jid] = {**_in_memory_jobs.get(jid, {}), **update}
             _set_job(jid, _in_memory_jobs[jid])
             logger.info("[THREAD] Status update", job_id=jid, step=step, progress=progress)
 
@@ -216,7 +220,7 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 "deployment_note":   final_state.get("deployment_note", ""),
                 "diagram_mermaid":   final_state.get("diagram_mermaid", ""),
                 "project_files":     final_state.get("original_project_files") or final_state.get("project_files"),
-                "updated_at":        datetime.utcnow().isoformat(),
+                "updated_at":        datetime.now(timezone.utc).isoformat(),
             }
             # Persist deployed contract to PostgreSQL
             _save_deployed_contract(job_id, final_state)
@@ -237,28 +241,26 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 "audit_reports":     final_state.get("audit_reports", {}),
                 "diagram_mermaid":   final_state.get("diagram_mermaid", ""),
                 "project_files":     final_state.get("original_project_files") or final_state.get("project_files"),
-                "updated_at":        datetime.utcnow().isoformat(),
+                "updated_at":        datetime.now(timezone.utc).isoformat(),
             }
 
-        _in_memory_jobs[job_id] = result
+        with _jobs_lock:
+            _in_memory_jobs[job_id] = result
         _set_job(job_id, result)
         logger.info("[THREAD] Pipeline completed", job_id=job_id, status=result["status"])
-        print(f"[THREAD] Pipeline completed for job {job_id} — status: {result['status']}")
 
     except Exception as e:
-        logger.error("[THREAD] Pipeline crashed", job_id=job_id, error=str(e))
-        print(f"[THREAD] Pipeline CRASHED for job {job_id}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error("[THREAD] Pipeline crashed", job_id=job_id, error=str(e), exc_info=True)
         error_data = {
             "job_id":        job_id,
             "status":        "failed",
             "current_step":  "Internal error",
             "progress":      0,
             "error_message": str(e),
-            "updated_at":    datetime.utcnow().isoformat(),
+            "updated_at":    datetime.now(timezone.utc).isoformat(),
         }
-        _in_memory_jobs[job_id] = error_data
+        with _jobs_lock:
+            _in_memory_jobs[job_id] = error_data
         _set_job(job_id, error_data)
 
 
@@ -275,11 +277,12 @@ def _start_pipeline_job(job_id: str, user_input: str, canton_environment: str, c
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_contract(request: GenerateRequest, background_tasks: BackgroundTasks, user: dict | None = Depends(optional_auth)):
+@limiter.limit("5/minute")
+async def generate_contract(request: Request, body: GenerateRequest = Depends(), background_tasks: BackgroundTasks = BackgroundTasks(), user: dict | None = Depends(optional_auth)):
     settings = get_settings()
     job_id = str(uuid.uuid4())
 
-    canton_url = request.canton_url or settings.get_canton_url()
+    canton_url = body.canton_url or settings.get_canton_url()
 
     # Extract authenticated party_id if user is logged in
     party_id = user.get("sub", "") if user else ""
@@ -290,16 +293,17 @@ async def generate_contract(request: GenerateRequest, background_tasks: Backgrou
         "current_step": "Job queued...",
         "progress":     5,
         "party_id":     party_id,
-        "updated_at":   datetime.utcnow().isoformat(),
+        "updated_at":   datetime.now(timezone.utc).isoformat(),
     }
-    _in_memory_jobs[job_id] = initial_data
+    with _jobs_lock:
+        _in_memory_jobs[job_id] = initial_data
     _set_job(job_id, initial_data)
 
     # Launch pipeline in a dedicated thread (not BackgroundTasks which can silently fail)
     _start_pipeline_job(
         job_id=job_id,
-        user_input=request.prompt,
-        canton_environment=request.canton_environment or settings.canton_environment,
+        user_input=body.prompt,
+        canton_environment=body.canton_environment or settings.canton_environment,
         canton_url=canton_url,
         party_id=party_id,
     )
@@ -361,18 +365,19 @@ async def get_job_result(job_id: str):
 
 
 @router.post("/iterate/{job_id}", response_model=GenerateResponse)
-async def iterate_contract(job_id: str, request: IterateRequest, background_tasks: BackgroundTasks):
+@limiter.limit("10/minute")
+async def iterate_contract(request: Request, job_id: str, body: IterateRequest = Depends(), background_tasks: BackgroundTasks = BackgroundTasks()):
     original_data = _get_job(job_id) or _in_memory_jobs.get(job_id)
 
     if not original_data:
         raise HTTPException(status_code=404, detail=f"Original job {job_id} not found")
 
-    original_code  = request.original_code or original_data.get("generated_code", "")
+    original_code  = body.original_code or original_data.get("generated_code", "")
     original_input = original_data.get("user_input", "")
 
     new_prompt = f"""Modify the following existing Daml contract based on this feedback:
 
-FEEDBACK: {request.feedback}
+FEEDBACK: {body.feedback}
 
 EXISTING CONTRACT CODE:
 {original_code}
@@ -390,9 +395,10 @@ Please update the contract to incorporate the requested changes while keeping th
         "current_step": "Processing iteration request...",
         "progress":     5,
         "parent_job_id": job_id,
-        "updated_at":   datetime.utcnow().isoformat(),
+        "updated_at":   datetime.now(timezone.utc).isoformat(),
     }
-    _in_memory_jobs[new_job_id] = initial_data
+    with _jobs_lock:
+        _in_memory_jobs[new_job_id] = initial_data
     _set_job(new_job_id, initial_data)
 
     _start_pipeline_job(

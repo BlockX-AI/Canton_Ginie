@@ -1,7 +1,7 @@
 import json
 import structlog
 from celery import Celery
-from datetime import datetime
+from datetime import datetime, timezone
 
 from config import get_settings
 
@@ -42,7 +42,7 @@ def generate_contract_task(self, job_id: str, user_input: str, canton_environmen
             "status":       "running",
             "current_step": step,
             "progress":     progress,
-            "updated_at":   datetime.utcnow().isoformat(),
+            "updated_at":   datetime.now(timezone.utc).isoformat(),
         }
         if extra:
             data.update(extra)
@@ -71,7 +71,7 @@ def generate_contract_task(self, job_id: str, user_input: str, canton_environmen
                 "generated_code":  final_state.get("generated_code"),
                 "structured_intent": final_state.get("structured_intent"),
                 "attempt_number":  final_state.get("attempt_number"),
-                "updated_at":      datetime.utcnow().isoformat(),
+                "updated_at":      datetime.now(timezone.utc).isoformat(),
             }
         else:
             result = {
@@ -82,7 +82,7 @@ def generate_contract_task(self, job_id: str, user_input: str, canton_environmen
                 "error_message": final_state.get("error_message", "Pipeline failed"),
                 "generated_code": final_state.get("generated_code", ""),
                 "compile_errors": final_state.get("compile_errors", []),
-                "updated_at":    datetime.utcnow().isoformat(),
+                "updated_at":    datetime.now(timezone.utc).isoformat(),
             }
 
         redis_client.set(job_key, json.dumps(result), ex=3600)
@@ -97,7 +97,7 @@ def generate_contract_task(self, job_id: str, user_input: str, canton_environmen
             "current_step":  "Internal error",
             "progress":      0,
             "error_message": str(e),
-            "updated_at":    datetime.utcnow().isoformat(),
+            "updated_at":    datetime.now(timezone.utc).isoformat(),
         }
         redis_client.set(job_key, json.dumps(error_data), ex=3600)
         raise

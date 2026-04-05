@@ -2,11 +2,13 @@ import structlog
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
 
 from api.routes import router
 from api.audit_routes import audit_router
 from api.auth_routes import auth_router as auth_api_router
 from api.ledger_routes import ledger_router
+from api.rate_limiter import limiter, rate_limit_exceeded_handler
 from config import get_settings
 
 logger = structlog.get_logger()
@@ -24,6 +26,37 @@ async def lifespan(app: FastAPI):
         logger.info("PostgreSQL database initialized")
     except Exception as e:
         logger.warning("PostgreSQL initialization deferred — jobs will use Redis/memory fallback", error=str(e))
+
+    # Validate Canton token for non-sandbox environments
+    if settings.canton_environment != "sandbox":
+        if not settings.canton_token:
+            logger.error(
+                "CANTON_TOKEN is required for non-sandbox environments",
+                environment=settings.canton_environment,
+            )
+            raise RuntimeError(
+                f"CANTON_TOKEN env var is required for {settings.canton_environment}. "
+                "Set it in backend/.env.ginie"
+            )
+        # Lightweight validation: try a /v1/parties call
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    f"{settings.get_canton_url()}/v1/parties",
+                    headers={"Authorization": f"Bearer {settings.canton_token}"},
+                )
+                if resp.status_code == 401:
+                    logger.error("CANTON_TOKEN is invalid (401 Unauthorized)")
+                    raise RuntimeError("CANTON_TOKEN is invalid — received 401 from Canton")
+                logger.info("Canton token validated", status=resp.status_code)
+        except httpx.ConnectError:
+            logger.warning("Canton not reachable at startup — token will be validated on first request",
+                          url=settings.get_canton_url())
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.warning("Canton token validation skipped", error=str(e))
 
     try:
         from rag.vector_store import get_vector_store
@@ -48,13 +81,21 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    settings = get_settings()
+    allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    logger.info("CORS allowed origins", origins=allowed_origins)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Rate limiter
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
     app.include_router(router, prefix="/api/v1", tags=["contracts"])
     app.include_router(auth_api_router, prefix="/api/v1", tags=["auth"])
