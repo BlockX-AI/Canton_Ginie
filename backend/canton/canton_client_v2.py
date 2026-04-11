@@ -1,5 +1,6 @@
 import base64
 import json
+import time
 import uuid
 from typing import Optional
 
@@ -26,12 +27,13 @@ def make_sandbox_jwt(act_as: list[str], read_as: list[str] | None = None) -> str
 
     header = _b64url(json.dumps({"alg": "none", "typ": "JWT"}, separators=(",", ":")))
     payload = _b64url(json.dumps({
+        "sub": "ginie-sandbox",
         "ledgerId": "sandbox",
         "applicationId": "ginie-daml",
         "actAs": act_as,
         "readAs": read_as or act_as,
         "admin": True,
-        "exp": 9999999999,
+        "exp": int(time.time()) + 3600,
     }, separators=(",", ":")))
 
     _log = structlog.get_logger()
@@ -121,11 +123,12 @@ class CantonClientV2:
             if response.status_code in (200, 201):
                 data = response.json()
                 result = data.get("result", data)
-                party_id = (
-                    result.get("identifier")
-                    or result.get("party")
-                    or f"{party_hint}::sandbox-{uuid.uuid4().hex[:8]}"
-                )
+                party_id = result.get("identifier") or result.get("party")
+                if not party_id:
+                    raise RuntimeError(
+                        f"Party allocation for '{party_hint}' succeeded (HTTP {response.status_code}) "
+                        "but Canton returned no identifier. Check Canton node logs."
+                    )
                 logger.info("Party allocated", hint=party_hint, party_id=party_id)
                 return True, party_id, ""
 

@@ -10,8 +10,11 @@ from daml.error_classifier import ErrorClassifier
 
 logger = structlog.get_logger()
 
-DAML_YAML_TEMPLATE = """sdk-version: 2.10.3
-name: {project_name}
+def _get_daml_yaml_template() -> str:
+    from config import get_settings
+    sdk_ver = get_settings().daml_sdk_version
+    return f"""sdk-version: {sdk_ver}
+name: {{project_name}}
 version: 0.0.1
 source: daml
 dependencies:
@@ -20,14 +23,21 @@ dependencies:
 """
 
 _SDK_INSTALL_INSTRUCTIONS = """
-Daml SDK is not installed or not on PATH.
-Install it with:
+Daml SDK (daml CLI) is not installed or not on PATH.
 
-    curl -sSL https://get.daml.com/ | sh
+Install via the Canton package manager (dpm):
+    npm install -g @digitalasset/dpm
+    dpm install daml-sdk
+
+Or download the Canton binary directly:
+    https://github.com/digital-asset/daml/releases
 
 Then either:
-  1. Add ~/.daml/bin to your PATH, OR
-  2. Set DAML_SDK_PATH=/path/to/daml in backend/.env
+  1. Add the SDK bin directory to your PATH, OR
+  2. Set DAML_SDK_PATH=/path/to/daml in backend/.env.ginie
+
+Start Canton sandbox with:
+    canton sandbox --config canton-sandbox-memory.conf
 
 After installing, restart the Ginie backend.
 """.strip()
@@ -324,7 +334,7 @@ def _create_project_dir(daml_code: str, job_id: str, base_dir: str,
             f.write(sanitized)
 
     # Write daml.yaml
-    yaml_content = daml_yaml if daml_yaml else DAML_YAML_TEMPLATE.format(project_name="ginie-project")
+    yaml_content = daml_yaml if daml_yaml else _get_daml_yaml_template().format(project_name="ginie-project")
     with open(os.path.join(project_dir, "daml.yaml"), "w") as f:
         f.write(yaml_content)
 
@@ -387,7 +397,13 @@ def _sanitize_daml_project_file(code: str, filepath: str) -> str:
 
 
 def _run_daml_build(project_dir: str, daml_sdk_path: str) -> dict:
-    env = {**os.environ, "DAML_PROJECT": project_dir}
+    java_home = os.environ.get("JAVA_HOME", "/opt/homebrew/opt/openjdk")
+    env = {
+        **os.environ,
+        "DAML_PROJECT": project_dir,
+        "JAVA_HOME": java_home,
+        "PATH": f"{java_home}/bin:{os.environ.get('PATH', '')}",
+    }
     cmd = [daml_sdk_path, "build", "--project-root", project_dir]
 
     logger.info("Spawning daml build", cmd=" ".join(cmd))

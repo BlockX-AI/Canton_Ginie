@@ -4,6 +4,7 @@ import uuid
 import zipfile
 import structlog
 import httpx
+from decimal import Decimal, ROUND_DOWN
 from typing import Optional
 
 from config import get_settings
@@ -14,24 +15,27 @@ logger = structlog.get_logger()
 _CANTON_NOT_RUNNING = """
 Canton node is not reachable at {url}.
 
-To start Canton Sandbox locally:
-    daml sandbox
+To start Canton Sandbox locally (in-memory):
+    canton sandbox --config canton-sandbox-memory.conf
 
-It starts on http://localhost:6865 by default.
+Or with PostgreSQL persistence:
+    canton sandbox --config canton-sandbox.conf
+
+The HTTP JSON API will be available on http://localhost:7575 once started.
 For DevNet/MainNet set CANTON_ENVIRONMENT and the matching URL in backend/.env.
 """.strip()
 
 
 def _auth_header(canton_environment: str, act_as: list[str] | None = None) -> dict:
     if canton_environment == "sandbox":
-        parties = act_as or ["issuer", "owner", "investor"]
+        parties = act_as or ["sandbox-admin"]
         token = make_sandbox_jwt(parties)
         return {"Authorization": f"Bearer {token}"}
-    token = os.environ.get("CANTON_TOKEN", "")
+    token = get_settings().canton_token
     if not token:
         raise EnvironmentError(
-            "CANTON_TOKEN env var is required for devnet/mainnet deployments. "
-            "Set it in backend/.env as CANTON_TOKEN=<your-token>"
+            "CANTON_TOKEN is required for devnet/mainnet deployments. "
+            "Set it in backend/.env.ginie as CANTON_TOKEN=<your-token>"
         )
     return {"Authorization": f"Bearer {token}"}
 
@@ -39,15 +43,11 @@ def _auth_header(canton_environment: str, act_as: list[str] | None = None) -> di
 def _check_canton_reachable(canton_url: str, canton_environment: str) -> None:
     try:
         with httpx.Client(timeout=5.0) as client:
-            resp = client.post(
-                f"{canton_url}/v1/query",
-                content=b'{"templateIds":[]}',
-                headers={**_auth_header(canton_environment), "Content-Type": "application/json"},
-            )
+            resp = client.get(f"{canton_url}/livez")
             if resp.status_code >= 500:
                 raise ConnectionError(
-                    f"Canton node returned {resp.status_code}. "
-                    f"Node may be starting up — wait a moment and retry."
+                    f"Canton node returned {resp.status_code} on /livez. "
+                    "Node may be starting up — wait a moment and retry."
                 )
     except (httpx.ConnectError, httpx.ConnectTimeout):
         raise ConnectionError(_CANTON_NOT_RUNNING.format(url=canton_url))
@@ -82,10 +82,17 @@ def _upload_dar(client: httpx.Client, canton_url: str, dar_bytes: bytes, auth: d
     return ""
 
 
+def _sanitize_identifier_hint(name: str) -> str:
+    sanitized = re.sub(r"[^a-zA-Z0-9-]", "-", name.lower())
+    sanitized = re.sub(r"-+", "-", sanitized).strip("-")
+    return sanitized or "party"
+
+
 def _allocate_party(client: httpx.Client, canton_url: str, display_name: str, auth: dict) -> str:
+    hint = _sanitize_identifier_hint(display_name)
     resp = client.post(
         f"{canton_url}/v1/parties/allocate",
-        json={"displayName": display_name, "identifierHint": display_name.lower()},
+        json={"displayName": display_name, "identifierHint": hint},
         headers={**auth, "Content-Type": "application/json"},
         timeout=15.0,
     )
@@ -119,10 +126,21 @@ def _create_contract(
     template_id: str,
     payload: dict,
     auth: dict,
+    acting_parties: list[str] | None = None,
 ) -> str:
+    command_id = f"ginie-deploy-{uuid.uuid4().hex[:16]}"
+    body: dict = {
+        "templateId": template_id,
+        "payload": payload,
+        "meta": {
+            "commandId": command_id,
+        },
+    }
+    if acting_parties:
+        body["meta"]["actAs"] = acting_parties
     resp = client.post(
         f"{canton_url}/v1/create",
-        json={"templateId": template_id, "payload": payload},
+        json=body,
         headers={**auth, "Content-Type": "application/json"},
         timeout=60.0,
     )
@@ -179,7 +197,7 @@ def run_deploy_agent(
         # Step 1: Extract package ID from DAR manifest (fallback)
         manifest_package_id = _extract_package_id_from_dar(dar_path)
 
-        with httpx.Client() as client:
+        with httpx.Client(timeout=httpx.Timeout(connect=10.0, read=180.0, write=60.0, pool=10.0)) as client:
             # Step 2: Upload DAR — use package ID from Canton response
             upload_package_id = _upload_dar(client, canton_url, dar_bytes, auth)
             package_id = upload_package_id or manifest_package_id
@@ -277,6 +295,7 @@ def run_deploy_agent(
                 template_id,
                 payload,
                 auth,
+                acting_parties=list(all_party_ids),
             )
             logger.info("Contract created", contract_id=contract_id)
 
@@ -288,11 +307,11 @@ def run_deploy_agent(
                 logger.warning("Contract verification failed, but contract was created", contract_id=contract_id)
 
         if canton_environment == "sandbox":
-            explorer_link = f"http://localhost:7575/contract/{contract_id}"
+            explorer_link = f"http://localhost:7575/v1/query#contractId={contract_id}"
         elif canton_environment == "devnet":
-            explorer_link = f"https://canton.network/explorer/contract/{contract_id}"
+            explorer_link = f"https://scan.sv.canton.network/#/transactions/{contract_id}"
         else:
-            explorer_link = f"https://main.canton.network/explorer/contract/{contract_id}"
+            explorer_link = f"https://scan.sv.canton.network/#/transactions/{contract_id}"
 
         return {
             "success":       True,
@@ -368,10 +387,6 @@ def _verify_contract(client: httpx.Client, canton_url: str, contract_id: str, te
     except Exception as e:
         logger.warning("Verification query failed", error=str(e))
         return False
-
-
-def _compute_package_id(dar_bytes: bytes) -> str:
-    pass  # replaced by _extract_package_id_from_dar
 
 
 def _extract_package_id_from_dar(dar_path: str) -> str:
@@ -519,13 +534,13 @@ def _build_payload(fields: list[dict], party_values: dict, daml_code: str = "", 
             else:
                 payload[name] = name
         elif ftype in ("Decimal", "Numeric") or ftype.startswith("Numeric "):
-            # Smart defaults: rate fields use 0-1 range, others use larger values
             numeric_counter += 1
             name_lower = name.lower()
             if "rate" in name_lower or "percent" in name_lower or "ratio" in name_lower:
-                payload[name] = f"{0.05 * numeric_counter}"
+                val = Decimal("0.05") * numeric_counter
             else:
-                payload[name] = f"{1000.0 * numeric_counter}"
+                val = Decimal("1000.00") * numeric_counter
+            payload[name] = str(val.quantize(Decimal("0.0000000000"), rounding=ROUND_DOWN))
         elif ftype == "Int" or ftype == "Int64":
             numeric_counter += 1
             payload[name] = max(1, numeric_counter)

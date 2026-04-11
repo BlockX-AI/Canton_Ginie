@@ -17,7 +17,7 @@ from config import get_settings
 
 logger = structlog.get_logger()
 
-MAX_FIX_ATTEMPTS = 3
+_COMPILED_PIPELINE: CompiledStateGraph | None = None
 
 FALLBACK_CONTRACT = """module Main where
 
@@ -42,6 +42,10 @@ template SimpleContract
 
 # Global registry for per-job status callbacks so nodes can push updates
 _status_callbacks: dict = {}
+
+
+def _max_fix_attempts() -> int:
+    return get_settings().max_fix_attempts
 
 
 def _push_status(state: dict, step: str, progress: int):
@@ -378,7 +382,7 @@ def audit_node(state: dict) -> dict:
             "enterprise_score": enterprise_score,
             "deploy_gate": deploy_gate,
             "audit_reports": audit_result.get("reports", {}),
-            "current_step": "Deploying to Canton..." if deploy_gate else "Security gate failed — deploying anyway...",
+            "current_step": "Running security audit..." if deploy_gate else "Security gate failed — deployment will be blocked",
             "progress": 85,
         }
 
@@ -396,6 +400,18 @@ def audit_node(state: dict) -> dict:
 
 def deploy_node(state: dict) -> dict:
     logger.info("Node: deploy", job_id=state.get("job_id"))
+
+    if state.get("deploy_gate") is False:
+        logger.warning("Security gate blocked deployment — contract NOT deployed", job_id=state.get("job_id"))
+        _push_status(state, "Deployment blocked by security audit gate", 90)
+        return {
+            **state,
+            "error_message":  "Security gate blocked deployment. Audit found critical vulnerabilities — fix them before deploying.",
+            "is_fatal_error": True,
+            "current_step":   "Blocked by security gate — not deployed",
+            "progress":       90,
+        }
+
     _push_status(state, "Deploying to Canton ledger...", 90)
 
     settings = get_settings()
@@ -477,8 +493,7 @@ def _route_after_compile(state: dict) -> Literal["audit", "fix", "fallback"]:
 
     attempt = state.get("attempt_number", 0)
 
-    # After MAX_FIX_ATTEMPTS: use fallback contract (never go to error)
-    if attempt >= MAX_FIX_ATTEMPTS:
+    if attempt >= _max_fix_attempts():
         return "fallback"
 
     return "fix"
@@ -503,7 +518,7 @@ def _route_after_generate(state: dict) -> Literal["compile", "error"]:
     return "compile"
 
 
-def build_pipeline() -> CompiledStateGraph:
+def _build_pipeline() -> CompiledStateGraph:
     graph = StateGraph(dict)
 
     graph.add_node("intent",           intent_node)
@@ -541,6 +556,13 @@ def build_pipeline() -> CompiledStateGraph:
     graph.add_edge("error",  END)
 
     return graph.compile()
+
+
+def build_pipeline() -> CompiledStateGraph:
+    global _COMPILED_PIPELINE
+    if _COMPILED_PIPELINE is None:
+        _COMPILED_PIPELINE = _build_pipeline()
+    return _COMPILED_PIPELINE
 
 
 def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbox", canton_url: str = "", status_callback=None, party_id: str = "") -> dict:
