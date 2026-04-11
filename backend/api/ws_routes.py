@@ -68,20 +68,24 @@ async def broadcast_status(job_id: str, data: dict):
                     _ws_clients[job_id].discard(ws)
 
 
+_main_event_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_main_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Store the main event loop reference at app startup for use by pipeline threads."""
+    global _main_event_loop
+    _main_event_loop = loop
+
+
 def push_status_sync(job_id: str, data: dict):
     """Thread-safe bridge: schedule broadcast_status onto the running event loop.
 
     Called from pipeline threads (sync context) to push updates to WS clients.
     """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.run_coroutine_threadsafe(broadcast_status(job_id, data), loop)
-        else:
-            # No running loop — skip (WS clients will poll fallback)
-            pass
-    except RuntimeError:
-        # No event loop in this thread — skip
+    loop = _main_event_loop
+    if loop is not None and loop.is_running():
+        asyncio.run_coroutine_threadsafe(broadcast_status(job_id, data), loop)
+    else:
         pass
 
 

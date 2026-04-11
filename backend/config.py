@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     canton_token: str = ""
 
     daml_sdk_path: str = os.path.expanduser("~/.daml/bin/daml")
+    daml_sdk_version: str = "2.10.3"
     dar_output_dir: str = "/tmp/ginie_jobs"
 
     chroma_persist_dir: str = "./rag/chroma_db"

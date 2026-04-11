@@ -72,9 +72,9 @@ async def _auth_header(act_as: list[str] | None = None) -> dict:
             parties = ["sandbox"]
         token = make_sandbox_jwt(parties)
         return {"Authorization": f"Bearer {token}"}
-    token = os.environ.get("CANTON_TOKEN", "")
+    token = get_settings().canton_token
     if not token:
-        raise HTTPException(status_code=500, detail="CANTON_TOKEN not set for non-sandbox environment")
+        raise HTTPException(status_code=500, detail="CANTON_TOKEN not set for non-sandbox environment. Set it in backend/.env.ginie")
     return {"Authorization": f"Bearer {token}"}
 
 

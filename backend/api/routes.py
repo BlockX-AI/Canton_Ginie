@@ -288,7 +288,7 @@ def _start_pipeline_job(job_id: str, user_input: str, canton_environment: str, c
 
 @router.post("/generate", response_model=GenerateResponse)
 @limiter.limit("5/minute")
-async def generate_contract(request: Request, body: GenerateRequest = Depends(), background_tasks: BackgroundTasks = BackgroundTasks(), user: dict | None = Depends(optional_auth)):
+async def generate_contract(request: Request, body: GenerateRequest, user: dict | None = Depends(optional_auth)):
     settings = get_settings()
     job_id = str(uuid.uuid4())
 
@@ -376,7 +376,7 @@ async def get_job_result(job_id: str):
 
 @router.post("/iterate/{job_id}", response_model=GenerateResponse)
 @limiter.limit("10/minute")
-async def iterate_contract(request: Request, job_id: str, body: IterateRequest = Depends(), background_tasks: BackgroundTasks = BackgroundTasks()):
+async def iterate_contract(request: Request, job_id: str, body: IterateRequest):
     original_data = _get_job(job_id) or _in_memory_jobs.get(job_id)
 
     if not original_data:

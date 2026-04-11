@@ -1,3 +1,5 @@
+import asyncio
+import os
 import structlog
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -66,8 +68,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("RAG initialization deferred", error=str(e))
 
-    import os
     os.makedirs(settings.dar_output_dir, exist_ok=True)
+
+    from api.ws_routes import set_main_event_loop
+    set_main_event_loop(asyncio.get_running_loop())
+    logger.info("Event loop stored for WebSocket thread bridge")
 
     yield
 
