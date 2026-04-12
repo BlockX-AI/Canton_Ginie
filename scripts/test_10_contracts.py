@@ -1,12 +1,3 @@
-"""
-Generate 10 diverse DAML contracts via the backend API and track results.
-
-Run from repo root:
-    python scripts/test_10_contracts.py
-
-Requires backend API running on http://127.0.0.1:8000
-"""
-
 import sys
 import os
 import time
