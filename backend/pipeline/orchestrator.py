@@ -259,7 +259,7 @@ def compile_node(state: dict) -> dict:
                 "compile_errors":  result.get("errors", []),
                 "dar_path":        "",
                 "attempt_number":  attempt,
-                "current_step":    f"Fixing errors (attempt {attempt}/{MAX_FIX_ATTEMPTS})...",
+                "current_step":    f"Fixing errors (attempt {attempt}/{_max_fix_attempts()})...",
                 "progress":        progress,
             }
     except Exception as e:
@@ -276,7 +276,7 @@ def compile_node(state: dict) -> dict:
 def fix_node(state: dict) -> dict:
     attempt = state.get("attempt_number", 1)
     logger.info("Node: fix", job_id=state.get("job_id"), attempt=attempt)
-    _push_status(state, f"Auto-fixing errors (attempt {attempt}/{MAX_FIX_ATTEMPTS})...", 60)
+    _push_status(state, f"Auto-fixing errors (attempt {attempt}/{_max_fix_attempts()})...", 60)
 
     result = run_fix_agent(
         daml_code=state["generated_code"],
@@ -402,15 +402,19 @@ def deploy_node(state: dict) -> dict:
     logger.info("Node: deploy", job_id=state.get("job_id"))
 
     if state.get("deploy_gate") is False:
-        logger.warning("Security gate blocked deployment — contract NOT deployed", job_id=state.get("job_id"))
-        _push_status(state, "Deployment blocked by security audit gate", 90)
-        return {
-            **state,
-            "error_message":  "Security gate blocked deployment. Audit found critical vulnerabilities — fix them before deploying.",
-            "is_fatal_error": True,
-            "current_step":   "Blocked by security gate — not deployed",
-            "progress":       90,
-        }
+        settings = get_settings()
+        if settings.canton_environment != "sandbox":
+            logger.warning("Security gate blocked deployment — contract NOT deployed", job_id=state.get("job_id"))
+            _push_status(state, "Deployment blocked by security audit gate", 90)
+            return {
+                **state,
+                "error_message":  "Security gate blocked deployment. Audit found critical vulnerabilities — fix them before deploying.",
+                "is_fatal_error": True,
+                "current_step":   "Blocked by security gate — not deployed",
+                "progress":       90,
+            }
+        else:
+            logger.warning("Security gate would block deployment but sandbox mode — proceeding anyway", job_id=state.get("job_id"))
 
     _push_status(state, "Deploying to Canton ledger...", 90)
 

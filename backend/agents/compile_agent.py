@@ -398,11 +398,13 @@ def _sanitize_daml_project_file(code: str, filepath: str) -> str:
 
 def _run_daml_build(project_dir: str, daml_sdk_path: str) -> dict:
     java_home = os.environ.get("JAVA_HOME", "/opt/homebrew/opt/openjdk")
+    daml_bin_dir = os.path.dirname(daml_sdk_path)
+    path_sep = ";" if os.name == "nt" else ":"
     env = {
         **os.environ,
         "DAML_PROJECT": project_dir,
         "JAVA_HOME": java_home,
-        "PATH": f"{java_home}/bin:{os.environ.get('PATH', '')}",
+        "PATH": f"{daml_bin_dir}{path_sep}{java_home}/bin{path_sep}{os.environ.get('PATH', '')}",
     }
     cmd = [daml_sdk_path, "build", "--project-root", project_dir]
 
@@ -421,6 +423,7 @@ def _run_daml_build(project_dir: str, daml_sdk_path: str) -> dict:
             code=proc.returncode,
             stdout_len=len(proc.stdout),
             stderr_len=len(proc.stderr),
+            stderr=proc.stderr[:500] if proc.returncode != 0 else "",
         )
         return {
             "success": proc.returncode == 0,

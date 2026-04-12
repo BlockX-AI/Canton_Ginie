@@ -10,7 +10,7 @@ Endpoints:
 """
 
 import structlog
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Body
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -86,7 +86,7 @@ async def create_challenge(request: Request):
 
 @auth_router.post("/verify", response_model=VerifyResponse)
 @limiter.limit("10/minute")
-async def verify_challenge(request: Request, body: VerifyRequest = Depends()):
+async def verify_challenge(request: Request, body: VerifyRequest = Body()):
     """Verify an Ed25519 signature against the challenge.
 
     This ONLY verifies the signature — it does NOT register a party or issue a JWT.
@@ -103,7 +103,7 @@ async def verify_challenge(request: Request, body: VerifyRequest = Depends()):
 
 @auth_router.post("/register", response_model=RegisterResponse)
 @limiter.limit("10/minute")
-async def register_and_authenticate(request: Request, body: RegisterRequest = Depends()):
+async def register_and_authenticate(request: Request, body: RegisterRequest = Body()):
     """Register a party on Canton and issue a JWT.
 
     The client should call /auth/verify first to confirm their key works,
