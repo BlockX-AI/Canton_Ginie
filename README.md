@@ -106,7 +106,7 @@ Typical run: ~35 seconds from prompt to deployed contract.
 - **LLM**: Claude (primary), GPT-4o, Gemini 2.0
 - **RAG**: ChromaDB with curated Daml examples
 - **Compilation**: Daml SDK 2.10.4
-- **Frontend**: Next.js 15, TailwindCSS
+- **Frontend**: Next.js 16, TailwindCSS
 - **Ledger**: Canton HTTP JSON API
 
 ---
@@ -144,7 +144,7 @@ python -m api.main
 
 ### 3. Frontend
 ```bash
-cd frontend
+cd frontend_dark
 npm install
 npm run dev
 ```

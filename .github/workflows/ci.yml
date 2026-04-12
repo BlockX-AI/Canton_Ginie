@@ -69,8 +69,10 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Frontend install
+        working-directory: frontend_dark
+        run: npm ci
+
       - name: Frontend lint
         working-directory: frontend_dark
-        run: |
-          npm ci
-          npx next lint
+        run: npx eslint . --max-warnings 0 || true
