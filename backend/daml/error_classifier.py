@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[mGKHF]")

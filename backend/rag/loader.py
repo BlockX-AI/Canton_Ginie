@@ -1,10 +1,7 @@
 import os
 import re
-import json
-import glob
 import structlog
 from pathlib import Path
-from typing import Optional
 
 logger = structlog.get_logger()
 
@@ -249,7 +246,7 @@ def _chunk_daml_file(content: str, file_name: str) -> list[dict]:
     chunks.append({"type": "full_file", "content": content})
 
     # 2) Import block chunk
-    import_lines = [l for l in content.split("\n") if l.strip().startswith("import ")]
+    import_lines = [line for line in content.split("\n") if line.strip().startswith("import ")]
     if import_lines:
         chunks.append({"type": "imports", "content": "\n".join(import_lines)})
 
@@ -290,7 +287,6 @@ def _extract_template_blocks(content: str) -> list[dict]:
         if re.match(r"^template\s+\w+", line):
             tpl_name = stripped.replace("template ", "").strip()
             tpl_lines = [line]
-            tpl_indent = len(line) - len(line.lstrip())
             i += 1
 
             # Collect all lines belonging to this template
@@ -340,7 +336,6 @@ def _extract_choices_from_block(template_content: str) -> list[dict]:
     i = 0
 
     while i < len(lines):
-        stripped = lines[i].strip()
         # Match choice definitions (including nonconsuming/preconsuming variants)
         choice_match = re.match(
             r"^\s+(?:nonconsuming\s+|preconsuming\s+|postconsuming\s+)?choice\s+(\w+)",

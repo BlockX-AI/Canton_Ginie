@@ -1,7 +1,6 @@
 import json
 import structlog
 
-from config import get_settings
 from utils.llm_client import call_llm
 
 logger = structlog.get_logger()

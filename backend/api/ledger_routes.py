@@ -5,15 +5,13 @@ Provides endpoints for verifying deployed contracts and inspecting ledger state,
 similar to Daml Navigator but native to the Ginie platform.
 """
 
-import os
 import json as _json
 import pathlib as _pathlib
 import tempfile
 import structlog
 import httpx
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from config import get_settings
 from canton.canton_client_v2 import make_sandbox_jwt

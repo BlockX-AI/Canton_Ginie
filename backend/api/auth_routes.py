@@ -17,9 +17,9 @@ from typing import Optional
 from api.rate_limiter import limiter
 
 from auth.crypto import generate_challenge, verify_signature, compute_fingerprint
-from auth.jwt_manager import create_user_jwt, refresh_user_jwt, create_canton_jwt
+from auth.jwt_manager import create_user_jwt
 from auth.party_manager import register_party, get_party, list_parties
-from api.middleware import get_current_user, optional_auth, blocklist_token, _extract_token
+from api.middleware import get_current_user, blocklist_token
 from config import get_settings
 
 logger = structlog.get_logger()
@@ -156,7 +156,6 @@ async def get_me(user: dict = Depends(get_current_user)):
 @auth_router.post("/refresh")
 async def refresh_token(user: dict = Depends(get_current_user)):
     """Refresh the JWT — extend expiry without re-authentication."""
-    from fastapi import Request
     # We need the raw token to refresh it
     try:
         new_token = create_user_jwt(

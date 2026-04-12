@@ -8,7 +8,6 @@ Two JWT types:
 import jwt
 import structlog
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
 from config import get_settings
 

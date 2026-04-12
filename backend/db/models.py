@@ -9,7 +9,7 @@ Tables:
 
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, Integer, Text, Boolean, DateTime, ForeignKey, Index, JSON,
+    Column, Integer, Text, DateTime, ForeignKey, Index, JSON,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 

@@ -8,7 +8,6 @@ then tests concurrent load and API stability.
 import sys
 import os
 import time
-import json
 import threading
 import traceback
 from datetime import datetime
@@ -19,9 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import get_settings
 from pipeline.orchestrator import run_pipeline, FALLBACK_CONTRACT
-from agents.compile_agent import run_compile_agent, _sanitize_daml, _ensure_module_header
-from agents.fix_agent import run_fix_agent
-from agents.deploy_agent import _check_canton_reachable, _extract_package_id_from_dar
+from agents.compile_agent import run_compile_agent, _sanitize_daml
+from agents.deploy_agent import _check_canton_reachable
 from utils.llm_client import check_llm_available
 
 # ──────────────────────────────────────────────
@@ -105,11 +103,11 @@ def test_fallback_compilation():
     banner("FALLBACK CONTRACT COMPILATION TEST")
     result = run_compile_agent(FALLBACK_CONTRACT, "test-fallback")
     if result["success"]:
-        print(f"  ✅ Fallback contract compiles successfully")
+        print("  ✅ Fallback contract compiles successfully")
         print(f"     DAR: {result['dar_path']}")
         return True
     else:
-        print(f"  ❌ Fallback contract FAILED to compile!")
+        print("  ❌ Fallback contract FAILED to compile!")
         print(f"     Errors: {result.get('errors', [])}")
         return False
 
@@ -288,7 +286,6 @@ def security_audit():
 
     # 1. Shell injection check — sandbox uses create_subprocess_shell
     print("  Checking sandbox command execution...")
-    from sandbox.daml_sandbox import Commands
     # The Commands class runs in a restricted cwd
     print("  ⚠  Commands.run() uses create_subprocess_shell — CWD is restricted to sandbox_dir")
     print("     Mitigation: job_id is UUID (no user input in commands)")
@@ -298,7 +295,7 @@ def security_audit():
     sb = DamlSandbox("test-security", "test")
     base = Path(sb.sandbox_dir)
     print(f"  ✅ Sandbox base dir: {base}")
-    print(f"     Files._full_path joins to sandbox_dir — no traversal without ..")
+    print("     Files._full_path joins to sandbox_dir — no traversal without ..")
 
     # 3. Path traversal test
     from sandbox.daml_sandbox import Files
@@ -319,7 +316,6 @@ def security_audit():
     print("     Prompts are sent as LLM user_message, not executed")
 
     # 5. Env vars not exposed
-    from api.routes import router
     print("  ✅ API endpoints do not expose environment variables")
     print("     /health returns only SDK version, redis status, RAG status")
 

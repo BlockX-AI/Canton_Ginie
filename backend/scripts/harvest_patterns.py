@@ -11,15 +11,13 @@ Each file that passes the compile-gate is kept; failures go to quarantine/.
 import argparse
 import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 

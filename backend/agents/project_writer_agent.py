@@ -17,8 +17,6 @@ from __future__ import annotations
 import re
 import structlog
 
-from config import get_settings
-from rag.vector_store import search_daml_patterns, search_signatures
 from security.generation_rules import format_rules_for_prompt
 from utils.llm_client import call_llm
 

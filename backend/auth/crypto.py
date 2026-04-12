@@ -7,7 +7,6 @@ Functions:
 """
 
 import os
-import json
 import structlog
 import redis as redis_lib
 from nacl.signing import VerifyKey

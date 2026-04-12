@@ -8,20 +8,13 @@ POST /api/compliance/byJob    — Run compliance on a completed job's code
 GET  /api/audit/report/{job}  — Get audit reports (json/md/html) for a job
 """
 
-import json
 import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from security.audit_agent import run_security_audit
 from security.compliance_engine import run_compliance_analysis, VALID_PROFILES
 from security.hybrid_auditor import run_hybrid_audit
-from security.report_generator import (
-    generate_json_report,
-    generate_markdown_report,
-    generate_html_report,
-)
 
 logger = structlog.get_logger()
 audit_router = APIRouter()

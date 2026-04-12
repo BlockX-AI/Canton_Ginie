@@ -3,7 +3,7 @@ import json
 import threading
 import structlog
 import redis
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request
 from datetime import datetime, timezone
 
 from api.rate_limiter import limiter
@@ -521,7 +521,7 @@ async def init_rag():
     settings = get_settings()
 
     try:
-        store = build_vector_store(persist_dir=settings.chroma_persist_dir, force_rebuild=True)
+        build_vector_store(persist_dir=settings.chroma_persist_dir, force_rebuild=True)
         stats = get_store_stats(persist_dir=settings.chroma_persist_dir)
         return {
             "status": "ok",

@@ -16,7 +16,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 import structlog
@@ -266,7 +265,6 @@ def generate_synthetic_patterns(
             )
 
             # Try up to 2 times per pattern
-            success = False
             for attempt in range(2):
                 try:
                     raw = call_llm(
@@ -287,7 +285,6 @@ def generate_synthetic_patterns(
                         stats["compiled"] += 1
                         cat_generated += 1
                         total_generated += 1
-                        success = True
                         logger.info("Generated pattern", name=spec["name"], category=category)
                         break
                     else:

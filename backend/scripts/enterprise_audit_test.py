@@ -29,13 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import get_settings
 from pipeline.orchestrator import run_pipeline, FALLBACK_CONTRACT
-from agents.compile_agent import run_compile_agent
 from agents.deploy_agent import _check_canton_reachable
 from utils.llm_client import check_llm_available
-from security.audit_agent import run_security_audit, _compute_security_score
+from security.audit_agent import _compute_security_score
 from security.compliance_engine import run_compliance_analysis, VALID_PROFILES
-from security.hybrid_auditor import run_hybrid_audit
-from security.report_generator import generate_json_report, generate_markdown_report, generate_html_report
 
 # ──────────────────────────────────────────────
 # Test prompts — 20 diverse contract types
@@ -125,10 +122,10 @@ def step1_verify_services():
 
     # 5. Security module imports
     try:
-        from security.hybrid_auditor import run_hybrid_audit
-        from security.audit_agent import run_security_audit
-        from security.compliance_engine import run_compliance_analysis
-        from security.report_generator import generate_json_report
+        from security.hybrid_auditor import run_hybrid_audit  # noqa: F401
+        from security.audit_agent import run_security_audit  # noqa: F401
+        from security.compliance_engine import run_compliance_analysis  # noqa: F401
+        from security.report_generator import generate_json_report  # noqa: F401
         log("✅ Security modules imported successfully")
     except ImportError as e:
         log(f"❌ Security module import failed: {e}")
@@ -187,7 +184,7 @@ def step2_3_e2e_tests(count: int = 20):
             if security_score is not None:
                 log(f"     security={security_score}/100  compliance={compliance_score}/100  enterprise={enterprise_score}  gate={deploy_gate}")
             else:
-                log(f"     ⚠ No audit scores returned")
+                log("     ⚠ No audit scores returned")
             if error:
                 log(f"     error: {error[:80]}")
 
@@ -298,7 +295,7 @@ def step4_audit_validation(e2e_results):
         log(f"✅ Scoring formula verified for {formula_tested} jobs (100 - 25*CRIT - 15*HIGH - 7*MED - 3*LOW)")
         checks_passed += 1
     elif formula_tested > 0:
-        log(f"❌ Scoring formula mismatch detected")
+        log("❌ Scoring formula mismatch detected")
     else:
         log("⚠ No audit reports to verify scoring formula")
         checks_passed += 1  # not a failure, just no data
@@ -335,7 +332,7 @@ def step4_audit_validation(e2e_results):
         log(f"✅ Remediation roadmap present in {roadmap_count} jobs")
         checks_passed += 1
     else:
-        log(f"⚠ No remediation roadmaps found (may be expected for clean contracts)")
+        log("⚠ No remediation roadmaps found (may be expected for clean contracts)")
         checks_passed += 1  # not a hard failure
 
     section_summary("Audit Validation", checks_passed, checks_total)
@@ -366,7 +363,7 @@ def step5_compliance_validation(e2e_results):
         log(f"✅ All compliance scores in valid range: min={min(c_scores)}, max={max(c_scores)}, avg={sum(c_scores)/len(c_scores):.1f}")
         checks_passed += 1
     elif c_scores:
-        log(f"❌ Some compliance scores out of range")
+        log("❌ Some compliance scores out of range")
     else:
         log("⚠ No compliance scores to validate")
 
@@ -455,7 +452,7 @@ def step6_deployment_validation(e2e_results):
     checks_total += 1
     with_cid = [r for r in deployed if r.get("contract_id")]
     if len(with_cid) == len(deployed):
-        log(f"✅ All deployed contracts have contract_id")
+        log("✅ All deployed contracts have contract_id")
         checks_passed += 1
     else:
         log(f"❌ Missing contract_id: {len(deployed) - len(with_cid)} jobs")
@@ -464,7 +461,7 @@ def step6_deployment_validation(e2e_results):
     checks_total += 1
     with_pid = [r for r in deployed if r.get("package_id")]
     if len(with_pid) == len(deployed):
-        log(f"✅ All deployed contracts have package_id")
+        log("✅ All deployed contracts have package_id")
         checks_passed += 1
     else:
         log(f"⚠ Missing package_id: {len(deployed) - len(with_pid)} jobs")
@@ -529,10 +526,6 @@ def step7_frontend_compatibility(e2e_results):
     checks_total = 0
 
     # The frontend expects these fields in the result JSON
-    required_fields = [
-        "security_score", "compliance_score", "enterprise_score",
-        "deploy_gate", "audit_reports",
-    ]
 
     # Check 1: Result shape has audit fields
     checks_total += 1
@@ -594,7 +587,7 @@ def step7_frontend_compatibility(e2e_results):
     for r in e2e_results:
         ss = r.get("security_score")
         cs = r.get("compliance_score")
-        es = r.get("enterprise_score")
+        r.get("enterprise_score")
         if isinstance(ss, (int, float)) and isinstance(cs, (int, float)):
             ring_ok += 1
     if ring_ok > 0:
@@ -603,7 +596,7 @@ def step7_frontend_compatibility(e2e_results):
     else:
         log("❌ No numeric score data for frontend rings")
 
-    log(f"\n  Frontend URL template: http://localhost:3000/sandbox/{{job_id}}")
+    log("\n  Frontend URL template: http://localhost:3000/sandbox/{job_id}")
     if e2e_results and e2e_results[0].get("success"):
         log(f"  Test URL: http://localhost:3000/sandbox/{e2e_results[0].get('contract_id', 'N/A')[:20]}...")
 

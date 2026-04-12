@@ -15,12 +15,7 @@ Runs all 10 audit steps:
 """
 
 import os
-import sys
-import json
 import time
-import uuid
-import textwrap
-import concurrent.futures
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -344,7 +339,7 @@ def step4_compliance_validation(pipeline_results: list[dict]) -> dict:
             data = r.json()
             score = data.get("compliance_score")
             has_report = bool(data.get("compliance_report"))
-            has_summary = bool(data.get("executive_summary"))
+            bool(data.get("executive_summary"))
             success = data.get("success")
 
             report = data.get("compliance_report") or {}
@@ -398,7 +393,7 @@ def step5_deployment_validation(pipeline_results: list[dict]) -> dict:
         label = entry["label"]
         cid = entry["contract_id"]
         pid = entry.get("package_id", "")
-        tid = entry.get("template_id", "")
+        entry.get("template_id", "")
 
         # Verify via ledger explorer verify endpoint
         try:
@@ -450,7 +445,7 @@ def step6_explorer_validation(pipeline_results: list[dict]) -> dict:
             exp_stats["issues"].append(f"Missing contracts in explorer: {len(missing)}")
             log(f"    MISMATCH: {len(missing)} deployed contracts not visible in explorer")
         else:
-            log(f"    Cross-check: All deployed contracts visible in explorer")
+            log("    Cross-check: All deployed contracts visible in explorer")
 
         # Validate payload structure
         for c in contracts[:3]:
@@ -476,9 +471,9 @@ def step6_explorer_validation(pipeline_results: list[dict]) -> dict:
         identifiers = [p["identifier"] for p in parties]
         if len(identifiers) != len(set(identifiers)):
             exp_stats["issues"].append("Duplicate party identifiers found")
-            log(f"    WARNING: Duplicate parties detected")
+            log("    WARNING: Duplicate parties detected")
         else:
-            log(f"    No duplicates detected")
+            log("    No duplicates detected")
 
         for p in parties:
             log(f"    - {p.get('displayName', 'unnamed')}: {p['identifier'][:40]}...")
@@ -503,7 +498,7 @@ def step6_explorer_validation(pipeline_results: list[dict]) -> dict:
             exp_stats["issues"].append(f"Missing packages: {len(missing_pkgs)}")
             log(f"    MISMATCH: {len(missing_pkgs)} deployed packages not in explorer")
         else:
-            log(f"    Cross-check: All deployed packages present")
+            log("    Cross-check: All deployed packages present")
 
     except Exception as e:
         exp_stats["issues"].append(f"Packages tab error: {e}")
@@ -569,14 +564,14 @@ def step7_frontend_validation() -> dict:
 
     # API docs
     try:
-        r = httpx.get(f"http://localhost:8000/docs", timeout=10.0)
+        r = httpx.get("http://localhost:8000/docs", timeout=10.0)
         ux_checks["api_docs"] = r.status_code == 200
         log(f"  API docs:       {'OK' if r.status_code == 200 else 'FAIL'} (HTTP {r.status_code})")
     except Exception as e:
         ux_checks["api_docs"] = False
         log(f"  API docs:       FAIL — {e}")
 
-    log(f"\n  Note: Visual UX (score rings, pipeline steps, copy buttons, deploy gate badge)")
+    log("\n  Note: Visual UX (score rings, pipeline steps, copy buttons, deploy gate badge)")
     log(f"        require manual browser verification at {FRONTEND}")
 
     return ux_checks
@@ -670,7 +665,7 @@ def step9_failure_testing() -> dict:
         r = api("POST", "/generate", json={"prompt": ""})
         if r.status_code == 422:
             fail_stats["passed"] += 1
-            log(f"  Empty prompt:       PASS (422 validation error as expected)")
+            log("  Empty prompt:       PASS (422 validation error as expected)")
         else:
             fail_stats["issues"].append(f"Empty prompt returned HTTP {r.status_code} instead of 422")
             log(f"  Empty prompt:       FAIL (expected 422, got {r.status_code})")
@@ -683,7 +678,7 @@ def step9_failure_testing() -> dict:
         r = api("POST", "/generate", json={"prompt": "hi"})
         if r.status_code == 422:
             fail_stats["passed"] += 1
-            log(f"  Short prompt:       PASS (422 validation error as expected)")
+            log("  Short prompt:       PASS (422 validation error as expected)")
         else:
             fail_stats["issues"].append(f"Short prompt returned HTTP {r.status_code} instead of 422")
             log(f"  Short prompt:       FAIL (expected 422, got {r.status_code})")
@@ -696,7 +691,7 @@ def step9_failure_testing() -> dict:
         r = api("GET", "/status/nonexistent-job-id")
         if r.status_code == 404:
             fail_stats["passed"] += 1
-            log(f"  Invalid job ID:     PASS (404 as expected)")
+            log("  Invalid job ID:     PASS (404 as expected)")
         else:
             fail_stats["issues"].append(f"Invalid job ID returned HTTP {r.status_code}")
             log(f"  Invalid job ID:     FAIL (expected 404, got {r.status_code})")
@@ -714,7 +709,7 @@ def step9_failure_testing() -> dict:
                 fail_stats["passed"] += 1
                 log(f"  Invalid DAML audit: PASS (returned result with score={data.get('security_score')})")
             else:
-                log(f"  Invalid DAML audit: PARTIAL")
+                log("  Invalid DAML audit: PARTIAL")
         else:
             log(f"  Invalid DAML audit: HTTP {r.status_code}")
     except Exception as e:
@@ -739,10 +734,10 @@ def step9_failure_testing() -> dict:
         data = r.json()
         if data.get("verified") is False:
             fail_stats["passed"] += 1
-            log(f"  Fake contract ID:   PASS (verified=false as expected)")
+            log("  Fake contract ID:   PASS (verified=false as expected)")
         else:
             fail_stats["issues"].append("Fake contract ID returned verified=true")
-            log(f"  Fake contract ID:   FAIL (should be verified=false)")
+            log("  Fake contract ID:   FAIL (should be verified=false)")
     except Exception as e:
         log(f"  Fake contract ID:   ERROR — {e}")
 

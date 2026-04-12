@@ -5,7 +5,6 @@ persistent and tied to a user's Ed25519 key identity.
 """
 
 import structlog
-from datetime import datetime, timezone
 from typing import Optional
 
 from config import get_settings

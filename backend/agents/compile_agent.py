@@ -270,7 +270,6 @@ def _fix_choice_ordering(code: str) -> str:
         cm = controller_re.match(line)
         if cm:
             indent = cm.group(1)
-            rest   = cm.group(2)
             j = i + 1
             if j < len(lines) and with_block_re.match(lines[j]):
                 with_lines = [lines[j]]

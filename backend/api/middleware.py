@@ -8,7 +8,7 @@ Provides two dependency functions:
 import structlog
 import redis as redis_lib
 from typing import Optional
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
 from config import get_settings
 from auth.jwt_manager import verify_user_jwt

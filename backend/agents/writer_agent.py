@@ -1,7 +1,6 @@
 import re
 import structlog
 
-from config import get_settings
 from rag.vector_store import search_daml_patterns, search_signatures
 from security.generation_rules import format_rules_for_prompt
 from utils.llm_client import call_llm
@@ -94,8 +93,6 @@ template {template_name}
 
 
 def run_writer_agent(structured_intent: dict, rag_context: list[str] = None) -> dict:
-    settings = get_settings()
-
     parties = structured_intent.get("parties", ["issuer", "investor"])
     features = structured_intent.get("features", [])
     templates = structured_intent.get("daml_templates_needed", ["Main"])

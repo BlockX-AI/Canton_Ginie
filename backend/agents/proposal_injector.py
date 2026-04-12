@@ -42,7 +42,8 @@ def inject_proposal_pattern(
         logger.warning("Could not extract fields from core code, skipping proposal injection")
         return core_code
 
-    module_name = _extract_module_name(core_code) or "Main"
+    if "proposal" in core_code.lower():
+        return core_code
 
     # Build the proposal template
     proposal_name = f"{template_name}Proposal"

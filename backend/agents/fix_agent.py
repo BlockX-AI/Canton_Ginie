@@ -1,7 +1,6 @@
 import re
 import structlog
 
-from config import get_settings
 from utils.llm_client import call_llm
 
 logger = structlog.get_logger()
@@ -88,10 +87,8 @@ def run_fix_agent(daml_code: str, compile_errors: list[dict], attempt_number: in
 
 def _apply_targeted_fixes(code: str, errors: list[dict]) -> str:
     """Apply all targeted fixes synchronously. Returns modified code."""
-    original = code
     for error in errors[:10]:
         error_type = error.get("type", error.get("error_type", "unknown"))
-        msg = error.get("message", "")
 
         if error_type == "multiple_declaration":
             code = _fix_multiple_declaration_sync(code, error)
@@ -282,7 +279,6 @@ def _fix_type_mismatch_sync(code: str, error: dict) -> str:
 
 def _fix_parse_error_sync(code: str, error: dict) -> str:
     """Fix common parse errors from LLM output."""
-    original = code
     code = code.replace("\t", "  ")
     code = re.sub(r"^```(?:daml|haskell)?\s*$", "", code, flags=re.MULTILINE)
     code = code.replace("```", "")
