@@ -61,12 +61,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Canton token validation skipped", error=str(e))
 
-    try:
-        from rag.vector_store import get_vector_store
-        get_vector_store(persist_dir=settings.chroma_persist_dir)
-        logger.info("RAG vector store initialized")
-    except Exception as e:
-        logger.warning("RAG initialization deferred", error=str(e))
+    # Skip RAG initialization on startup if SKIP_RAG_INIT is set (for faster Railway deployment)
+    if not os.getenv("SKIP_RAG_INIT"):
+        try:
+            from rag.vector_store import get_vector_store
+            get_vector_store(persist_dir=settings.chroma_persist_dir)
+            logger.info("RAG vector store initialized")
+        except Exception as e:
+            logger.warning("RAG initialization deferred", error=str(e))
+    else:
+        logger.info("RAG initialization skipped (SKIP_RAG_INIT=true), will initialize on first use")
 
     os.makedirs(settings.dar_output_dir, exist_ok=True)
 

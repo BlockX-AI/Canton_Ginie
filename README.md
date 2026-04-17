@@ -33,34 +33,31 @@ Canton is the settlement layer for institutional finance — repo agreements, to
 
 Eight-stage pipeline: intent parsing, RAG retrieval, code generation, compilation, error fixing, security audit, diagram generation, and deployment.
 
-```
-English Description
-        │
-        ▼
-   Intent Agent        Parse to structured JSON spec
-        │
-        ▼
-   RAG Retrieval       Match against 500+ Daml examples (ChromaDB)
-        │
-        ▼
-   Writer Agent        Generate complete Daml module
-        │
-        ▼
-   Compile Agent       Run `daml build`, capture errors
-        │
-        ├── [errors?] ──► Fix Agent (retry up to 3x)
-        │
-        ▼
-   Security Audit      Hybrid LLM + static analysis
-        │
-        ▼
-   Deploy Gate         Block if critical vulnerabilities found
-        │
-        ▼
-   Deploy Agent        DAR upload, party allocation, contract creation
-        │
-        ▼
-   contract_id + package_id + audit scores
+```mermaid
+graph TB
+    Start([English Description]) --> Intent[Intent Agent<br/>Parse to JSON spec]
+    Intent --> RAG[RAG Retrieval<br/>Match 500+ examples]
+    RAG --> Writer[Writer Agent<br/>Generate Daml code]
+    Writer --> Compile[Compile Agent<br/>daml build]
+    
+    Compile -->|Success| Audit[Security Audit<br/>Hybrid LLM + static]
+    Compile -->|Errors| Fix{Fix Agent<br/>Attempt < 3?}
+    Fix -->|Yes| Writer
+    Fix -->|No| Fallback[Use Fallback<br/>Template]
+    Fallback --> Audit
+    
+    Audit --> Gate{Deploy Gate<br/>Critical issues?}
+    Gate -->|Pass| Deploy[Deploy Agent<br/>DAR upload + Canton]
+    Gate -->|Fail<br/>Production| Block[❌ Blocked]
+    Gate -->|Fail<br/>Sandbox| Deploy
+    
+    Deploy --> Result([✅ Contract ID<br/>Package ID<br/>Audit Scores])
+    
+    style Start fill:#e1f5ff
+    style Result fill:#d4edda
+    style Block fill:#f8d7da
+    style Gate fill:#fff3cd
+    style Fix fill:#fff3cd
 ```
 
 ### Security Layer
@@ -71,6 +68,61 @@ Contracts pass through a hybrid auditor before deployment:
 - Compliance checks against NIST 800-53, SOC 2, ISO 27001, and Canton-specific standards
 
 The deploy gate blocks contracts with critical vulnerabilities. Lower-severity findings are reported but don't block.
+
+### System Architecture
+
+```mermaid
+graph LR
+    subgraph Frontend
+        UI[Next.js UI<br/>React 19]
+    end
+    
+    subgraph Backend
+        API[FastAPI<br/>REST API]
+        Pipeline[LangGraph<br/>Orchestrator]
+        RAG[(ChromaDB<br/>Vector Store)]
+        Redis[(Redis<br/>Job Queue)]
+    end
+    
+    subgraph Agents
+        Intent[Intent Agent]
+        Writer[Writer Agent]
+        Compile[Compile Agent]
+        Fix[Fix Agent]
+        Audit[Security Audit]
+        Deploy[Deploy Agent]
+    end
+    
+    subgraph External
+        LLM[LLM Providers<br/>Claude/GPT-4o/Gemini]
+        Canton[Canton Network<br/>JSON API]
+        DamlSDK[Daml SDK<br/>Compiler]
+    end
+    
+    UI -->|HTTP/WebSocket| API
+    API --> Pipeline
+    Pipeline --> Intent
+    Pipeline --> Writer
+    Pipeline --> Compile
+    Pipeline --> Fix
+    Pipeline --> Audit
+    Pipeline --> Deploy
+    
+    Intent -.->|Prompts| LLM
+    Writer -.->|Code Gen| LLM
+    Writer -.->|Retrieval| RAG
+    Audit -.->|Analysis| LLM
+    Compile -.->|Build| DamlSDK
+    Deploy -.->|DAR Upload| Canton
+    
+    API -.->|Queue| Redis
+    
+    style UI fill:#e1f5ff
+    style API fill:#fff3cd
+    style Pipeline fill:#d4edda
+    style Canton fill:#f8d7da
+    style LLM fill:#e7d4f5
+```
 
 ---
 
@@ -239,6 +291,34 @@ curl -X POST http://localhost:8000/api/v1/generate \
 | `mainnet` | Production Global Synchronizer | Canton Network membership |
 
 Set `CANTON_ENVIRONMENT=devnet` in `.env` to target DevNet. Contract IDs deployed to DevNet are verifiable on [cantonscan.com](https://cantonscan.com).
+
+### Deployment Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Ginie
+    participant DamlSDK as Daml SDK
+    participant Canton as Canton Ledger
+    
+    User->>Ginie: Submit prompt
+    Ginie->>Ginie: Generate Daml code
+    Ginie->>DamlSDK: daml build
+    DamlSDK-->>Ginie: DAR package
+    
+    Ginie->>Ginie: Security audit
+    alt Critical vulnerabilities & Production
+        Ginie-->>User: ❌ Deployment blocked
+    else Pass or Sandbox
+        Ginie->>Canton: Allocate parties
+        Canton-->>Ginie: Party IDs
+        Ginie->>Canton: Upload DAR
+        Canton-->>Ginie: Package ID
+        Ginie->>Canton: Create contract
+        Canton-->>Ginie: Contract ID
+        Ginie-->>User: ✅ Deployed
+    end
+```
 
 ---
 
