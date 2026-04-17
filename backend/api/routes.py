@@ -1,3 +1,4 @@
+import os
 import uuid
 import json
 import threading
@@ -435,12 +436,15 @@ async def health_check():
         redis_status = "unavailable (using in-memory fallback)"
 
     rag_status = "ready"
-    try:
-        from rag.vector_store import get_store_stats
-        stats = get_store_stats(persist_dir=settings.chroma_persist_dir)
-        rag_status = f"ready ({stats['patterns_count']} patterns, {stats['signatures_count']} signatures)"
-    except Exception:
-        rag_status = "not initialized (run /init-rag)"
+    if os.getenv("SKIP_RAG_INIT"):
+        rag_status = "deferred (will initialize on first use)"
+    else:
+        try:
+            from rag.vector_store import get_store_stats
+            stats = get_store_stats(persist_dir=settings.chroma_persist_dir)
+            rag_status = f"ready ({stats['patterns_count']} patterns, {stats['signatures_count']} signatures)"
+        except Exception:
+            rag_status = "not initialized (run /init-rag)"
 
     db_status = "unknown"
     try:
