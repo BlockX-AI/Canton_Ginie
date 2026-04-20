@@ -543,6 +543,48 @@ def _extract_ensure_text_values(daml_code: str, template_name: str | None = None
     return hints
 
 
+def _extract_ensure_numeric_values(daml_code: str, template_name: str | None = None) -> dict[str, str]:
+    """Parse ensure clauses to find numeric equality constraints.
+
+    For example, ``ensure amount == 100.0`` yields {"amount": "100.0"}.
+    Also handles ``quantity == 50`` (integers).
+    """
+    hints: dict[str, str] = {}
+    if not daml_code:
+        return hints
+
+    # Find the ensure block for the target template
+    if template_name:
+        pat = rf"template\s+{re.escape(template_name)}\s+.*?\bensure\s+(.*?)\n\s*\n"
+    else:
+        pat = r"\bensure\s+(.*?)\n\s*\n"
+    m = re.search(pat, daml_code, re.DOTALL)
+    if not m:
+        if template_name:
+            pat2 = rf"template\s+{re.escape(template_name)}\s+.*?\bensure\s+(.*?)(?=\n\s+(?:choice|key|deriving)\b)"
+        else:
+            pat2 = r"\bensure\s+(.*?)(?=\n\s+(?:choice|key|deriving)\b)"
+        m = re.search(pat2, daml_code, re.DOTALL)
+    if not m:
+        return hints
+
+    ensure_text = m.group(1)
+    # Match exact equality:  fieldName == 100.0  or  fieldName == 50
+    for field_match in re.finditer(r'(\w+)\s*==\s*([0-9]+(?:\.[0-9]+)?)', ensure_text):
+        fname = field_match.group(1)
+        fval = field_match.group(2)
+        if fname not in hints:
+            hints[fname] = fval
+    # Match greater-than constraints:  amount > 0  or  amount >= 1.0
+    # Store as minimum bounds (prefix with ">") so _build_payload can use them
+    for field_match in re.finditer(r'(\w+)\s*>=?\s*([0-9]+(?:\.[0-9]+)?)', ensure_text):
+        fname = field_match.group(1)
+        if fname not in hints:
+            hints[fname] = field_match.group(2)
+    logger.info("Ensure numeric hints extracted", hints=hints)
+    return hints
+
+
 def _build_payload(fields: list[dict], party_values: dict, daml_code: str = "", template_name: str | None = None) -> dict:
     payload = {}
     party_ids = list(party_values.values())
@@ -553,6 +595,7 @@ def _build_payload(fields: list[dict], party_values: dict, daml_code: str = "", 
 
     # Extract valid text values from ensure clauses to satisfy preconditions
     ensure_hints = _extract_ensure_text_values(daml_code, template_name) if daml_code else {}
+    numeric_hints = _extract_ensure_numeric_values(daml_code, template_name) if daml_code else {}
 
     for field in fields:
         name = field["name"]
@@ -582,15 +625,21 @@ def _build_payload(fields: list[dict], party_values: dict, daml_code: str = "", 
                 payload[name] = name
         elif ftype in ("Decimal", "Numeric") or ftype.startswith("Numeric "):
             numeric_counter += 1
-            name_lower = name.lower()
-            if "rate" in name_lower or "percent" in name_lower or "ratio" in name_lower:
-                val = Decimal("0.05") * numeric_counter
+            if name in numeric_hints:
+                payload[name] = str(Decimal(numeric_hints[name]).quantize(Decimal("0.0000000000"), rounding=ROUND_DOWN))
             else:
-                val = Decimal("1000.00") * numeric_counter
-            payload[name] = str(val.quantize(Decimal("0.0000000000"), rounding=ROUND_DOWN))
+                name_lower = name.lower()
+                if "rate" in name_lower or "percent" in name_lower or "ratio" in name_lower:
+                    val = Decimal("0.05") * numeric_counter
+                else:
+                    val = Decimal("1000.00") * numeric_counter
+                payload[name] = str(val.quantize(Decimal("0.0000000000"), rounding=ROUND_DOWN))
         elif ftype == "Int" or ftype == "Int64":
             numeric_counter += 1
-            payload[name] = max(1, numeric_counter)
+            if name in numeric_hints:
+                payload[name] = int(numeric_hints[name])
+            else:
+                payload[name] = max(1, numeric_counter)
         elif ftype == "Text":
             # Use ensure-clause hints first, then smart defaults for common names
             if name in ensure_hints:
