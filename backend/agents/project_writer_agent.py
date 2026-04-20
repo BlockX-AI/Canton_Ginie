@@ -25,15 +25,20 @@ from utils.llm_client import call_llm
 logger = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
-# SDK version — must match what `daml build` expects
+# SDK version — read from config so it stays in sync with daml_sdk_version
 # ---------------------------------------------------------------------------
-_SDK_VERSION = "2.10.3"
+def _sdk_version() -> str:
+    try:
+        from config import get_settings
+        return get_settings().daml_sdk_version
+    except Exception:
+        return "2.10.4"
 
 # ---------------------------------------------------------------------------
 # System prompts
 # ---------------------------------------------------------------------------
 
-_TYPES_SYSTEM_PROMPT = """You are an expert Daml 2.x engineer.
+_TYPES_SYSTEM_PROMPT = """You are an expert Daml engineer for Canton Network.
 Generate a DAML module that defines shared data types and enums.
 
 RULES:
@@ -45,7 +50,7 @@ RULES:
 6. No markdown fences
 7. Return ONLY raw Daml code starting with `module Types where`"""
 
-_TEMPLATE_SYSTEM_PROMPT = """You are an expert Daml 2.x engineer for Canton Network smart contracts.
+_TEMPLATE_SYSTEM_PROMPT = """You are an expert Daml engineer for Canton Network smart contracts.
 You produce COMPILABLE Daml code. Follow these rules EXACTLY:
 
 MANDATORY STRUCTURE:
@@ -335,7 +340,7 @@ Start with: module {module_name} where"""
 def _build_daml_yaml(project_name: str) -> str:
     """Build daml.yaml deterministically — never via LLM."""
     safe = re.sub(r"[^a-z0-9-]", "-", project_name.lower())[:40]
-    return f"""sdk-version: {_SDK_VERSION}
+    return f"""sdk-version: {_sdk_version()}
 name: {safe}
 version: 0.0.1
 source: daml

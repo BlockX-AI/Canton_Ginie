@@ -1,6 +1,7 @@
 import asyncio
 import glob
 import os
+import shlex
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -11,9 +12,24 @@ class Commands:
         self.sandbox_dir = sandbox_dir
 
     async def run(self, command: str, timeout: int = 300) -> dict:
+        """Execute a shell command safely using exec (no shell interpreter).
+
+        The command string is split via shlex so that word-splitting and
+        quoting work correctly, but no shell is involved — preventing shell
+        injection if any argument ever contained shell metacharacters.
+        """
         try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
+            args = shlex.split(command)
+        except ValueError as exc:
+            return {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": f"Could not parse command arguments: {exc}",
+            }
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *args,
                 cwd=self.sandbox_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -41,6 +57,12 @@ class Commands:
                     "stderr": f"Command timed out after {timeout} seconds: {command}",
                 }
 
+        except FileNotFoundError as exc:
+            return {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": f"Executable not found: {exc}",
+            }
         except Exception as exc:
             return {
                 "exit_code": -1,
@@ -108,8 +130,14 @@ class DamlSandbox:
         await asyncio.to_thread(daml_dir.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(dist_dir.mkdir, parents=True, exist_ok=True)
 
+        try:
+            from config import get_settings
+            sdk_version = get_settings().daml_sdk_version
+        except Exception:
+            sdk_version = "2.10.4"
+
         daml_yaml = (
-            "sdk-version: 2.10.3\n"
+            f"sdk-version: {sdk_version}\n"
             f"name: {self.project_name}\n"
             "version: 0.0.1\n"
             "source: daml\n"

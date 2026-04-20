@@ -16,10 +16,11 @@ def make_sandbox_jwt(act_as: list[str], read_as: list[str] | None = None) -> str
     """
     from config import get_settings
     settings = get_settings()
-    if settings.canton_environment != "sandbox":
+    env = settings.canton_environment.strip().lower()
+    if env != "sandbox":
         raise RuntimeError(
             "make_sandbox_jwt() called in non-sandbox environment "
-            f"({settings.canton_environment}). Use CANTON_TOKEN env var instead."
+            f"({settings.canton_environment!r}). Use CANTON_TOKEN env var instead."
         )
 
     def _b64url(s: str) -> str:

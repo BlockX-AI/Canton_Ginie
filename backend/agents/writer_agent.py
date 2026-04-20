@@ -8,7 +8,7 @@ from utils.llm_client import call_llm
 
 logger = structlog.get_logger()
 
-WRITER_SYSTEM_PROMPT = """You are an expert Daml 2.x engineer for Canton Network smart contracts.
+WRITER_SYSTEM_PROMPT = """You are an expert Daml engineer for Canton Network smart contracts.
 You produce COMPILABLE Daml code. Follow these rules EXACTLY:
 
 MANDATORY STRUCTURE — every file you produce MUST follow this layout:

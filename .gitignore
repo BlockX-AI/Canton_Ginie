@@ -4,6 +4,9 @@
 .env.*.local
 backend/.env
 backend/.env.ginie
+Canton/.env
+Canton/backend/.env
+Canton/backend/.env.ginie
 frontend/.env
 frontend/.env.local
 
@@ -53,4 +56,34 @@ Thumbs.db
 *.pem
 *.key
 *.cert
-audit.md 
+audit.md
+
+# Nested / external git repos (tracked separately or excluded from this monorepo)
+/Canton/
+/hedera_tokenproof/
+
+# Compressed logs and archives
+*.gz
+*.zip
+*.tar.gz
+*.tar.bz2
+
+# macOS metadata
+__MACOSX/
+.DS_Store
+
+# Test result artifacts
+*.test-results.json
+.coverage
+htmlcov/
+
+# RAG vector store data (built locally, not committed)
+backend/rag/chroma_db/
+chroma_db/
+
+# DAML build outputs
+*.dar
+.daml/
+
+# Temporary job output
+/tmp/ginie_jobs/

@@ -19,27 +19,6 @@ logger = structlog.get_logger()
 
 _COMPILED_PIPELINE: CompiledStateGraph | None = None
 
-FALLBACK_CONTRACT = """module Main where
-
-template SimpleContract
-  with
-    issuer : Party
-    owner : Party
-    amount : Decimal
-  where
-    signatory issuer
-    observer owner
-
-    ensure amount > 0.0
-
-    choice Transfer : ContractId SimpleContract
-      with
-        newOwner : Party
-      controller owner
-      do
-        create this with owner = newOwner
-"""
-
 # Global registry for per-job status callbacks so nodes can push updates
 _status_callbacks: dict = {}
 
@@ -298,26 +277,37 @@ def fix_node(state: dict) -> dict:
 
 
 def fallback_node(state: dict) -> dict:
-    """Replace generated code with guaranteed-compilable fallback contract."""
-    logger.info("Node: fallback (using guaranteed contract)", job_id=state.get("job_id"))
-    _push_status(state, "Using fallback contract template", 75)
+    """Return an explicit failure when all compile+fix attempts are exhausted.
 
-    # Preserve original project files for the user even though we're falling back
-    original_project_files = state.get("project_files", {})
+    Previously this silently deployed a hardcoded SimpleContract, giving users
+    a false success response for a contract they never wrote.  This now fails
+    closed so the caller receives a clear, actionable error.
+    """
+    job_id = state.get("job_id", "unknown")
+    max_attempts = _max_fix_attempts()
+    last_errors = state.get("compile_errors", [])
+    error_summary = "; ".join(
+        e.get("message", "") for e in last_errors[:3] if e.get("message")
+    ) or "Unknown compile error"
+
+    logger.error(
+        "Max fix attempts reached — contract compilation failed",
+        job_id=job_id,
+        max_attempts=max_attempts,
+        last_error_summary=error_summary,
+    )
+    _push_status(state, f"Compilation failed after {max_attempts} attempts — see error details", 75)
 
     return {
         **state,
-        "generated_code":           FALLBACK_CONTRACT,
-        "attempt_number":           0,
-        "compile_errors":           [],
-        "compile_success":          False,
-        "fallback_used":            True,
-        "project_mode":             False,
-        "project_files":            {},
-        "daml_yaml":                "",
-        "original_project_files":   original_project_files,
-        "current_step":             "Using fallback contract template",
-        "progress":                 75,
+        "error_message": (
+            f"Contract failed to compile after {max_attempts} fix attempt(s). "
+            f"Last errors: {error_summary}. "
+            "Refine your prompt or review the generated code for structural issues."
+        ),
+        "is_fatal_error": True,
+        "current_step":   f"Compilation failed after {max_attempts} attempts",
+        "progress":       75,
     }
 
 
@@ -387,14 +377,27 @@ def audit_node(state: dict) -> dict:
         }
 
     except Exception as e:
-        logger.error("Audit node failed, continuing to deploy", error=str(e))
+        logger.error(
+            "Audit node raised an unexpected exception — failing closed, deployment blocked",
+            job_id=job_id,
+            error=str(e),
+            exc_info=True,
+        )
+        _push_status(state, "Security audit system error — deployment blocked", 85)
         return {
             **state,
-            "audit_result": None,
-            "security_score": None,
+            "audit_result":    None,
+            "security_score":  None,
             "compliance_score": None,
-            "current_step": "Audit failed, deploying to Canton...",
-            "progress": 85,
+            "deploy_gate":     False,
+            "error_message":   (
+                f"Security audit failed unexpectedly: {e}. "
+                "Deployment has been blocked as a safety measure. "
+                "Resolve the auditor error before retrying."
+            ),
+            "is_fatal_error":  True,
+            "current_step":    "Security audit error — deployment blocked",
+            "progress":        85,
         }
 
 
@@ -553,7 +556,7 @@ def _build_pipeline() -> CompiledStateGraph:
         {"audit": "audit", "fix": "fix", "fallback": "fallback"},
     )
     graph.add_edge("fix", "compile")
-    graph.add_edge("fallback", "compile")  # recompile after fallback — guaranteed success
+    graph.add_edge("fallback", "error")
     graph.add_edge("audit", "diagram")
     graph.add_edge("diagram", "deploy")
     graph.add_edge("deploy", END)
@@ -582,7 +585,6 @@ def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbo
         "compile_success":    False,
         "compile_errors":     [],
         "attempt_number":     0,
-        "fallback_used":      False,
         "dar_path":           "",
         "contract_id":        "",
         "package_id":         "",

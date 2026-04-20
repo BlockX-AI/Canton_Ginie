@@ -38,7 +38,7 @@ class UserSession(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(Text, nullable=False, unique=True, index=True)
     party_id = Column(Text, ForeignKey("registered_parties.party_id"), nullable=False)
-    jwt_token = Column(Text, nullable=False)
+    jwt_token_hash = Column(Text, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 

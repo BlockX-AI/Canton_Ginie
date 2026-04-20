@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from api.rate_limiter import limiter
+from utils.url_validator import validate_canton_url
 
 from auth.crypto import generate_challenge, verify_signature, compute_fingerprint
 from auth.jwt_manager import create_user_jwt, refresh_user_jwt, create_canton_jwt
@@ -112,11 +113,21 @@ async def register_and_authenticate(request: Request, body: RegisterRequest = Bo
     settings = get_settings()
     fingerprint = compute_fingerprint(body.public_key)
 
+    safe_canton_url: str | None = None
+    if body.canton_url:
+        try:
+            safe_canton_url = validate_canton_url(
+                body.canton_url,
+                allow_localhost=(settings.canton_environment == "sandbox"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid canton_url: {exc}")
+
     try:
         result = await register_party(
             party_name=body.party_name,
             fingerprint=fingerprint,
-            canton_url=body.canton_url,
+            canton_url=safe_canton_url,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))

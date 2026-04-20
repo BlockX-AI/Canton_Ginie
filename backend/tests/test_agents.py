@@ -32,7 +32,9 @@ def api_key_valid():
 class TestIntentAgent:
     def test_parses_bond_contract(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid — update ANTHROPIC_API_KEY in backend/.env")
+            from config import get_settings
+            provider = get_settings().llm_provider
+            pytest.skip(f"LLM unavailable — check {provider.upper()}_API_KEY in backend/.env.ginie")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent(
             "I want a bond tokenization contract where Goldman Sachs issues "
@@ -49,7 +51,7 @@ class TestIntentAgent:
 
     def test_parses_escrow_contract(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent(
             "Build an escrow contract with buyer, seller and escrow agent. "
@@ -61,7 +63,7 @@ class TestIntentAgent:
 
     def test_parses_nft_contract(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent("Create an NFT marketplace where artists mint tokens and collectors trade them.")
         assert result["success"]
@@ -70,7 +72,7 @@ class TestIntentAgent:
 
     def test_returns_daml_templates(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.intent_agent import run_intent_agent
         result = run_intent_agent("Simple asset transfer between two parties.")
         assert result["success"]
@@ -85,7 +87,7 @@ class TestIntentAgent:
 class TestWriterAgent:
     def test_generates_valid_daml(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.writer_agent import run_writer_agent
         intent = {
             "contract_type": "bond_tokenization",
@@ -106,7 +108,7 @@ class TestWriterAgent:
 
     def test_generates_valid_daml_escrow(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.writer_agent import run_writer_agent
         intent = {
             "contract_type": "escrow",
@@ -124,7 +126,7 @@ class TestWriterAgent:
 
     def test_has_module_declaration(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.writer_agent import run_writer_agent
         intent = {
             "contract_type": "equity_token",
@@ -233,7 +235,7 @@ setup = script do
 class TestFixAgent:
     def test_fix_improves_code(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.fix_agent import run_fix_agent
 
         bad_code = "module Main where\n\ntemplate Broken\n  with\n    owner : Party\n  where\n    choice Foo : () controller owner do return ()\n"
@@ -247,7 +249,7 @@ class TestFixAgent:
 
     def test_fix_regenerates_on_many_errors(self, api_key_valid):
         if not api_key_valid:
-            pytest.skip("Anthropic API key invalid")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.fix_agent import run_fix_agent
 
         bad_code = "this is not valid daml at all\n"
@@ -286,5 +288,10 @@ class TestPipelineCompile:
         if not compile_result["success"]:
             print(f"  errors: {compile_result.get('error_summary', '')[:200]}")
 
-        assert compile_result["success"] or len(compile_result.get("errors", [])) > 0, \
-            "Compile agent must return structured output regardless of success"
+        assert "success" in compile_result, "Compile agent must return a result dict with 'success' key"
+        if not compile_result["success"]:
+            errors = compile_result.get("errors", compile_result.get("compile_errors", []))
+            assert len(errors) > 0, (
+                "Compile agent returned success=False but provided no error details — "
+                "caller cannot diagnose the failure"
+            )

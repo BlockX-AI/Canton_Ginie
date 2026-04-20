@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
 from pathlib import Path
 import os
 import secrets
@@ -34,7 +33,7 @@ class Settings(BaseSettings):
 
     canton_sandbox_url: str = "http://localhost:7575"
     canton_devnet_url: str = "https://canton.network/ledger"
-    canton_mainnet_url: str = "https://main.canton.network/ledger"
+    canton_mainnet_url: str = "https://REPLACE_WITH_YOUR_MAINNET_JSON_API_URL"
     canton_environment: str = "sandbox"
     canton_token: str = ""
 
@@ -70,23 +69,56 @@ class Settings(BaseSettings):
 
 
 _DEFAULT_SECRET = "ginie-local-dev-secret-change-in-production"
+_INSECURE_PASSWORDS = {"password", "postgres", "admin", "changeme", "secret", ""}
+
+_settings_instance: "Settings | None" = None
 
 
-@lru_cache()
-def get_settings() -> Settings:
+def _build_settings() -> Settings:
+    """Construct, validate, and return a fully-initialized Settings object.
+
+    Called exactly once. All mutation happens here before the object is
+    stored in the module-level singleton, avoiding the lru_cache-and-mutate
+    anti-pattern.
+    """
     s = Settings()
+    env = s.canton_environment.strip().lower()
 
     # --- JWT secret validation ---
-    if not s.jwt_secret or s.jwt_secret == _DEFAULT_SECRET:
-        if s.canton_environment != "sandbox":
+    if not s.jwt_secret or s.jwt_secret.strip() == _DEFAULT_SECRET:
+        if env != "sandbox":
             raise RuntimeError(
                 "FATAL: JWT_SECRET is not set or is the default value. "
                 "A strong, unique secret is REQUIRED for non-sandbox environments. "
                 "Set JWT_SECRET in backend/.env.ginie"
             )
-        # Sandbox: auto-generate a random secret per startup
-        s.jwt_secret = secrets.token_hex(32)
+        ephemeral = secrets.token_hex(32)
+        s.jwt_secret = ephemeral
         _logger.warning("JWT_SECRET not configured — generated ephemeral secret (sandbox only)")
+
+    # --- Database password validation in non-sandbox environments ---
+    try:
+        from urllib.parse import urlparse
+        db_url = s.database_url
+        parsed = urlparse(db_url)
+        db_pass = parsed.password or ""
+        if env != "sandbox" and db_pass.lower() in _INSECURE_PASSWORDS:
+            raise RuntimeError(
+                "FATAL: DATABASE_URL uses an insecure default password in a non-sandbox environment. "
+                "Set a strong DATABASE_URL in backend/.env.ginie"
+            )
+        if env == "sandbox" and db_pass.lower() in _INSECURE_PASSWORDS:
+            _logger.warning(
+                "DATABASE_URL uses default password — acceptable for sandbox only; "
+                "set a strong password before deploying to devnet/mainnet"
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+
+    # --- Canton environment normalisation ---
+    s.canton_environment = env
 
     # --- Resolve relative chroma_persist_dir to absolute ---
     chroma_path = Path(s.chroma_persist_dir)
@@ -95,3 +127,16 @@ def get_settings() -> Settings:
         _logger.info("Resolved chroma_persist_dir to absolute path", path=s.chroma_persist_dir)
 
     return s
+
+
+def get_settings() -> Settings:
+    """Return the process-wide Settings singleton.
+
+    Built once on first call.  Uses a plain module-level variable rather than
+    functools.lru_cache so that the initialization logic (which mutates the
+    object) is not entangled with caching semantics.
+    """
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = _build_settings()
+    return _settings_instance

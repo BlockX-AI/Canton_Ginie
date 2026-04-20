@@ -5,6 +5,7 @@ Two JWT types:
   - Canton JWT: Unsigned wildcard JWT for Canton sandbox ledger operations.
 """
 
+import hashlib
 import jwt
 import structlog
 from datetime import datetime, timezone, timedelta
@@ -95,3 +96,18 @@ def create_canton_jwt(party_ids: list[str]) -> str:
     """
     from canton.canton_client_v2 import make_sandbox_jwt
     return make_sandbox_jwt(party_ids)
+
+
+def hash_token(token: str) -> str:
+    """Return a SHA-256 hex digest of a JWT for safe DB persistence.
+
+    Store this hash instead of the raw token so that a database breach does
+    not directly expose live session credentials.
+
+    Args:
+        token: Raw JWT string.
+
+    Returns:
+        64-character lowercase hex digest.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

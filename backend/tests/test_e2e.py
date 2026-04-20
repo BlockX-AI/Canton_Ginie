@@ -100,7 +100,7 @@ class TestE2EIntentToCode:
     @pytest.mark.parametrize("contract_name,prompt", PROMPTS)
     def test_intent_to_code(self, contract_name, prompt, api_key_valid):
         if not api_key_valid:
-            pytest.skip("LLM unavailable — check GEMINI_API_KEY or ANTHROPIC_API_KEY in backend/.env")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         from agents.intent_agent import run_intent_agent
         from agents.writer_agent import run_writer_agent
 
@@ -146,7 +146,7 @@ class TestE2EIntentToCode:
 class TestE2ECompile:
     def test_bond_compiles(self, daml_sdk_available, api_key_valid):
         if not api_key_valid:
-            pytest.skip("LLM unavailable — check API key in backend/.env")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed — install with: curl -sSL https://get.daml.com/ | sh")
 
@@ -189,7 +189,7 @@ class TestE2ECompile:
 
     def test_compile_fix_loop(self, daml_sdk_available, api_key_valid):
         if not api_key_valid:
-            pytest.skip("LLM unavailable — check API key in backend/.env")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
         """If first compile fails, the fix agent must improve the code."""
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed")
@@ -243,7 +243,7 @@ class TestE2EOrchestrator:
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed")
         if not api_key_valid:
-            pytest.skip("LLM unavailable — check API key in backend/.env")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
 
         from pipeline.orchestrator import run_pipeline
 
@@ -283,9 +283,9 @@ class TestE2EFullDeploy:
         if not daml_sdk_available:
             pytest.skip("Daml SDK not installed")
         if not canton_available:
-            pytest.skip("Canton sandbox not running — start with: daml sandbox")
+            pytest.skip("Canton sandbox not running — start with: canton sandbox --config canton-sandbox-memory.conf")
         if not api_key_valid:
-            pytest.skip("LLM unavailable — check API key in backend/.env")
+            pytest.skip("LLM unavailable — check API key in backend/.env.ginie")
 
         from pipeline.orchestrator import run_pipeline
 
@@ -383,4 +383,4 @@ class TestE2EAPI:
         if api_key_valid:
             assert result.get("generated_code"), "No Daml code in final result (API key is valid, this is a real failure)"
         else:
-            print("  [api-poll] SKIP code assertion — Anthropic API key invalid (update backend/.env)")
+            print("  [api-poll] SKIP code assertion — LLM API key invalid (check provider key in backend/.env.ginie)")

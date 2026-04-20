@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from api.rate_limiter import limiter
 from api.ws_routes import push_status_sync
+from utils.url_validator import validate_canton_url
 
 from api.models import (
     GenerateRequest,
@@ -66,8 +67,10 @@ def _get_job(job_id: str) -> dict:
 
 def _set_job(job_id: str, data: dict):
     """Persist job data to PostgreSQL (source of truth) + Redis (cache) + in-memory (fallback)."""
+    import time
     # Always update in-memory for immediate availability
     _in_memory_jobs[job_id] = data
+    _in_memory_jobs_ts[job_id] = time.monotonic()
 
     # Layer 1: Redis cache
     try:
@@ -112,18 +115,19 @@ def _save_deployed_contract(job_id: str, deploy_result: dict):
         from db.session import get_db_session
         from db.models import DeployedContract
         with get_db_session() as session:
+            party_id = deploy_result.get("party_id") or deploy_result.get("parties", {}).get("primary") or None
             contract = DeployedContract(
                 contract_id=deploy_result.get("contract_id", ""),
                 package_id=deploy_result.get("package_id", ""),
                 template_id=deploy_result.get("template_id", ""),
                 job_id=job_id,
-                party_id=None,
-                canton_env=deploy_result.get("environment", "sandbox"),
+                party_id=party_id,
+                canton_env=deploy_result.get("canton_environment", deploy_result.get("environment", "sandbox")),
                 explorer_link=deploy_result.get("explorer_link", ""),
             )
             session.add(contract)
     except Exception as e:
-        logger.debug("Failed to save deployed contract to DB", error=str(e))
+        logger.warning("Failed to save deployed contract to DB", job_id=job_id, error=str(e))
 
 
 def _job_row_to_dict(job) -> dict:
@@ -142,9 +146,29 @@ def _job_row_to_dict(job) -> dict:
 
 
 _in_memory_jobs: dict = {}
+_in_memory_jobs_ts: dict = {}
 _jobs_lock = threading.Lock()
 _active_threads: dict[str, threading.Thread] = {}
 _threads_lock = threading.Lock()
+
+_JOB_MEMORY_TTL_SECONDS = 7200
+
+
+def _evict_stale_jobs() -> None:
+    """Remove in-memory job entries older than _JOB_MEMORY_TTL_SECONDS.
+
+    Called opportunistically on each new job creation — O(n) but n is small
+    because terminal jobs are also written to Redis/PostgreSQL.
+    """
+    import time
+    now = time.monotonic()
+    with _jobs_lock:
+        stale = [jid for jid, ts in _in_memory_jobs_ts.items() if now - ts > _JOB_MEMORY_TTL_SECONDS]
+        for jid in stale:
+            _in_memory_jobs.pop(jid, None)
+            _in_memory_jobs_ts.pop(jid, None)
+    if stale:
+        logger.debug("Evicted stale in-memory jobs", count=len(stale))
 
 
 def _celery_has_workers() -> bool:
@@ -292,10 +316,22 @@ async def generate_contract(request: Request, body: GenerateRequest, user: dict 
     settings = get_settings()
     job_id = str(uuid.uuid4())
 
-    canton_url = body.canton_url or settings.get_canton_url()
+    raw_canton_url = body.canton_url or ""
+    if raw_canton_url:
+        try:
+            canton_url = validate_canton_url(
+                raw_canton_url,
+                allow_localhost=(settings.canton_environment == "sandbox"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid canton_url: {exc}")
+    else:
+        canton_url = settings.get_canton_url()
 
     # Extract authenticated party_id if user is logged in
     party_id = user.get("sub", "") if user else ""
+
+    _evict_stale_jobs()
 
     initial_data = {
         "job_id":       job_id,
