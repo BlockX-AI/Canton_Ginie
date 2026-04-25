@@ -32,6 +32,25 @@ class RegisteredParty(Base):
     jobs = relationship("JobHistory", back_populates="party")
 
 
+class EmailAccount(Base):
+    """Email/password account that wraps a party identity.
+
+    The email is the login credential. A party identity (Ed25519) is created
+    after signup and linked here via party_id. Contracts are still owned by
+    the party — the email is just a more familiar login layer.
+    """
+
+    __tablename__ = "email_accounts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(Text, nullable=False, unique=True, index=True)
+    password_hash = Column(Text, nullable=False)
+    display_name = Column(Text, nullable=True)
+    party_id = Column(Text, ForeignKey("registered_parties.party_id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class UserSession(Base):
     __tablename__ = "user_sessions"
 

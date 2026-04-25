@@ -18,7 +18,13 @@ from api.rate_limiter import limiter
 
 from auth.crypto import generate_challenge, verify_signature, compute_fingerprint
 from auth.jwt_manager import create_user_jwt
-from auth.party_manager import register_party, get_party, list_parties
+from auth.party_manager import register_party, get_party, get_party_by_fingerprint, list_parties
+from auth.email_auth import (
+    create_email_account,
+    authenticate_email,
+    link_party_to_email,
+    get_email_account,
+)
 from api.middleware import get_current_user, blocklist_token
 from config import get_settings
 
@@ -53,6 +59,20 @@ class RegisterRequest(BaseModel):
 
 
 class RegisterResponse(BaseModel):
+    token: str
+    party_id: str
+    display_name: str
+    fingerprint: str
+    expires_in_days: int
+
+
+class LoginRequest(BaseModel):
+    challenge: str = Field(..., min_length=16)
+    signature: str = Field(..., description="Base64-encoded Ed25519 signature")
+    public_key: str = Field(..., description="Base64-encoded Ed25519 public key")
+
+
+class LoginResponse(BaseModel):
     token: str
     party_id: str
     display_name: str
@@ -138,6 +158,73 @@ async def register_and_authenticate(request: Request, body: RegisterRequest = Bo
     )
 
 
+@auth_router.post("/login", response_model=LoginResponse)
+@limiter.limit("10/minute")
+async def login_existing_party(request: Request, body: LoginRequest = Body()):
+    """Session recovery for an existing party.
+
+    Flow:
+      1. Verify the Ed25519 signature against the challenge.
+      2. Compute fingerprint from the public key.
+      3. Look up the party in PostgreSQL by fingerprint (no Canton call).
+      4. Issue a fresh JWT for the existing party.
+
+    This endpoint does NOT allocate a new party on Canton — it only recovers
+    a session for a party that was previously registered. Canton party
+    allocation is permanent and one-way, so there is no "re-registration."
+
+    Errors:
+        401 — Signature verification failed.
+        404 — No party found for this key (party_not_found=true in detail).
+              Frontend should prompt the user to register a new party
+              (e.g. Canton DB was reset, losing the allocation).
+    """
+    settings = get_settings()
+
+    # Step 1: Verify signature (consumes the challenge atomically)
+    ok = verify_signature(body.challenge, body.signature, body.public_key)
+    if not ok:
+        raise HTTPException(status_code=401, detail="Signature verification failed")
+
+    # Step 2: Compute fingerprint
+    fingerprint = compute_fingerprint(body.public_key)
+
+    # Step 3: Look up party by fingerprint in current environment
+    party = get_party_by_fingerprint(fingerprint, canton_env=settings.canton_environment)
+    if not party:
+        logger.info("Login failed — party not found for fingerprint",
+                    fingerprint=fingerprint[:16], env=settings.canton_environment)
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "party_not_found": True,
+                "message": (
+                    "No party is registered for this key on the current environment. "
+                    "The Canton node may have been reset. Please register a new party."
+                ),
+                "environment": settings.canton_environment,
+            },
+        )
+
+    # Step 4: Issue fresh JWT
+    token = create_user_jwt(
+        party_id=party["party_id"],
+        fingerprint=fingerprint,
+        display_name=party["display_name"],
+    )
+
+    logger.info("Session recovered for existing party",
+                party_id=party["party_id"], display_name=party["display_name"])
+
+    return LoginResponse(
+        token=token,
+        party_id=party["party_id"],
+        display_name=party["display_name"],
+        fingerprint=fingerprint,
+        expires_in_days=settings.jwt_expiry_days,
+    )
+
+
 @auth_router.get("/me", response_model=MeResponse)
 async def get_me(user: dict = Depends(get_current_user)):
     """Return current authenticated user info from JWT + database."""
@@ -188,3 +275,137 @@ async def get_parties(user: dict = Depends(get_current_user)):
     settings = get_settings()
     parties = list_parties(canton_env=settings.canton_environment)
     return PartyListResponse(parties=parties)
+
+
+# ---------------------------------------------------------------------------
+# Email / password authentication (layered on top of party identity)
+# ---------------------------------------------------------------------------
+
+class EmailSignupRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=120)
+    password: str = Field(..., min_length=8, max_length=200)
+    display_name: Optional[str] = Field(None, max_length=60)
+
+
+class EmailLoginRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=120)
+    password: str = Field(..., min_length=8, max_length=200)
+
+
+class EmailAuthResponse(BaseModel):
+    token: str
+    email: str
+    display_name: Optional[str]
+    party_id: Optional[str]
+    needs_party: bool
+    expires_in_days: int
+
+
+class LinkPartyRequest(BaseModel):
+    party_id: str = Field(..., min_length=4)
+    display_name: Optional[str] = None
+
+
+def _create_email_token(email: str, display_name: str, party_id: Optional[str]) -> str:
+    """Issue a JWT for an email account. If party is linked, JWT also acts as
+    a party JWT; otherwise it carries an empty party claim until linked."""
+    return create_user_jwt(
+        party_id=party_id or f"email:{email}",
+        fingerprint=f"email:{email}",
+        display_name=display_name or email.split("@")[0],
+    )
+
+
+@auth_router.post("/email/signup", response_model=EmailAuthResponse)
+@limiter.limit("5/minute")
+async def email_signup(request: Request, body: EmailSignupRequest = Body()):
+    """Create a new email/password account. Party is created later via /setup."""
+    settings = get_settings()
+    try:
+        account = create_email_account(
+            email=body.email,
+            password=body.password,
+            display_name=body.display_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        logger.exception("Email signup failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Signup failed")
+
+    token = _create_email_token(
+        email=account["email"],
+        display_name=account["display_name"] or "",
+        party_id=account.get("party_id"),
+    )
+
+    return EmailAuthResponse(
+        token=token,
+        email=account["email"],
+        display_name=account["display_name"],
+        party_id=account.get("party_id"),
+        needs_party=account.get("party_id") is None,
+        expires_in_days=settings.jwt_expiry_days,
+    )
+
+
+@auth_router.post("/email/login", response_model=EmailAuthResponse)
+@limiter.limit("10/minute")
+async def email_login(request: Request, body: EmailLoginRequest = Body()):
+    """Authenticate an email/password pair and return a JWT."""
+    settings = get_settings()
+    account = authenticate_email(email=body.email, password=body.password)
+    if not account:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = _create_email_token(
+        email=account["email"],
+        display_name=account["display_name"] or "",
+        party_id=account.get("party_id"),
+    )
+
+    return EmailAuthResponse(
+        token=token,
+        email=account["email"],
+        display_name=account["display_name"],
+        party_id=account.get("party_id"),
+        needs_party=account.get("party_id") is None,
+        expires_in_days=settings.jwt_expiry_days,
+    )
+
+
+@auth_router.post("/email/link-party", response_model=EmailAuthResponse)
+async def email_link_party(
+    body: LinkPartyRequest = Body(),
+    user: dict = Depends(get_current_user),
+):
+    """Link a freshly created party to the authenticated email account."""
+    settings = get_settings()
+    sub = user.get("sub", "")
+    if not sub.startswith("email:"):
+        raise HTTPException(status_code=400, detail="Token is not an email-account token")
+
+    email = sub[len("email:"):]
+    try:
+        account = link_party_to_email(
+            email=email,
+            party_id=body.party_id,
+            display_name=body.display_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    token = _create_email_token(
+        email=account["email"],
+        display_name=account["display_name"] or "",
+        party_id=account.get("party_id"),
+    )
+
+    return EmailAuthResponse(
+        token=token,
+        email=account["email"],
+        display_name=account["display_name"],
+        party_id=account.get("party_id"),
+        needs_party=False,
+        expires_in_days=settings.jwt_expiry_days,
+    )

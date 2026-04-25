@@ -26,5 +26,6 @@ structlog==24.4.0
 tenacity==9.0.0
 PyNaCl==1.5.0
 PyJWT==2.9.0
+bcrypt==4.2.0
 pypdf==5.1.0
 sentence-transformers==3.3.1

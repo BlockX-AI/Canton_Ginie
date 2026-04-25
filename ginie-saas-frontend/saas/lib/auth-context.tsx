@@ -26,10 +26,20 @@ interface AuthState {
   partyId: string | null;
   displayName: string | null;
   fingerprint: string | null;
+  email: string | null;
+  needsParty: boolean;
+}
+
+interface EmailAuthResult {
+  needsParty: boolean;
+  partyId: string | null;
 }
 
 interface AuthContextValue extends AuthState {
   login: (token: string, partyId: string, displayName: string, fingerprint: string) => void;
+  loginEmail: (email: string, password: string) => Promise<EmailAuthResult>;
+  signupEmail: (email: string, password: string, displayName?: string) => Promise<EmailAuthResult>;
+  linkParty: (partyId: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
 }
@@ -40,6 +50,8 @@ const defaultState: AuthState = {
   partyId: null,
   displayName: null,
   fingerprint: null,
+  email: null,
+  needsParty: false,
 };
 
 const STORAGE_KEY = "ginie_auth";
@@ -73,6 +85,9 @@ function clearStorage() {
 const AuthContext = createContext<AuthContextValue>({
   ...defaultState,
   login: () => {},
+  loginEmail: async () => ({ needsParty: false, partyId: null }),
+  signupEmail: async () => ({ needsParty: true, partyId: null }),
+  linkParty: async () => {},
   logout: async () => {},
   refreshToken: async () => {},
 });
@@ -96,11 +111,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         partyId,
         displayName,
         fingerprint,
+        email: null,
+        needsParty: false,
       };
       setState(next);
       saveToStorage(next);
     },
     [],
+  );
+
+  const applyEmailResult = useCallback((data: {
+    token: string;
+    email: string;
+    display_name: string | null;
+    party_id: string | null;
+    needs_party: boolean;
+  }): EmailAuthResult => {
+    const next: AuthState = {
+      isAuthenticated: true,
+      token: data.token,
+      partyId: data.party_id,
+      displayName: data.display_name || data.email.split("@")[0] || "Account",
+      fingerprint: `email:${data.email}`,
+      email: data.email,
+      needsParty: data.needs_party,
+    };
+    setState(next);
+    saveToStorage(next);
+    return { needsParty: data.needs_party, partyId: data.party_id };
+  }, []);
+
+  const signupEmail = useCallback(
+    async (email: string, password: string, displayName?: string): Promise<EmailAuthResult> => {
+      const resp = await fetch(`${API_URL}/auth/email/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          display_name: displayName,
+        }),
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.detail || `Signup failed (HTTP ${resp.status})`);
+      }
+      const data = await resp.json();
+      return applyEmailResult(data);
+    },
+    [applyEmailResult],
+  );
+
+  const loginEmail = useCallback(
+    async (email: string, password: string): Promise<EmailAuthResult> => {
+      const resp = await fetch(`${API_URL}/auth/email/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.detail || "Invalid email or password");
+      }
+      const data = await resp.json();
+      return applyEmailResult(data);
+    },
+    [applyEmailResult],
+  );
+
+  const linkParty = useCallback(
+    async (partyId: string, displayName: string) => {
+      if (!state.token) throw new Error("Not authenticated");
+      const resp = await fetch(`${API_URL}/auth/email/link-party`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${state.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ party_id: partyId, display_name: displayName }),
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.detail || "Failed to link party");
+      }
+      const data = await resp.json();
+      applyEmailResult(data);
+    },
+    [state.token, applyEmailResult],
   );
 
   const logout = useCallback(async () => {
@@ -156,7 +253,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [state.isAuthenticated, refreshToken]);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refreshToken }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        login,
+        loginEmail,
+        signupEmail,
+        linkParty,
+        logout,
+        refreshToken,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

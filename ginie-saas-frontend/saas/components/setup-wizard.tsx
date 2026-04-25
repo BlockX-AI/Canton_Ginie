@@ -46,7 +46,7 @@ const STEPS = [
 
 export function SetupWizard(): ReactNode {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, linkParty, email: existingEmail } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -202,7 +202,19 @@ export function SetupWizard(): ReactNode {
       updateStep(2, { status: "success" });
       setCurrentStep(3);
 
-      login(token, party_id, partyName, keyPair.fingerprint);
+      // If the user already signed in with an email account, link the new
+      // party to that account so future logins resolve to this party.
+      if (existingEmail) {
+        try {
+          await linkParty(party_id, partyName);
+        } catch (linkErr) {
+          // Non-fatal: party is registered on Canton; account just isn't linked yet.
+          console.warn("Failed to link party to email account", linkErr);
+          login(token, party_id, partyName, keyPair.fingerprint);
+        }
+      } else {
+        login(token, party_id, partyName, keyPair.fingerprint);
+      }
     } catch (e) {
       setAuthSubStep("");
       updateStep(2, { status: "error", error: String(e) });
