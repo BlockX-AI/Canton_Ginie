@@ -2,6 +2,7 @@ import { Header } from "@/components/header";
 import { Providers } from "@/components/providers";
 import { SkipToContent } from "@/components/skip-to-content";
 import { ThemeSwitch } from "@/components/theme-switch";
+import { UsernameBadge } from "@/components/username-badge";
 import { baseMetadata } from "@/lib/metadata";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -64,6 +65,7 @@ export default function RootLayout({
           </svg>
           
           <Header />
+          <UsernameBadge />
           <ThemeSwitch />
           
           <SkipToContent />
