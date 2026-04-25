@@ -145,40 +145,65 @@ export default function SandboxPage() {
   const [activeTab, setActiveTab] = useState<"code" | "diagram" | "files">("code");
   const [showFindings, setShowFindings] = useState(false);
   const [auditFindings, setAuditFindings] = useState<AuditFinding[]>([]);
+  const [resultLoading, setResultLoading] = useState(false);
+  const [resultError, setResultError] = useState<string | null>(null);
 
   const API_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
   const fetchResult = useCallback(async () => {
     if (!jobId) return;
-    try {
-      const response = await fetch(`${API_URL}/result/${jobId}`);
-      if (!response.ok) return;
-
-      const resultData: JobResult = await response.json();
-      setResult(resultData);
-
-      if (resultData.audit_reports?.json) {
-        try {
-          const parsed = JSON.parse(resultData.audit_reports.json);
-          const findings = parsed?.securityAudit?.report?.findings || [];
-          setAuditFindings(findings);
-        } catch { /* ignore parse errors */ }
+    setResultLoading(true);
+    setResultError(null);
+    // Retry with backoff: the /result endpoint may not be populated the
+    // instant the status flips to "complete" (the indexer / DB write can
+    // lag the WS broadcast by a few hundred ms). Without retrying the user
+    // sees a green "Contract Deployed" bar but no code / IDs / audit panel.
+    const delays = [0, 500, 1000, 2000, 3000, 5000, 8000];
+    let lastErr = "";
+    for (const delay of delays) {
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const response = await fetch(`${API_URL}/result/${jobId}`);
+        if (!response.ok) {
+          lastErr = `HTTP ${response.status}`;
+          continue;
+        }
+        const resultData: JobResult = await response.json();
+        // Treat anything other than a populated terminal record as not ready.
+        if (resultData.status !== "complete" && resultData.status !== "failed") {
+          lastErr = `status=${resultData.status ?? "unknown"}`;
+          continue;
+        }
+        setResult(resultData);
+        if (resultData.audit_reports?.json) {
+          try {
+            const parsed = JSON.parse(resultData.audit_reports.json);
+            const findings = parsed?.securityAudit?.report?.findings || [];
+            setAuditFindings(findings);
+          } catch { /* ignore parse errors */ }
+        }
+        setResultLoading(false);
+        return;
+      } catch (error) {
+        lastErr = String(error);
+        console.error("Error fetching result (will retry):", error);
       }
-    } catch (error) {
-      console.error("Error fetching result:", error);
     }
+    setResultError(lastErr || "Result not available");
+    setResultLoading(false);
   }, [jobId, API_URL]);
 
   useEffect(() => {
     if (
       status &&
       (status.status === "complete" || status.status === "failed") &&
-      !result
+      !result &&
+      !resultLoading
     ) {
       fetchResult();
     }
-  }, [status, result, fetchResult]);
+  }, [status, result, resultLoading, fetchResult]);
 
   useEffect(() => {
     if (status?.status === "unknown") {
@@ -310,6 +335,44 @@ export default function SandboxPage() {
             {status.error_message && (
               <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
                 <p className="text-sm text-red-600 dark:text-red-400">{status.error_message}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Result loading / error fallback (between progress and result panel) */}
+        {status?.status === "complete" && !result && (
+          <div className="mb-8 rounded-2xl border border-border bg-muted p-5">
+            {resultLoading && !resultError && (
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-accent" />
+                Loading deployment artifacts (code, IDs, audit report)...
+              </div>
+            )}
+            {resultError && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
+                  <div className="text-sm">
+                    <p className="font-medium text-foreground">
+                      Deployment succeeded, but the result payload is not available yet.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      The contract is on the ledger (you can verify it via the Ledger Explorer).
+                      The backend may still be persisting the result. Try again in a moment.
+                    </p>
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground/70">
+                      last error: {resultError}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={fetchResult}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <Loader2 className={`h-3.5 w-3.5 ${resultLoading ? "animate-spin" : ""}`} />
+                  Retry
+                </button>
               </div>
             )}
           </div>
