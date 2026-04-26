@@ -390,25 +390,45 @@ function PartiesTab({
   // ``user-owned`` when /me/parties responded, ``ledger`` when we fell back
   // to the global Canton listing. Drives the on-screen scope hint.
   const [scope, setScope] = useState<"user-owned" | "ledger">("ledger");
+  // When we have a token but /me/parties returned non-2xx, capture why so the
+  // UI can surface it instead of silently masquerading as the ledger view.
+  const [meFailure, setMeFailure] = useState<string | null>(null);
 
   const fetchParties = async () => {
     setLoading(true);
     setError("");
+    setMeFailure(null);
     try {
       // Authenticated path: ask the backend for ONLY this user's parties.
       // Sourced entirely from our Postgres tables, so it's immune to the
       // shared-sandbox 500s that ``/ledger/parties`` is prone to.
       if (token) {
-        const resp = await fetch(`${API_URL}/me/parties`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (resp.ok) {
-          const data = (await resp.json()) as { parties?: Party[]; scope?: string };
-          setParties(data.parties ?? []);
-          setScope("user-owned");
-          return;
+        try {
+          const resp = await fetch(`${API_URL}/me/parties`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (resp.ok) {
+            const data = (await resp.json()) as {
+              parties?: Party[];
+              scope?: string;
+              partial_errors?: string[];
+            };
+            setParties(data.parties ?? []);
+            setScope("user-owned");
+            if (data.partial_errors && data.partial_errors.length > 0) {
+              setMeFailure(`Partial: ${data.partial_errors.join("; ")}`);
+            }
+            return;
+          }
+          // 4xx/5xx \u2014 record why and fall through to the public ledger
+          // listing. We DO NOT silently filter the fallback to empty: the
+          // banner makes it clear the user is seeing the global view.
+          let body = "";
+          try { body = (await resp.text()).slice(0, 200); } catch { /* ignore */ }
+          setMeFailure(`/me/parties HTTP ${resp.status}${body ? `: ${body}` : ""}`);
+        } catch (e: unknown) {
+          setMeFailure(`/me/parties failed: ${e instanceof Error ? e.message : String(e)}`);
         }
-        // 4xx/5xx \u2014 fall through to the public ledger listing.
       }
 
       const resp = await fetch(`${API_URL}/ledger/parties`);
@@ -452,25 +472,38 @@ function PartiesTab({
   // DeployedContract joined to the user's email, so client-side
   // filtering would only re-introduce false negatives for the user's
   // own historical parties. When the response came from /ledger/parties
-  // (unauthenticated or fallback path) we still apply the legacy
-  // counterparty filter so the user doesn't see strangers' parties on
-  // the shared sandbox.
+  // (unauthenticated or fallback path) we apply the legacy counterparty
+  // filter ONLY when we actually have something to filter against;
+  // otherwise we'd hide every party on the ledger and lie about the
+  // count, which is what made this tab look broken before.
+  const haveCounterpartyHints =
+    !!currentPartyId || relevantPartyIds.size > 0;
   const visible =
     scope === "user-owned"
       ? parties
-      : parties.filter((p) => {
+      : haveCounterpartyHints
+      ? parties.filter((p) => {
           if (currentPartyId && p.identifier === currentPartyId) return true;
           if (relevantPartyIds.has(p.identifier)) return true;
           return false;
-        });
+        })
+      : parties;
 
   return (
     <div>
+      {meFailure && (
+        <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-xs text-yellow-600 dark:text-yellow-300">
+          <span className="font-semibold">Couldn&apos;t load your scoped parties.</span>{" "}
+          Showing the global ledger view instead. Detail: <code>{meFailure}</code>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-4">
         <span className="text-sm text-muted-foreground/80">
           {scope === "user-owned"
             ? `${visible.length} part${visible.length === 1 ? "y" : "ies"} you own`
-            : `${visible.length} of ${parties.length} parties (yours & counterparties)`}
+            : haveCounterpartyHints
+            ? `${visible.length} of ${parties.length} parties (yours & counterparties)`
+            : `${visible.length} part${visible.length === 1 ? "y" : "ies"} on ledger`}
         </span>
         <button onClick={() => void fetchParties()} className="rounded-lg border border-border bg-foreground/5 p-2 text-muted-foreground hover:bg-foreground/10 hover:text-foreground">
           <RefreshCw className="h-4 w-4" />
@@ -531,24 +564,32 @@ function PackagesTab({ token }: { token: string | null }) {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [scope, setScope] = useState<"user-owned" | "ledger">("ledger");
+  const [meFailure, setMeFailure] = useState<string | null>(null);
 
   const fetchPackages = async () => {
     setLoading(true);
     setError("");
+    setMeFailure(null);
     try {
       // Authenticated path first \u2014 sourced from our DB so it works
       // even when Canton's /v1/packages 500s with a JWT-scope error.
       if (token) {
-        const resp = await fetch(`${API_URL}/me/packages`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (resp.ok) {
-          const data = (await resp.json()) as { packages?: PackageEntry[] };
-          setPackages(data.packages ?? []);
-          setScope("user-owned");
-          return;
+        try {
+          const resp = await fetch(`${API_URL}/me/packages`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (resp.ok) {
+            const data = (await resp.json()) as { packages?: PackageEntry[] };
+            setPackages(data.packages ?? []);
+            setScope("user-owned");
+            return;
+          }
+          let body = "";
+          try { body = (await resp.text()).slice(0, 200); } catch { /* ignore */ }
+          setMeFailure(`/me/packages HTTP ${resp.status}${body ? `: ${body}` : ""}`);
+        } catch (e: unknown) {
+          setMeFailure(`/me/packages failed: ${e instanceof Error ? e.message : String(e)}`);
         }
-        // Non-2xx \u2014 fall through to the public ledger listing.
       }
 
       const resp = await fetch(`${API_URL}/ledger/packages`);
@@ -604,6 +645,12 @@ function PackagesTab({ token }: { token: string | null }) {
 
   return (
     <div>
+      {meFailure && (
+        <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-xs text-yellow-600 dark:text-yellow-300">
+          <span className="font-semibold">Couldn&apos;t load your scoped packages.</span>{" "}
+          Showing the global ledger view instead. Detail: <code>{meFailure}</code>
+        </div>
+      )}
       <div className="mb-4 flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
