@@ -4,7 +4,11 @@ import structlog
 from rag.vector_store import search_daml_patterns, search_signatures
 from rag.curated_loader import format_curated_for_prompt
 from security.generation_rules import format_rules_for_prompt
-from pipeline.spec_synth import format_spec_for_prompt
+from pipeline.spec_synth import (
+    derive_hard_rules,
+    format_hard_rules_for_prompt,
+    format_spec_for_prompt,
+)
 from utils.branding import prepend_brand_header
 from utils.llm_client import call_llm
 
@@ -137,6 +141,15 @@ def run_writer_agent(
     spec_block = format_spec_for_prompt(contract_spec) if contract_spec else ""
     spec_section = f"\n\n{spec_block}\n" if spec_block else ""
 
+    # Hard rules \u2014 MUST/MUST-NOT prose computed from spec content
+    # (P1). These sit ABOVE the plan + curated reference because they
+    # encode the structural laws the writer must obey before anything
+    # else (single CastVote choice, list-of-Party, no numbered fields,
+    # forbidden non_behaviours, used imports, etc).
+    hard_rules = derive_hard_rules(contract_spec) if contract_spec else []
+    hard_rules_block = format_hard_rules_for_prompt(hard_rules)
+    hard_rules_section = f"\n{hard_rules_block}\n" if hard_rules_block else ""
+
     # Curated gold-standard reference \u2014 a hand-audited Daml file for
     # this pattern that demonstrates the right structural choices
     # (list-of-Party, single parameterised choice, descriptive
@@ -175,7 +188,7 @@ REQUIRED FEATURES:
 
 CHOICES TO IMPLEMENT:
 {chr(10).join(f'- {c}' for c in choices[:3]) if choices else '- Transfer'}
-{constraints_section}{spec_section}{curated_section}
+{constraints_section}{hard_rules_section}{spec_section}{curated_section}
 {rag_section}
 
 IMPORTANT: Use module name 'Main', template name '{template_name}'.

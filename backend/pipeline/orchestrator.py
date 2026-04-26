@@ -14,6 +14,7 @@ from agents.proposal_injector import inject_proposal_pattern
 from agents.diagram_agent import parse_daml_for_diagram, generate_mermaid
 from security.hybrid_auditor import run_hybrid_audit
 from config import get_settings
+from utils.branding import prepend_brand_header
 from pipeline.events import (
     emit,
     emit_log,
@@ -868,6 +869,35 @@ def run_pipeline(job_id: str, user_input: str, canton_environment: str = "sandbo
         derived_status = "failed"
     else:
         derived_status = "complete"
+
+    # Defensive branding: re-stamp the final code AFTER all transforms
+    # (fix-loop, fallback, proposal injection) so the brand header always
+    # reaches the user. ``prepend_brand_header`` is idempotent so this is
+    # safe even when the writer already branded the output.
+    spec_for_brand = final_state.get("contract_spec") or {}
+    pattern = spec_for_brand.get("pattern") if isinstance(spec_for_brand, dict) else None
+    domain = spec_for_brand.get("domain") if isinstance(spec_for_brand, dict) else None
+    final_code = final_state.get("generated_code") or ""
+    if final_code:
+        final_state["generated_code"] = prepend_brand_header(
+            final_code,
+            pattern=pattern,
+            domain=domain,
+            module_name="Main",
+        )
+    project_files = final_state.get("project_files")
+    if isinstance(project_files, dict) and project_files:
+        for fname, code in list(project_files.items()):
+            if not fname.endswith(".daml"):
+                continue
+            stem = fname.rsplit("/", 1)[-1].removesuffix(".daml")
+            project_files[fname] = prepend_brand_header(
+                code,
+                pattern=pattern,
+                domain=domain,
+                module_name=stem,
+            )
+        final_state["project_files"] = project_files
 
     final_state["status"]     = derived_status
     final_state["daml_code"]  = final_state.get("generated_code", "")

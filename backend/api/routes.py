@@ -1,3 +1,4 @@
+import base64
 import os
 import io
 import uuid
@@ -245,6 +246,9 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 result["user_email"] = user_email
             # Persist deployed contract to PostgreSQL
             _save_deployed_contract(job_id, final_state, user_email=user_email or None)
+            # Embed DAR bytes (b64) so /download/{job}/dar still works after
+            # the Railway container restarts and the disk path disappears.
+            _attach_dar_b64(result, final_state.get("dar_path", ""))
         else:
             result = {
                 "job_id":            job_id,
@@ -667,6 +671,51 @@ Please update the contract to incorporate the requested changes while keeping th
     return GenerateResponse(job_id=new_job_id, message="Iteration job queued")
 
 
+# Largest DAR we'll embed in the result_json blob. DARs typically run 50-500KB;
+# anything past this cap is almost certainly a runaway build artefact and we
+# refuse to bloat Postgres with it. The user can still re-download from the
+# original disk path while the container is alive.
+_MAX_DAR_EMBED_BYTES = 8 * 1024 * 1024  # 8 MiB
+
+
+def _attach_dar_b64(result: dict, dar_path: str) -> None:
+    """Read the DAR bytes from disk and stash them base64-encoded onto
+    ``result`` so the download endpoint survives container restarts on
+    Railway / Fly / any other ephemeral-disk host.
+
+    No-op if the path is missing, empty, oversized, or unreadable. Writes
+    ``result['dar_b64']`` and ``result['dar_filename']`` on success.
+    """
+    if not dar_path or not os.path.exists(dar_path):
+        return
+    try:
+        size = os.path.getsize(dar_path)
+    except OSError:
+        return
+    if size <= 0 or size > _MAX_DAR_EMBED_BYTES:
+        if size > _MAX_DAR_EMBED_BYTES:
+            logger.warning(
+                "DAR exceeds embed cap; skipping b64 persistence",
+                path=dar_path,
+                size=size,
+                cap=_MAX_DAR_EMBED_BYTES,
+            )
+        return
+    try:
+        with open(dar_path, "rb") as fh:
+            data = fh.read()
+        result["dar_b64"] = base64.b64encode(data).decode("ascii")
+        result["dar_filename"] = os.path.basename(dar_path) or "contract.dar"
+        logger.info(
+            "DAR embedded into result_json",
+            path=dar_path,
+            size=size,
+            b64_size=len(result["dar_b64"]),
+        )
+    except OSError as e:
+        logger.warning("Failed to read DAR for b64 embedding", path=dar_path, error=str(e))
+
+
 def _resolve_dar_path(job_id: str) -> str:
     """Locate a compiled DAR file for a given job.
 
@@ -723,6 +772,11 @@ async def download_dar(job_id: str):
     """Download the compiled DAR file for a completed job.
 
     Returns the raw DAR binary (application/octet-stream).
+
+    Resolution priority:
+      1. ``result_json['dar_b64']`` (survives Railway / ephemeral-disk
+         container restarts \u2014 the bytes live in Postgres).
+      2. ``_resolve_dar_path`` lookup on disk (faster on a warm container).
     """
     data = _get_job(job_id)
     if not data:
@@ -730,18 +784,36 @@ async def download_dar(job_id: str):
     if data.get("status") != "complete":
         raise HTTPException(status_code=400, detail="Job is not complete; no DAR available")
 
+    # Layer 1: DB-embedded DAR bytes (the canonical store).
+    dar_b64 = data.get("dar_b64")
+    if isinstance(dar_b64, str) and dar_b64:
+        try:
+            raw = base64.b64decode(dar_b64, validate=True)
+        except Exception as e:
+            logger.warning("DAR b64 decode failed; falling back to disk", job_id=job_id, error=str(e))
+        else:
+            filename = data.get("dar_filename") or f"{job_id[:8]}.dar"
+            logger.info("Serving DAR download from DB", job_id=job_id, filename=filename, size=len(raw))
+            return StreamingResponse(
+                io.BytesIO(raw),
+                media_type="application/octet-stream",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+    # Layer 2: Disk lookup.
     dar_path = _resolve_dar_path(job_id)
     if not dar_path:
         raise HTTPException(
             status_code=404,
             detail=(
-                "DAR file not found on disk. It may have been cleaned up "
-                "(ephemeral storage) or the job never produced a DAR."
+                "DAR file not found on disk and not embedded in the job "
+                "result. It may have been produced before DAR persistence "
+                "was enabled, or the job never produced a DAR."
             ),
         )
 
     filename = os.path.basename(dar_path) or f"{job_id}.dar"
-    logger.info("Serving DAR download", job_id=job_id, path=dar_path, filename=filename)
+    logger.info("Serving DAR download from disk", job_id=job_id, path=dar_path, filename=filename)
     return FileResponse(
         path=dar_path,
         media_type="application/octet-stream",

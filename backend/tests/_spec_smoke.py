@@ -13,7 +13,14 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from pipeline.spec_synth import _parse_json_loose, _normalise_spec, format_spec_for_prompt  # noqa: E402
+from pipeline.spec_synth import (  # noqa: E402
+    _parse_json_loose,
+    _normalise_spec,
+    derive_hard_rules,
+    format_hard_rules_for_prompt,
+    format_spec_for_prompt,
+    validate_spec,
+)
 
 RAW = """```json
 {
@@ -64,9 +71,87 @@ def main() -> None:
     assert "Non-behaviours" in out
     assert "Transfer" in out
     assert "Award" in out
-    print("spec_synth smoke OK")
+
+    # ---- P1: validator should accept this clean credential spec ---------
+    issues = validate_spec(spec)
+    assert issues == [], f"clean spec should validate, got: {issues}"
+
+    # ---- P1: validator should reject a credential with a Transfer behaviour
+    bad_credential = {
+        **spec,
+        "behaviours": [
+            *spec["behaviours"],
+            {"name": "Transfer", "controller": "issuer", "effect": "create", "description": "x"},
+        ],
+        "fields": [
+            *spec["fields"],
+            {"name": "amount", "type": "Decimal", "required": True, "purpose": "x"},
+        ],
+    }
+    issues = validate_spec(bad_credential)
+    assert any("Transfer" in i for i in issues), f"missing transfer complaint: {issues}"
+    assert any("amount" in i.lower() for i in issues), f"missing amount complaint: {issues}"
+
+    # ---- P1: validator should reject a voting spec with only 2 parties ---
+    bad_voting = {
+        "domain": "governance",
+        "pattern": "voting-dao",
+        "title": "Vote",
+        "summary": "",
+        "rationale": "",
+        "parties": [
+            {"name": "voter1", "role": "voter", "is_signatory": True, "is_observer": False},
+            {"name": "voter2", "role": "voter", "is_signatory": True, "is_observer": False},
+        ],
+        "fields": [],
+        "behaviours": [
+            {"name": "VoteVoter1", "controller": "voter1", "effect": "create", "description": ""},
+            {"name": "VoteVoter2", "controller": "voter2", "effect": "create", "description": ""},
+        ],
+        "non_behaviours": [],
+        "invariants": [],
+        "test_scenarios": [],
+    }
+    issues = validate_spec(bad_voting)
+    assert any("3 parties" in i for i in issues), f"voting party-count check missing: {issues}"
+    assert any("Finalize" in i or "Tally" in i for i in issues), f"finalize check missing: {issues}"
+
+    # ---- P1: derive_hard_rules for a voting spec ------------------------
+    voting_spec = {
+        "domain": "governance",
+        "pattern": "voting-dao",
+        "parties": [
+            {"name": "proposer"}, {"name": "voter1"}, {"name": "voter2"},
+            {"name": "voter3"}, {"name": "voter4"},
+        ],
+        "fields": [],
+        "behaviours": [{"name": "CastVote"}, {"name": "Finalize"}],
+        "non_behaviours": [{"name": "Bribe", "reason": "no off-ledger payments"}],
+        "invariants": ["votedYes intersect votedNo == []"],
+    }
+    rules = derive_hard_rules(voting_spec)
+    rules_text = " ".join(rules)
+    assert "[Party]" in rules_text, "list-of-party rule missing"
+    assert "CastVote" in rules_text, "single-CastVote rule missing"
+    assert "votedYes" in rules_text or "double-vot" in rules_text.lower(), "double-vote rule missing"
+    assert "Bribe" in rules_text, "non-behaviour rule missing"
+    assert "assertMsg" in rules_text, "assertMsg rule missing"
+
+    block = format_hard_rules_for_prompt(rules)
+    assert "HARD RULES" in block
+    assert "non-negotiable" in block
+    assert "VoteVoter1" in block, "explicit anti-pattern callout missing"
+
+    # ---- P1: empty spec -> no rules ------------------------------------
+    assert derive_hard_rules(None) == []
+    assert derive_hard_rules({}) == []
+    assert format_hard_rules_for_prompt([]) == ""
+
+    print("spec_synth smoke OK (incl. P1 validator + hard-rules)")
     print("---")
     print(out)
+    print("---")
+    print(block)
 
 
 if __name__ == "__main__":

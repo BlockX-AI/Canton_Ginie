@@ -19,7 +19,11 @@ import structlog
 
 from rag.curated_loader import format_curated_for_prompt
 from security.generation_rules import format_rules_for_prompt
-from pipeline.spec_synth import format_spec_for_prompt
+from pipeline.spec_synth import (
+    derive_hard_rules,
+    format_hard_rules_for_prompt,
+    format_spec_for_prompt,
+)
 from utils.branding import prepend_brand_header
 from utils.llm_client import call_llm
 
@@ -298,16 +302,21 @@ def _generate_template(
     elif role == "transfer":
         role_guidance = "\nThis is a TRANSFER template. It should handle ownership transfer of the core asset."
 
-    # Inject the structured Plan AND the curated gold-standard reference
-    # only on the CORE template \u2014 lifecycle / transfer modules describe
-    # a single sub-event and the full plan would over-constrain them.
-    # The core template is what gets deployed.
+    # Inject the structured Plan + hard rules + curated gold-standard
+    # reference only on the CORE template \u2014 lifecycle / transfer modules
+    # describe a single sub-event and the full plan would over-constrain
+    # them. The core template is what gets deployed.
     spec_block = ""
+    hard_rules_block = ""
     curated_block = ""
     if role == "core" and contract_spec:
         formatted = format_spec_for_prompt(contract_spec)
         if formatted:
             spec_block = f"\n\n{formatted}\n"
+        hard_rules = derive_hard_rules(contract_spec)
+        rendered_rules = format_hard_rules_for_prompt(hard_rules)
+        if rendered_rules:
+            hard_rules_block = f"\n{rendered_rules}\n"
         curated = format_curated_for_prompt(
             contract_spec.get("pattern"),
             contract_spec.get("domain"),
@@ -328,7 +337,7 @@ PARTIES:
 - {party2} : Party (observer)
 
 FEATURES: {', '.join(features) if features else 'Standard ' + role + ' operations'}
-{constraints_section}{spec_block}{curated_block}
+{constraints_section}{hard_rules_block}{spec_block}{curated_block}
 {extra_imports and f'IMPORTS NEEDED: {extra_imports}'}
 {context_section}
 {rag_section}

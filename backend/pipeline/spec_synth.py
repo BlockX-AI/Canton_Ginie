@@ -125,24 +125,78 @@ Hard rules:
 def synthesize_spec(user_input: str, structured_intent: dict | None) -> Optional[dict[str, Any]]:
     """Best-effort: returns a spec dict, or None on failure.
 
+    Strategy: synthesize once, run a structural validator on the spec
+    (pattern-aware checks for things like "voting must have 3+ parties",
+    "credentials must NOT have a Transfer behaviour", etc.). If the
+    validator complains, regenerate ONCE feeding the complaints back as
+    explicit feedback. The second attempt's output is accepted whether
+    or not it satisfies the validator \u2014 partial-but-useful is better
+    than none, and downstream hard-rules in the writer prompt act as a
+    second line of defence.
+
     The pipeline must keep working even if this returns None \u2014 the writer
     agent falls back to the legacy intent-only prompt in that case.
     """
-    intent_summary = ""
-    if isinstance(structured_intent, dict):
-        intent_summary = json.dumps({
-            "contract_type":  structured_intent.get("contract_type"),
-            "parties":        structured_intent.get("parties"),
-            "features":       structured_intent.get("features"),
-            "description":    structured_intent.get("description"),
-            "needs_proposal": structured_intent.get("needs_proposal"),
-        })
+    intent_summary = _intent_summary(structured_intent)
 
+    spec = _call_synth(user_input, intent_summary, feedback="")
+    if spec is None:
+        return None
+
+    issues = validate_spec(spec)
+    if issues:
+        logger.warning(
+            "Spec validation found issues, regenerating with feedback",
+            issues=issues,
+            pattern=spec.get("pattern"),
+        )
+        feedback = (
+            "Your previous attempt had these structural problems. Fix ALL of them:\n"
+            + "\n".join(f"  - {i}" for i in issues)
+        )
+        retried = _call_synth(user_input, intent_summary, feedback=feedback)
+        if retried is not None:
+            spec = retried
+            remaining = validate_spec(spec)
+            if remaining:
+                logger.warning(
+                    "Spec still has issues after retry; accepting best-effort",
+                    issues=remaining,
+                )
+
+    logger.info(
+        "Spec synthesised",
+        domain=spec.get("domain"),
+        pattern=spec.get("pattern"),
+        n_parties=len(spec.get("parties") or []),
+        n_fields=len(spec.get("fields") or []),
+        n_behaviours=len(spec.get("behaviours") or []),
+        n_non_behaviours=len(spec.get("non_behaviours") or []),
+    )
+    return spec
+
+
+def _intent_summary(structured_intent: dict | None) -> str:
+    if not isinstance(structured_intent, dict):
+        return ""
+    return json.dumps({
+        "contract_type":  structured_intent.get("contract_type"),
+        "parties":        structured_intent.get("parties"),
+        "features":       structured_intent.get("features"),
+        "description":    structured_intent.get("description"),
+        "needs_proposal": structured_intent.get("needs_proposal"),
+    })
+
+
+def _call_synth(user_input: str, intent_summary: str, feedback: str) -> Optional[dict[str, Any]]:
+    """Single LLM round-trip. Returns a normalised spec dict or None."""
     user_msg = (
         f"User prompt:\n{user_input}\n\n"
         f"Coarse intent:\n{intent_summary or '(none)'}\n\n"
-        "Produce the contract Spec JSON now."
     )
+    if feedback:
+        user_msg += f"VALIDATOR FEEDBACK (mandatory to address):\n{feedback}\n\n"
+    user_msg += "Produce the contract Spec JSON now."
 
     try:
         raw = call_llm(
@@ -154,27 +208,17 @@ def synthesize_spec(user_input: str, structured_intent: dict | None) -> Optional
         logger.warning("Spec synthesis LLM call failed", error=str(e))
         return None
 
-    spec = _parse_json_loose(raw)
-    if not spec:
+    parsed = _parse_json_loose(raw)
+    if not parsed:
         logger.warning("Spec synthesis produced unparseable output", preview=(raw or "")[:200])
         return None
 
-    spec = _normalise_spec(spec)
+    spec = _normalise_spec(parsed)
     if not spec.get("behaviours"):
         # An empty behaviours list means the model gave us nothing usable \u2014
         # fall back rather than feed an empty checklist to the writer.
         logger.warning("Spec synthesis produced no behaviours, discarding")
         return None
-
-    logger.info(
-        "Spec synthesised",
-        domain=spec.get("domain"),
-        pattern=spec.get("pattern"),
-        n_parties=len(spec.get("parties") or []),
-        n_fields=len(spec.get("fields") or []),
-        n_behaviours=len(spec.get("behaviours") or []),
-        n_non_behaviours=len(spec.get("non_behaviours") or []),
-    )
     return spec
 
 
@@ -311,3 +355,291 @@ def format_spec_for_prompt(spec: dict[str, Any] | None) -> str:
             lines.append(f"  - {inv}")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Validator + hard-rule derivation (P1)
+# ---------------------------------------------------------------------------
+#
+# These helpers add a second line of defence between the planner and the
+# writer:
+#
+#   * ``validate_spec`` runs pattern-aware structural checks on the
+#     synthesised spec; the planner re-runs once if any check fails,
+#     feeding the complaints back as explicit feedback.
+#
+#   * ``derive_hard_rules`` produces a list of MUST / MUST-NOT prose
+#     rules computed from the spec's actual content (party count,
+#     party names, behaviour names, invariants, etc). The writer
+#     receives these as a separate "HARD RULES" block in its prompt
+#     so structural rules survive even when the LLM skims the Plan.
+#
+# Both are pure functions of the spec dict \u2014 no I/O, no side effects.
+
+
+_TRANSFER_LIKE = (
+    "transfer", "reassign", "changeowner", "give", "send",
+    "passon", "pass-on", "pass_on", "delegate",
+)
+_PLURAL_PARTY_NAMES = {
+    "voters", "members", "signers", "participants",
+    "investors", "holders", "shareholders", "delegates",
+    "validators", "witnesses",
+}
+
+
+def validate_spec(spec: dict[str, Any] | None) -> list[str]:
+    """Pattern-aware structural validation.
+
+    Returns a list of human-readable complaints; an empty list means
+    the spec is structurally sound for its declared pattern. Complaints
+    are written to be actionable feedback for a re-prompt.
+    """
+    issues: list[str] = []
+    if not isinstance(spec, dict):
+        return ["Spec is not a dict"]
+
+    pattern = (spec.get("pattern") or "").lower()
+    domain = (spec.get("domain") or "").lower()
+    parties = spec.get("parties") or []
+    fields = spec.get("fields") or []
+    behaviours = spec.get("behaviours") or []
+    invariants = spec.get("invariants") or []
+
+    # ----- Universal sanity ------------------------------------------------
+    if not behaviours:
+        issues.append(
+            "No behaviours defined. The contract must expose at least one choice."
+        )
+    if not parties:
+        issues.append("No parties defined.")
+
+    behaviour_names = " ".join((b.get("name") or "").lower() for b in behaviours)
+    field_names = " ".join((f.get("name") or "").lower() for f in fields)
+
+    # ----- Voting / DAO ----------------------------------------------------
+    is_voting = (
+        "voting" in pattern or "dao" in pattern
+        or "vote" in pattern or "ballot" in pattern
+        or domain in {"governance", "voting"}
+    )
+    if is_voting:
+        if len(parties) < 3:
+            issues.append(
+                "Voting/DAO patterns require at least 3 parties. "
+                "Replace numbered party fields with a single collective party "
+                "named `voters` (renderer will emit `voters : [Party]`)."
+            )
+        if "vote" not in behaviour_names and "cast" not in behaviour_names:
+            issues.append(
+                "Voting pattern must include a single `Vote` (or `CastVote`) "
+                "behaviour parameterised by the voter; do NOT enumerate one "
+                "behaviour per voter."
+            )
+        if all(
+            kw not in behaviour_names
+            for kw in ("finalize", "tally", "resolve", "close")
+        ):
+            issues.append(
+                "Voting pattern must include a `Finalize` (or `Tally`) "
+                "behaviour that closes the vote."
+            )
+
+    # ----- Soulbound credential -------------------------------------------
+    is_credential = (
+        "soulbound" in pattern or "credential" in pattern
+        or "badge" in pattern or "certificate" in pattern
+        or domain == "credential"
+    )
+    if is_credential:
+        for b in behaviours:
+            bname = (b.get("name") or "").lower()
+            if any(kw in bname for kw in _TRANSFER_LIKE):
+                issues.append(
+                    f"Credential/badge pattern must NOT have a transfer-like "
+                    f"behaviour `{b.get('name')}` \u2014 move it to non_behaviours."
+                )
+        for f in fields:
+            ftype = (f.get("type") or "").lower()
+            fname = (f.get("name") or "").lower()
+            if "decimal" in ftype and any(
+                kw in fname for kw in ("amount", "value", "price", "cost")
+            ):
+                issues.append(
+                    f"Credential pattern should not carry a financial field "
+                    f"`{f.get('name')} : {f.get('type')}`. Remove it."
+                )
+
+    # ----- NFT (transferable) ---------------------------------------------
+    is_nft = (
+        "nft" in pattern or "collectible" in pattern
+        or domain == "rights"
+    )
+    if is_nft:
+        if "transfer" not in behaviour_names:
+            issues.append(
+                "NFT pattern must include a `Transfer` behaviour "
+                "(controller=owner, effect=create-with-new-owner)."
+            )
+
+    # ----- Bond / fixed income --------------------------------------------
+    is_bond = (
+        "bond" in pattern or "note" in pattern
+        or domain == "finance" and ("coupon" in field_names or "principal" in field_names)
+    )
+    if is_bond:
+        if "principal" not in field_names and "amount" not in field_names:
+            issues.append(
+                "Bond pattern must include a `principal` (or `amount`) field of type Decimal."
+            )
+        if not any(kw in field_names for kw in ("maturity", "matur", "expir")):
+            issues.append("Bond pattern must include a `maturity` field of type Time.")
+
+    # ----- Escrow ---------------------------------------------------------
+    is_escrow = "escrow" in pattern or domain == "payments"
+    if is_escrow:
+        if len(parties) < 3:
+            issues.append(
+                "Escrow pattern needs at least 3 parties (arbiter, buyer, seller)."
+            )
+        if not any(kw in behaviour_names for kw in ("confirm", "release")):
+            issues.append("Escrow pattern needs a `Confirm` (or `Release`) behaviour.")
+        if "refund" not in behaviour_names and "cancel" not in behaviour_names:
+            issues.append("Escrow pattern needs a `Refund` (or `Cancel`) behaviour.")
+
+    # ----- Cross-pattern: invariants must reference real fields/parties ---
+    # If the model produced invariants but we have no parties or fields at
+    # all, something is wrong.
+    if invariants and not parties and not fields:
+        issues.append(
+            "Invariants reference fields/parties but the spec defines none."
+        )
+
+    return issues
+
+
+def derive_hard_rules(spec: dict[str, Any] | None) -> list[str]:
+    """Build a list of MUST/MUST-NOT prose rules from the spec content.
+
+    These rules are computed from the *actual* fields, parties and
+    behaviours the planner produced \u2014 not from the pattern label
+    alone \u2014 so they remain accurate even when a less common pattern
+    is selected.
+
+    The writer agent injects the rendered list (see
+    ``format_hard_rules_for_prompt``) into the user message so the
+    LLM cannot skim past them the way it can skim past the Plan.
+    """
+    rules: list[str] = []
+    if not isinstance(spec, dict):
+        return rules
+
+    parties = spec.get("parties") or []
+    behaviours = spec.get("behaviours") or []
+    non_behaviours = spec.get("non_behaviours") or []
+    invariants = spec.get("invariants") or []
+    pattern = (spec.get("pattern") or "").lower()
+    domain = (spec.get("domain") or "").lower()
+
+    # If the spec carries no usable content at all, return no rules \u2014
+    # we don't want to inject baseline prose rules into a writer that's
+    # operating without any plan context.
+    if not parties and not behaviours and not pattern and not domain:
+        return rules
+
+    party_names_lc = [(p.get("name") or "").lower() for p in parties]
+    plural_party = any(
+        name in _PLURAL_PARTY_NAMES or (name.endswith("s") and len(name) > 3)
+        for name in party_names_lc
+    )
+    is_voting = (
+        "voting" in pattern or "dao" in pattern or "vote" in pattern
+        or "ballot" in pattern or domain in {"governance", "voting"}
+    )
+
+    # ---- Rule: collective parties must be a `[Party]` list ---------------
+    if len(parties) >= 3 or plural_party or is_voting:
+        rules.append(
+            "MUST represent the collective parties as a SINGLE field of "
+            "type `[Party]` (e.g. `voters : [Party]`, `members : [Party]`). "
+            "FORBIDDEN: numbered fields like `voter1 : Party, voter2 : Party, "
+            "voter3 : Party`. The Daml runtime cannot generalise across "
+            "numbered fields and the contract becomes brittle to the exact "
+            "party count."
+        )
+
+    # ---- Rule: vote-like behaviours must be a single parameterised choice
+    bnames = [(b.get("name") or "") for b in behaviours]
+    vote_like = [n for n in bnames if "vote" in n.lower() or "cast" in n.lower()]
+    if is_voting or vote_like:
+        rules.append(
+            "MUST implement voting via ONE single `CastVote` choice with "
+            "`with voter : Party, inFavor : Bool` and `controller voter`, "
+            "guarded by `assertMsg \"...\" (voter `elem` voters)`. "
+            "FORBIDDEN: per-voter clones like `VoteVoter1`, `VoteVoter2`, "
+            "`VoteVoter3` \u2014 these are 100% structurally identical and "
+            "must be parameterised, not duplicated."
+        )
+        rules.append(
+            "MUST prevent double-voting: track `votedYes : [Party]` and "
+            "`votedNo : [Party]` and `assertMsg` that the voter has not "
+            "already voted before recording the new vote."
+        )
+
+    # ---- Rule: non-behaviours are forbidden -----------------------------
+    for nb in non_behaviours:
+        nm = (nb.get("name") or "").strip()
+        if nm:
+            rules.append(
+                f"FORBIDDEN choice: `{nm}`. The Plan explicitly excludes it "
+                f"({(nb.get('reason') or 'see Plan').strip()})."
+            )
+
+    # ---- Rule: every invariant must surface as assertMsg ---------------
+    if invariants:
+        rules.append(
+            "MUST express each Plan invariant as an `assertMsg \"<descriptive "
+            "human-readable reason>\" <condition>` inside the `do` block of "
+            "the choice that mutates the relevant state. Use `ensure` ONLY "
+            "for invariants that hold for the entire lifetime of the "
+            "contract (creation through archival)."
+        )
+
+    # ---- Rule: imports must be used --------------------------------------
+    rules.append(
+        "MUST NOT include unused imports. `import DA.Time` only if the "
+        "contract has a `Time` field or calls `getTime`. `import DA.Date` "
+        "only if it uses `Date`. `length`, `elem`, `notElem`, `head`, "
+        "`tail`, `null`, `map`, `filter` are in the prelude \u2014 NEVER "
+        "import `DA.List` for them."
+    )
+
+    # ---- Rule: descriptive assertMsg over bare ensure -------------------
+    rules.append(
+        "MUST favour `assertMsg \"<reason>\" <cond>` over a bare boolean "
+        "in `ensure` chains. A failing `assertMsg` produces a useful error "
+        "message; a failing `ensure` just says `precondition violated`."
+    )
+
+    return rules
+
+
+def format_hard_rules_for_prompt(rules: list[str] | None) -> str:
+    """Render derived hard rules as a clearly-delimited prompt block.
+
+    Returns ``""`` if there are no rules; otherwise a block with a
+    numbered list and clear delimiters that sits ABOVE the Plan and the
+    curated reference, since these are the structural laws the writer
+    must obey before anything else.
+    """
+    if not rules:
+        return ""
+    body = "\n".join(f"  {i+1}. {r}" for i, r in enumerate(rules))
+    return (
+        "\n--- HARD RULES (auto-derived from the Plan; non-negotiable) ---\n"
+        "Each rule is mandatory. The post-compile auditor checks for "
+        "every one of them, and violations cause your output to be "
+        "rejected and regenerated.\n\n"
+        f"{body}\n"
+        "--- END HARD RULES ---\n"
+    )
