@@ -539,11 +539,66 @@ def audit_node(state: dict) -> dict:
         contract_name = "Contract"
 
     try:
-        audit_result = run_hybrid_audit(
+        # Wall-clock cap: run the audit on a worker thread and wait at most
+        # ``audit_max_seconds`` for it. If anything inside (LLM call,
+        # compliance_engine, report generation) blocks past the deadline
+        # we abandon the audit and let the pipeline continue to deploy
+        # with degraded scores. Without this guard a single hung HTTP call
+        # silently parks the entire pipeline at the AUDIT stage forever
+        # (frontend keeps polling /status returning "running" indefinitely).
+        import concurrent.futures as _cf
+        settings = get_settings()
+        audit_deadline = float(getattr(settings, "audit_max_seconds", 240.0) or 240.0)
+        emit_log(
+            state,
+            f"Audit budget: {int(audit_deadline)}s wall-clock",
+            level="debug",
+        )
+        # NOTE: deliberately avoiding the ``with ThreadPoolExecutor(...)``
+        # form here \u2014 ``__exit__`` calls ``shutdown(wait=True)`` which
+        # would block until the hung worker completes, defeating the whole
+        # point of the timeout. We shut down with ``wait=False`` so the
+        # pipeline thread proceeds to deploy while the runaway audit
+        # request gets reaped by the LLM SDK's own client-side timeout.
+        _ex = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="audit-")
+        _future = _ex.submit(
+            run_hybrid_audit,
             daml_code=daml_code,
             contract_name=contract_name,
             compliance_profile="generic",
         )
+        try:
+            audit_result = _future.result(timeout=audit_deadline)
+        except _cf.TimeoutError:
+            logger.warning(
+                "Audit phase exceeded wall-clock budget \u2014 abandoning",
+                job_id=job_id,
+                budget_seconds=audit_deadline,
+            )
+            emit(
+                state,
+                "audit_timeout",
+                f"Audit took longer than {int(audit_deadline)}s \u2014 skipping and continuing to deploy",
+                level="warn",
+                data={"budget_seconds": audit_deadline},
+            )
+            _future.cancel()
+            _ex.shutdown(wait=False, cancel_futures=True)
+            return {
+                **state,
+                "audit_result": None,
+                "security_score": None,
+                "compliance_score": None,
+                "enterprise_score": None,
+                "deploy_gate": True,  # Don't block on a phase we couldn't run
+                "audit_reports": {},
+                "current_step": "Audit timed out, deploying to Canton...",
+                "progress": 85,
+            }
+        finally:
+            # Successful path: ``shutdown(wait=False)`` is safe \u2014 the
+            # future has already completed, so there's no orphan thread.
+            _ex.shutdown(wait=False)
 
         security_score = audit_result.get("combined_scores", {}).get("security_score")
         compliance_score = audit_result.get("combined_scores", {}).get("compliance_score")

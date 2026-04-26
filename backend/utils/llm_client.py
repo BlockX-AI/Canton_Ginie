@@ -24,7 +24,14 @@ def _call_gemini(settings, system_prompt: str, user_message: str, max_tokens: in
     from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=settings.gemini_api_key)
+    # google-genai's transport accepts a per-client httpx timeout via
+    # ``http_options``. Bound it to ``llm_request_timeout_seconds`` so a
+    # hung Gemini request can never stall the audit / writer pipeline.
+    timeout_s = float(getattr(settings, "llm_request_timeout_seconds", 90.0) or 90.0)
+    client = genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(timeout=int(timeout_s * 1000)),
+    )
     response = client.models.generate_content(
         model=settings.llm_model,
         contents=user_message,
@@ -52,7 +59,12 @@ def _call_gemini(settings, system_prompt: str, user_message: str, max_tokens: in
 def _call_openai(settings, system_prompt: str, user_message: str, max_tokens: int) -> str:
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    timeout_s = float(getattr(settings, "llm_request_timeout_seconds", 90.0) or 90.0)
+    # ``timeout`` on the client applies to every request made through it,
+    # including the underlying httpx connect/read/write phases. Without
+    # this the SDK defaults to ~10 minutes, which silently stalls the
+    # audit / writer / fix nodes when OpenAI is slow or the network blips.
+    client = OpenAI(api_key=settings.openai_api_key, timeout=timeout_s)
     response = client.chat.completions.create(
         model=settings.llm_model,
         max_tokens=max_tokens,
@@ -69,7 +81,8 @@ def _call_openai(settings, system_prompt: str, user_message: str, max_tokens: in
 def _call_anthropic(settings, system_prompt: str, user_message: str, max_tokens: int) -> str:
     from anthropic import Anthropic
 
-    client = Anthropic(api_key=settings.anthropic_api_key)
+    timeout_s = float(getattr(settings, "llm_request_timeout_seconds", 90.0) or 90.0)
+    client = Anthropic(api_key=settings.anthropic_api_key, timeout=timeout_s)
     response = client.messages.create(
         model=settings.llm_model,
         max_tokens=max_tokens,

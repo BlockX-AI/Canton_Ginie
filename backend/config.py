@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     max_fix_attempts: int = 3
     llm_model: str = "gpt-4o"
     llm_temperature: float = 0.1
+    # Per-request HTTP timeout for the LLM SDKs. The vendor defaults are
+    # ~10 minutes, which is long enough that a network blip silently stalls
+    # the whole pipeline (audit / writer / fix nodes all share this client).
+    # 90s is plenty for an 8K-token completion and bounds the worst case.
+    llm_request_timeout_seconds: float = 90.0
+    # Wall-clock cap for the entire audit phase (security + compliance +
+    # report generation combined). The phase runs on a worker thread; if it
+    # blows the deadline we abandon the audit, log a warning, and let the
+    # pipeline continue to the deploy stage with a degraded score.
+    audit_max_seconds: float = 240.0
 
     # Auth / JWT
     jwt_secret: str = ""
