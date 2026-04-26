@@ -149,19 +149,22 @@ function ContractsTab({
         });
         if (!r.ok) return [];
         const d = (await r.json()) as { contracts?: MyContractItem[] };
-        return (d.contracts ?? []).map((c) => ({
-          contractId: c.contract_id,
-          templateId: c.template_id || "",
-          payload: {},
-          signatories: c.signatories || (c.party_id ? [c.party_id] : []),
-          observers: c.observers || [],
-          agreementText: "",
-          jobId: c.job_id,
-          history: true,
-          prompt: c.prompt || "",
-          createdAt: c.created_at || undefined,
-          hasDar: !!c.has_dar,
-        }));
+        return (d.contracts ?? []).map((c): Contract => {
+          const item: Contract = {
+            contractId: c.contract_id,
+            templateId: c.template_id || "",
+            payload: {},
+            signatories: c.signatories || (c.party_id ? [c.party_id] : []),
+            observers: c.observers || [],
+            agreementText: "",
+            jobId: c.job_id,
+            history: true,
+            prompt: c.prompt || "",
+            hasDar: !!c.has_dar,
+          };
+          if (c.created_at) item.createdAt = c.created_at;
+          return item;
+        });
       })();
 
       const [live, mine] = await Promise.all([livePromise, myPromise]);
