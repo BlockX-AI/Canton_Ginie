@@ -76,6 +76,15 @@ _ALIASES: dict[str, str] = {
     "propose-accept":       "propose-accept",
     "agreement":            "propose-accept",
     "contract":             "propose-accept",
+    # invoice / billing lifecycle
+    "invoice":              "invoice-processing",
+    "invoice-processing":   "invoice-processing",
+    "invoicing":            "invoice-processing",
+    "billing":              "invoice-processing",
+    "bill":                 "invoice-processing",
+    "payment-request":      "invoice-processing",
+    "accounts-receivable":  "invoice-processing",
+    "ar":                   "invoice-processing",
 }
 
 

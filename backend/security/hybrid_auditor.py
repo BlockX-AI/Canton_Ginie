@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from security.audit_agent import run_security_audit
 from security.compliance_engine import run_compliance_analysis
+from security.static_checks import detect_static_findings
 from security.report_generator import (
     generate_json_report,
     generate_markdown_report,
@@ -63,6 +64,19 @@ def run_hybrid_audit(
         "error": None,
     }
 
+    # Phase 0: Static checks (deterministic, always run).
+    # These are cheap regex scans that produce findings even when the
+    # LLM audit later fails or times out. They merge into the security
+    # audit's findings list under ``source: "static"`` so the report
+    # generator and combined-score paths see them as first-class items.
+    static_findings = detect_static_findings(daml_code)
+    if static_findings:
+        logger.info(
+            "Static checks produced findings",
+            count=len(static_findings),
+            severities=[f.get("severity") for f in static_findings],
+        )
+
     # Phase 1: Security Audit
     audit_result = None
     if not skip_audit:
@@ -75,6 +89,56 @@ def run_hybrid_audit(
 
         if not audit_result["success"]:
             logger.warning("Security audit failed", error=audit_result.get("error"))
+
+    # Merge static findings into the audit_result. We do this even when
+    # the LLM audit failed entirely so deploy_gate has *something*
+    # deterministic to evaluate against; a hung Anthropic call should
+    # never silently turn into "no security issues found".
+    if static_findings:
+        if audit_result is None:
+            audit_result = {
+                "success": True,
+                "audit_report": {
+                    "contractName": contract_name,
+                    "language": "DAML",
+                    "platform": "Canton",
+                    "findings": [],
+                    "auditor": "Ginie Static Checker",
+                    "version": "2.0",
+                },
+                "security_score": 100,
+                "executive_summary": {},
+                "findings_count": 0,
+                "error": None,
+            }
+            result["security_audit"] = audit_result
+            result["phases"]["security_audit"] = {
+                "started": start_time.isoformat(),
+                "completed": datetime.now(timezone.utc).isoformat(),
+                "status": "static-only",
+            }
+
+        report = audit_result.setdefault("audit_report", {})
+        existing = report.setdefault("findings", [])
+        # Avoid duplicates if run_security_audit somehow already returned
+        # an item with the same id (e.g. on a retry).
+        existing_ids = {f.get("id") for f in existing if isinstance(f, dict)}
+        for sf in static_findings:
+            if sf.get("id") not in existing_ids:
+                existing.append(sf)
+
+        # Re-derive the deterministic score / executive summary so the
+        # newly-merged findings count toward the gate.
+        from security.audit_agent import (
+            _compute_security_score,
+            _build_executive_summary,
+        )
+        merged_findings = report["findings"]
+        new_score = _compute_security_score(merged_findings)
+        audit_result["security_score"] = new_score
+        audit_result["findings_count"] = len(merged_findings)
+        audit_result["executive_summary"] = _build_executive_summary(merged_findings, new_score)
+        report["executiveSummary"] = audit_result["executive_summary"]
 
     # Phase 2: Compliance Analysis
     compliance_result = None

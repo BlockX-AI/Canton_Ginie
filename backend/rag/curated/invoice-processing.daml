@@ -1,0 +1,168 @@
+-- =============================================================
+-- Curated reference pattern: Invoice / billing (propose-accept lifecycle)
+-- =============================================================
+-- Multi-template billing flow that demonstrates the *correct* way to
+-- model "vendor sends an invoice -> client approves or rejects -> when
+-- paid it closes" on Canton.
+--
+-- Why three templates instead of one?
+--   * Each terminal state (paid / rejected) becomes its own ledger
+--     row, so a query like "all paid invoices for Q1" is just a
+--     ``PaidInvoice`` ACS query \xe2\x80\x94 no transaction-stream replay.
+--   * The bilateral ``Invoice`` (signed by both vendor and client)
+--     proves mutual consent; neither party can unilaterally rewrite
+--     the agreed amount or due date.
+--   * The propose stage (``InvoiceProposal``) is single-signatory so
+--     the vendor can issue without coordinating with the client first.
+--
+-- Structural idioms to imitate:
+--   * Propose-accept: ``InvoiceProposal`` (signatory vendor) ->
+--     ``Accept`` -> ``Invoice`` (signatory vendor + client).
+--   * Status enum (``InvoiceStatus``) records ledger-visible state \xe2\x80\x94
+--     never bare ``create this``; always ``create this with status = ...``.
+--   * Terminal choices CREATE successor templates (``PaidInvoice``)
+--     instead of bare ``archive self`` so the audit trail survives.
+--   * Reject / Cancel choices may bare-archive because the business
+--     meaning is genuinely "discard".
+--   * Every ``assertMsg`` message accurately describes its condition.
+-- =============================================================
+
+module Main where
+
+import DA.Time
+
+data InvoiceStatus
+  = Issued
+  | Approved
+  | Disputed
+  deriving (Eq, Show)
+
+
+-- Stage 1: vendor-only proposal. Client is observer so they can see
+-- and react to it, but the contract is unilateral until accepted.
+template InvoiceProposal
+  with
+    vendor      : Party
+    client      : Party
+    invoiceId   : Text
+    amount      : Decimal
+    dueDate     : Time
+    description : Text
+  where
+    signatory vendor
+    observer client
+
+    ensure vendor /= client
+        && invoiceId /= ""
+        && amount > 0.0
+        && description /= ""
+
+    -- Client accepts -> creates the bilateral Invoice with status=Issued.
+    -- The proposal itself is consumed; only the Invoice persists.
+    choice AcceptProposal : ContractId Invoice
+      controller client
+      do
+        create Invoice with
+          vendor; client; invoiceId; amount; dueDate; description
+          status = Issued
+
+    -- Client rejects -> bare archive is correct here because the
+    -- business meaning is genuinely "discard, no successor record".
+    choice RejectProposal : ()
+      with
+        reason : Text
+      controller client
+      do
+        assertMsg "Rejection reason must be provided" (reason /= "")
+        return ()
+
+    -- Vendor revises before acceptance \xe2\x80\x94 mutates fields, never bare
+    -- ``create this``. The new proposal supersedes the old one.
+    choice ReviseProposal : ContractId InvoiceProposal
+      with
+        newAmount      : Decimal
+        newDescription : Text
+      controller vendor
+      do
+        assertMsg "Revised amount must be positive" (newAmount > 0.0)
+        assertMsg "Revised description must be non-empty" (newDescription /= "")
+        create this with
+          amount      = newAmount
+          description = newDescription
+
+
+-- Stage 2: bilateral active invoice. Both parties signatories so neither
+-- can unilaterally archive or amend. ``status`` records ledger-visible
+-- progress so downstream gates (e.g. payment requires Approved) are
+-- enforceable.
+template Invoice
+  with
+    vendor      : Party
+    client      : Party
+    invoiceId   : Text
+    amount      : Decimal
+    dueDate     : Time
+    description : Text
+    status      : InvoiceStatus
+  where
+    signatory vendor, client
+
+    ensure vendor /= client
+        && invoiceId /= ""
+        && amount > 0.0
+
+    -- Client confirms the invoice details. Mutates ``status`` so the
+    -- transition is observable on-ledger \xe2\x80\x94 NEVER bare ``create this``.
+    choice ApproveInvoice : ContractId Invoice
+      controller client
+      do
+        assertMsg "Invoice must be in Issued state to approve"
+                  (status == Issued)
+        create this with status = Approved
+
+    -- Client raises a dispute. Same mutation pattern.
+    choice DisputeInvoice : ContractId Invoice
+      with
+        reason : Text
+      controller client
+      do
+        assertMsg "Dispute reason must be provided" (reason /= "")
+        assertMsg "Cannot dispute a non-active invoice"
+                  (status == Issued || status == Approved)
+        create this with status = Disputed
+
+    -- Terminal: payment closes the invoice. Creates a PaidInvoice
+    -- successor so a regulator can ACS-query "show me paid invoices"
+    -- instead of replaying transactions.
+    choice MarkPaid : ContractId PaidInvoice
+      with
+        paidAt        : Time
+        paymentRef    : Text
+      controller client
+      do
+        assertMsg "Invoice must be Approved before payment"
+                  (status == Approved)
+        assertMsg "Payment reference must be provided" (paymentRef /= "")
+        archive self
+        create PaidInvoice with
+          vendor; client; invoiceId; amount; paidAt; paymentRef
+
+
+-- Stage 3: terminal "paid" record. Bilateral signatories so the proof
+-- of payment cannot be unilaterally rewritten. No further choices \xe2\x80\x94
+-- this row is read-only history.
+template PaidInvoice
+  with
+    vendor     : Party
+    client     : Party
+    invoiceId  : Text
+    amount     : Decimal
+    paidAt     : Time
+    paymentRef : Text
+  where
+    signatory vendor, client
+
+    ensure vendor /= client
+        && invoiceId /= ""
+        && amount > 0.0
+        && paymentRef /= ""

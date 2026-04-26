@@ -70,6 +70,56 @@ GENERATION_SECURITY_RULES: list[dict] = [
         "example": "choice Execute : () ... do archive self; return ()",
         "severity": "medium",
     },
+    {
+        "id": "SEC-GEN-011",
+        "rule": (
+            "A consuming choice that calls `create this` MUST mutate at "
+            "least one field via `with` \u2014 a bare `create this` re-"
+            "creates a byte-identical contract (no-op state transition) "
+            "and gives the impression of a state change while changing "
+            "nothing observable on-ledger. If the choice has no field "
+            "to mutate, either add a `status` field to the template or "
+            "drop the choice entirely."
+        ),
+        "example": (
+            "choice Approve : ContractId Invoice ... do "
+            "create this with status = Approved  -- NEVER bare `create this`"
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-012",
+        "rule": (
+            "Terminal-state choices (Pay, Settle, Complete, Finalize, "
+            "MarkPaid, etc.) MUST `create` a successor template "
+            "(`PaidInvoice`, `SettledTrade`, ...) instead of bare "
+            "`archive self`. A bare archive collapses every terminal "
+            "outcome into a single ledger event and breaks audit-trail "
+            "queries. Reject / Cancel / Withdraw choices may bare-archive "
+            "because the business meaning is genuinely \u2018discard\u2019."
+        ),
+        "example": (
+            "choice MarkPaid : ContractId PaidInvoice ... do "
+            "archive self; create PaidInvoice with vendor; client; amount"
+        ),
+        "severity": "medium",
+    },
+    {
+        "id": "SEC-GEN-013",
+        "rule": (
+            "Every `assertMsg` message MUST accurately describe the "
+            "boolean condition it guards. A message like \u201cInvoice "
+            "already approved\u201d on a condition `vendor /= client` "
+            "is a lie at runtime \u2014 when the assertion fails the "
+            "user sees a misleading reason. Either rewrite the message "
+            "to match the condition, or rewrite the condition to match "
+            "the message."
+        ),
+        "example": (
+            "assertMsg \"Vendor and client must differ\" (vendor /= client)"
+        ),
+        "severity": "medium",
+    },
 ]
 
 

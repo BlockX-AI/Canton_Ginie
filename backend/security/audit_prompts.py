@@ -28,6 +28,9 @@ Your audit MUST cover all categories from these authoritative sources, adapted f
 - DSV-013: Recursive Choice Calls (choices that can recurse indefinitely)
 - DSV-014: Improper Decimal Precision (financial calculations with insufficient precision)
 - DSV-015: Missing Contract Lifecycle Management (no archive/expire mechanism)
+- DSV-016: No-Op State Transition (consuming choice that re-creates `this` with no field changes \u2014 e.g. `archive self; create this` \u2014 producing a contract byte-identical to the one just archived; downstream gates that depend on the transition cannot enforce ordering)
+- DSV-017: Archive-Without-Replacement on Terminal States (consuming choice ends with `archive self` and does NOT `create` a successor template, collapsing distinct outcomes \u2014 paid / settled / cancelled \u2014 into an indistinguishable archive event and destroying the audit trail)
+- DSV-018: Misleading Assertion Messages (`assertMsg` text describes a check that does not match the actual boolean condition \u2014 e.g. message says "Invoice already approved" while the condition only re-checks `vendor /= client`; ships as a runtime lie when the assertion fires)
 
 ### 2. SWC Registry Equivalents for DAML
 - SWC-102 → Outdated SDK Version
