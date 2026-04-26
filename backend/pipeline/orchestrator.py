@@ -199,11 +199,14 @@ def generate_project_node(state: dict) -> dict:
         }
 
     files = result["files"]
+    file_names = list(files.keys())
+    preview = ", ".join(file_names[:5])
+    suffix = "\u2026" if len(files) > 5 else ""
     emit_log(
         state,
-        f"Created {len(files)} project file(s): {', '.join(list(files.keys())[:5])}{'\u2026' if len(files) > 5 else ''}",
+        f"Created {len(files)} project file(s): {preview}{suffix}",
         count=len(files),
-        files=list(files.keys()),
+        files=file_names,
     )
     # Combine all files into a single code string for compile/audit/deploy
     # (compile_node writes individual files but generated_code holds the combined view)
