@@ -24,6 +24,8 @@ import {
   FolderTree,
   ExternalLink,
   Database,
+  Download,
+  Archive,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -636,6 +638,39 @@ export default function SandboxPage() {
                 )}
               </div>
             )}
+
+            {/* Downloads */}
+            <div className="rounded-2xl border border-border bg-muted p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Download className="h-4 w-4 text-accent" />
+                <h3 className="text-sm font-semibold text-foreground">Download artifacts</h3>
+              </div>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Save the generated Daml project source and the compiled DAR. You can re-import the
+                project locally or upload the DAR to any Canton participant.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href={`${API_URL}/download/${result.job_id}/source`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                  <Archive className="h-3.5 w-3.5" />
+                  Source (.zip)
+                </a>
+                <a
+                  href={`${API_URL}/download/${result.job_id}/dar`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-4 py-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-accent/20"
+                >
+                  <Download className="h-3.5 w-3.5 text-accent" />
+                  Compiled DAR (.dar)
+                </a>
+                {result.contract_id && (
+                  <span className="text-[11px] text-muted-foreground">
+                    Job&nbsp;ID:&nbsp;<code className="font-mono">{result.job_id.slice(0, 8)}</code>
+                  </span>
+                )}
+              </div>
+            </div>
 
             {/* Actions */}
             <div className="flex items-center gap-3 border-t border-border pt-6">

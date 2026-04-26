@@ -1,37 +1,25 @@
-"""Ginie SDK — Package setup."""
+"""DEPRECATED — package config has moved to the repo-root ``pyproject.toml``.
 
-from setuptools import setup, find_packages
+The distribution is now published as ``canton-ginie`` on PyPI.
+Install with:
 
-setup(
-    name="ginie-sdk",
-    version="0.1.0",
-    description="Python SDK for the Ginie AI-powered DAML contract generation platform",
-    long_description=open("sdk/README.md", encoding="utf-8").read(),
-    long_description_content_type="text/markdown",
-    author="Ginie Team",
-    url="https://github.com/ginie/ginie-sdk",
-    license="MIT",
-    packages=find_packages(include=["sdk", "sdk.*"]),
-    python_requires=">=3.10",
-    install_requires=[
-        "httpx>=0.24.0",
-    ],
-    extras_require={
-        "dev": [
-            "pytest>=7.0",
-            "pytest-cov",
-        ],
-    },
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Topic :: Software Development :: Code Generators",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-    ],
-    keywords="daml canton smart-contracts ai sdk",
+    pip install canton-ginie
+
+This file is kept only to avoid breaking any legacy ``pip install -e ./sdk``
+invocations; it now defers to the root-level pyproject.toml.
+"""
+
+import warnings
+
+warnings.warn(
+    "sdk/setup.py is deprecated. Install canton-ginie via the project root: "
+    "`pip install -e .` or `pip install canton-ginie` from PyPI.",
+    DeprecationWarning,
+    stacklevel=2,
 )
+
+from setuptools import setup
+
+# Minimal setup() so `pip install -e ./sdk` still works but delegates
+# configuration to the modern pyproject.toml at the repo root.
+setup()

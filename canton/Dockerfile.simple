@@ -1,0 +1,33 @@
+# Simplified Canton Dockerfile for debugging
+# Use this if the main Dockerfile keeps failing
+
+FROM eclipse-temurin:17-jre-jammy
+
+WORKDIR /app
+
+# Install minimal dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download Canton
+ARG CANTON_VERSION=2.9.3
+RUN curl -L "https://github.com/digital-asset/canton/releases/download/v${CANTON_VERSION}/canton-open-source-${CANTON_VERSION}.tar.gz" \
+    -o canton.tar.gz && \
+    tar -xzf canton.tar.gz && \
+    mv canton-open-source-${CANTON_VERSION} /canton && \
+    rm canton.tar.gz && \
+    chmod +x /canton/bin/canton
+
+# Simple config that uses environment variables
+RUN mkdir -p /canton/config
+COPY canton-railway.conf /canton/config/
+
+# Simple entrypoint
+COPY entrypoint-simple.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 7575 7576
+
+ENTRYPOINT ["/entrypoint.sh"]

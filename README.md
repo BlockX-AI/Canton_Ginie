@@ -3,7 +3,32 @@
 Natural language to deployed Canton smart contracts.
 
 [![CI](https://github.com/BlockX-AI/Canton_Ginie/actions/workflows/ci.yml/badge.svg)](https://github.com/BlockX-AI/Canton_Ginie/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/canton-ginie?color=gold)](https://pypi.org/project/canton-ginie/)
 [![Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-gold?style=flat)](LICENSE)
+
+**Live demo:** [canton.ginie.xyz](https://canton.ginie.xyz) · **Community contracts:** [COMMUNITY_CONTRACTS.md](COMMUNITY_CONTRACTS.md)
+
+---
+
+## Try it in 30 seconds
+
+```bash
+pip install canton-ginie
+```
+
+```python
+from ginie import GinieClient
+
+client = GinieClient(base_url="https://api.ginie.xyz/api/v1")
+result = client.full_pipeline("Create a bond between issuer and investor, 5% coupon")
+
+print(result.contract_id)   # deployed on Canton
+print(result.explorer_link) # verifiable on cantonscan.com
+```
+
+Or use the hosted UI directly at **[canton.ginie.xyz](https://canton.ginie.xyz)** — deploy your first Canton contract in under a minute, no install required.
+
+See the full [SDK docs](sdk/README.md) for audit, compliance, and iteration APIs.
 
 ---
 

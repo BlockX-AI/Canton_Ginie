@@ -23,7 +23,7 @@ from api.models import (
 )
 from config import get_settings
 from sqlalchemy import text as sa_text
-from api.middleware import optional_auth
+from api.middleware import optional_auth, get_current_user
 from utils.daml_utils import get_daml_sdk_version
 
 logger = structlog.get_logger()
@@ -103,14 +103,18 @@ def _set_job(job_id: str, data: dict):
                     current_step=data.get("current_step", "idle"),
                     progress=data.get("progress", 0),
                     canton_env=data.get("canton_environment", "sandbox"),
+                    user_email=data.get("user_email"),
                     error_message=data.get("error_message"),
                 )
                 session.add(job)
+            # Backfill user_email if it was learned later (e.g. linked after queue)
+            if data.get("user_email") and not job.user_email:
+                job.user_email = data.get("user_email")
     except Exception as e:
         logger.debug("DB write failed, data still in Redis/memory", error=str(e))
 
 
-def _save_deployed_contract(job_id: str, deploy_result: dict):
+def _save_deployed_contract(job_id: str, deploy_result: dict, user_email: str | None = None):
     """Save deployed contract info to PostgreSQL."""
     try:
         from db.session import get_db_session
@@ -122,6 +126,7 @@ def _save_deployed_contract(job_id: str, deploy_result: dict):
                 template_id=deploy_result.get("template_id", ""),
                 job_id=job_id,
                 party_id=deploy_result.get("party_id") or None,
+                user_email=user_email or deploy_result.get("user_email") or None,
                 dar_path=deploy_result.get("dar_path", "") or None,
                 canton_env=deploy_result.get("environment") or deploy_result.get("canton_environment", "sandbox"),
                 explorer_link=deploy_result.get("explorer_link", ""),
@@ -161,7 +166,7 @@ def _celery_has_workers() -> bool:
         return False
 
 
-def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, canton_url: str, party_id: str = ""):
+def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, canton_url: str, party_id: str = "", user_email: str = ""):
     """Run pipeline in a dedicated thread — guaranteed to execute immediately."""
     logger.info("[THREAD] Starting pipeline", job_id=job_id, party_id=party_id or "(anonymous)")
     with _threads_lock:
@@ -173,6 +178,7 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
             "status":       "running",
             "current_step": "Initializing pipeline...",
             "progress":     10,
+            "user_email":   user_email or None,
             "updated_at":   datetime.now(timezone.utc).isoformat(),
         }
         with _jobs_lock:
@@ -233,8 +239,11 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 "project_files":     final_state.get("original_project_files") or final_state.get("project_files"),
                 "updated_at":        datetime.now(timezone.utc).isoformat(),
             }
+            # Stamp user_email so later /me/contracts queries can find this row
+            if user_email:
+                result["user_email"] = user_email
             # Persist deployed contract to PostgreSQL
-            _save_deployed_contract(job_id, final_state)
+            _save_deployed_contract(job_id, final_state, user_email=user_email or None)
         else:
             result = {
                 "job_id":            job_id,
@@ -280,11 +289,11 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
             _active_threads.pop(job_id, None)
 
 
-def _start_pipeline_job(job_id: str, user_input: str, canton_environment: str, canton_url: str, party_id: str = ""):
+def _start_pipeline_job(job_id: str, user_input: str, canton_environment: str, canton_url: str, party_id: str = "", user_email: str = ""):
     """Launch the pipeline in a daemon thread so it starts immediately."""
     t = threading.Thread(
         target=_run_pipeline_thread,
-        args=(job_id, user_input, canton_environment, canton_url, party_id),
+        args=(job_id, user_input, canton_environment, canton_url, party_id, user_email),
         daemon=True,
         name=f"pipeline-{job_id[:8]}",
     )
@@ -303,12 +312,24 @@ async def generate_contract(request: Request, body: GenerateRequest, user: dict 
     # Extract authenticated party_id if user is logged in
     party_id = user.get("sub", "") if user else ""
 
+    # Extract stable user identity (email) for cross-session, cross-party history.
+    # The fingerprint claim is set to `email:<addr>` for email-account tokens; the
+    # sub claim flips to the party_id once a party is linked, so prefer fingerprint.
+    user_email = ""
+    if user:
+        fp = user.get("fingerprint", "") or ""
+        if isinstance(fp, str) and fp.startswith("email:"):
+            user_email = fp[len("email:"):]
+        elif isinstance(party_id, str) and party_id.startswith("email:"):
+            user_email = party_id[len("email:"):]
+
     initial_data = {
         "job_id":       job_id,
         "status":       "queued",
         "current_step": "Job queued...",
         "progress":     5,
         "party_id":     party_id,
+        "user_email":   user_email or None,
         "updated_at":   datetime.now(timezone.utc).isoformat(),
     }
     with _jobs_lock:
@@ -322,8 +343,9 @@ async def generate_contract(request: Request, body: GenerateRequest, user: dict 
         canton_environment=body.canton_environment or settings.canton_environment,
         canton_url=canton_url,
         party_id=party_id,
+        user_email=user_email,
     )
-    logger.info("Job created and pipeline thread launched", job_id=job_id, party_id=party_id or "(anonymous)")
+    logger.info("Job created and pipeline thread launched", job_id=job_id, party_id=party_id or "(anonymous)", user_email=user_email or "(anonymous)")
 
     return GenerateResponse(job_id=job_id)
 
@@ -378,6 +400,69 @@ async def get_job_result(job_id: str):
         diagram_mermaid=data.get("diagram_mermaid"),
         project_files=data.get("project_files"),
     )
+
+
+@router.get("/me/contracts")
+async def list_my_contracts(user: dict = Depends(get_current_user)):
+    """Return every contract this user has ever deployed, across all of the
+    parties they may have created in different sessions.
+
+    Identity is keyed off the email account (stable) instead of party_id
+    (which rotates each session by design), so users can always see and
+    download their full deployment history.
+    """
+    fp = (user.get("fingerprint") or "")
+    sub = (user.get("sub") or "")
+    user_email = ""
+    if isinstance(fp, str) and fp.startswith("email:"):
+        user_email = fp[len("email:"):]
+    elif isinstance(sub, str) and sub.startswith("email:"):
+        user_email = sub[len("email:"):]
+    if not user_email:
+        # Token isn't an email-account token (legacy Ed25519-only login).
+        # Fall back to filtering by party_id sub so the endpoint is still
+        # useful for those users.
+        return {"contracts": [], "count": 0, "user_email": None}
+
+    items: list[dict] = []
+    try:
+        from db.session import get_db_session
+        from db.models import DeployedContract, JobHistory
+        with get_db_session() as session:
+            rows = (
+                session.query(DeployedContract, JobHistory)
+                .outerjoin(JobHistory, DeployedContract.job_id == JobHistory.job_id)
+                .filter(
+                    (DeployedContract.user_email == user_email)
+                    | (JobHistory.user_email == user_email)
+                )
+                .order_by(DeployedContract.created_at.desc())
+                .all()
+            )
+            for c, j in rows:
+                rj = (j.result_json if j and isinstance(j.result_json, dict) else {}) or {}
+                items.append({
+                    "job_id": c.job_id,
+                    "contract_id": c.contract_id,
+                    "package_id": c.package_id,
+                    "template_id": c.template_id or rj.get("template_id") or rj.get("template", ""),
+                    "party_id": c.party_id,
+                    "canton_env": c.canton_env,
+                    "explorer_link": c.explorer_link,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                    "signatories": [c.party_id] if c.party_id else [],
+                    "observers": [],
+                    "prompt": (j.prompt if j else "") or rj.get("user_input", ""),
+                    "deploy_gate": rj.get("deploy_gate"),
+                    "security_score": rj.get("security_score"),
+                    "compliance_score": rj.get("compliance_score"),
+                    "has_dar": bool(rj.get("dar_path") or c.dar_path),
+                })
+    except Exception as e:
+        logger.warning("/me/contracts query failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to load contract history")
+
+    return {"contracts": items, "count": len(items), "user_email": user_email}
 
 
 @router.post("/iterate/{job_id}", response_model=GenerateResponse)

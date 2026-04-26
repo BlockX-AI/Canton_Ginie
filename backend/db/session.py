@@ -79,3 +79,34 @@ def init_db():
     engine = get_engine()
     Base.metadata.create_all(engine)
     logger.info("Database tables initialized (set INIT_DB_TABLES=false to use Alembic only)")
+
+    # Lightweight in-place schema upgrades for columns added after first deploy.
+    # `create_all` only creates *missing tables*, never alters existing tables,
+    # so without Alembic running on startup we have to apply additive column
+    # changes ourselves. PostgreSQL's `ADD COLUMN IF NOT EXISTS` makes this
+    # idempotent and safe to run on every boot.
+    _apply_inline_schema_upgrades(engine)
+
+
+def _apply_inline_schema_upgrades(engine) -> None:
+    """Idempotent ALTER TABLE statements for columns added in later releases.
+
+    Each statement is wrapped in its own transaction so a failure on one
+    upgrade does not abort the rest.
+    """
+    statements = [
+        # Migration 003: link jobs/contracts to the email account that
+        # created them so users can see all their deployments across the
+        # multiple parties they create over different sessions.
+        "ALTER TABLE job_history ADD COLUMN IF NOT EXISTS user_email TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_job_history_user_email ON job_history (user_email)",
+        "ALTER TABLE deployed_contracts ADD COLUMN IF NOT EXISTS user_email TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_deployed_contracts_user_email ON deployed_contracts (user_email)",
+    ]
+    from sqlalchemy import text
+    for stmt in statements:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception as e:
+            logger.warning("Inline schema upgrade skipped", stmt=stmt, error=str(e))

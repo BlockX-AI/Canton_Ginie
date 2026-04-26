@@ -75,6 +75,7 @@ class JobHistory(Base):
     current_step = Column(Text, nullable=False, default="idle")
     progress = Column(Integer, nullable=False, default=0)
     canton_env = Column(Text, nullable=False, default="sandbox")
+    user_email = Column(Text, nullable=True, index=True)
     result_json = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -87,6 +88,7 @@ class JobHistory(Base):
     __table_args__ = (
         Index("idx_job_history_status", "status"),
         Index("idx_job_history_party", "party_id"),
+        Index("idx_job_history_user_email", "user_email"),
     )
 
 
@@ -99,6 +101,7 @@ class DeployedContract(Base):
     template_id = Column(Text, nullable=False, default="")
     job_id = Column(Text, ForeignKey("job_history.job_id"), nullable=True)
     party_id = Column(Text, nullable=True)
+    user_email = Column(Text, nullable=True, index=True)
     dar_path = Column(Text, nullable=True)
     canton_env = Column(Text, nullable=False, default="sandbox")
     explorer_link = Column(Text, nullable=True)
@@ -109,4 +112,5 @@ class DeployedContract(Base):
     __table_args__ = (
         Index("idx_deployed_contracts_job", "job_id"),
         Index("idx_deployed_contracts_party", "party_id"),
+        Index("idx_deployed_contracts_user_email", "user_email"),
     )

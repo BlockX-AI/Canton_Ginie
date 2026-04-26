@@ -69,6 +69,11 @@ export function SetupWizard(): ReactNode {
   const [authSubStep, setAuthSubStep] = useState("");
   const [registeredPartyId, setRegisteredPartyId] = useState("");
 
+  // True when the user is logging in with an existing key file
+  // (session recovery) rather than registering a new party.
+  const [isReturningUser, setIsReturningUser] = useState(false);
+  const [partyNotFound, setPartyNotFound] = useState(false);
+
   const updateStep = (index: number, update: Partial<StepState>) => {
     setStepStates((prev) => {
       const next = [...prev];
@@ -111,7 +116,11 @@ export function SetupWizard(): ReactNode {
       }
       setKeyPair(kp);
       setKeyFileDownloaded(true);
+      setIsReturningUser(true);
       updateStep(0, { status: "success" });
+      // Skip party-name step — we look it up by fingerprint.
+      updateStep(1, { status: "success" });
+      setCurrentStep(2);
     } catch (e) {
       updateStep(0, { status: "error", error: `Invalid key file: ${e}` });
     }
@@ -142,7 +151,91 @@ export function SetupWizard(): ReactNode {
     }
   };
 
-  // ── Step 3: Register & Authenticate ─────────────────────────
+  // ── Step 3a: Session recovery (returning user with existing key) ─
+  const handleLogin = async () => {
+    if (!keyPair) return;
+    updateStep(2, { status: "loading" });
+    setPartyNotFound(false);
+
+    try {
+      setAuthSubStep("Requesting challenge...");
+      const challengeResp = await fetch(`${API_URL}/auth/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!challengeResp.ok) {
+        throw new Error(`Challenge request failed: ${challengeResp.status}`);
+      }
+      const { challenge } = await challengeResp.json();
+
+      setAuthSubStep("Signing challenge...");
+      const signature = signChallenge(challenge, keyPair.secretKey);
+
+      setAuthSubStep("Recovering session...");
+      const loginResp = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challenge,
+          signature,
+          public_key: keyPair.publicKey,
+        }),
+      });
+
+      if (loginResp.status === 404) {
+        // Party not found for this fingerprint — Canton node may have been reset.
+        const data = await loginResp.json().catch(() => ({}));
+        const detail = data?.detail;
+        const partyNotFoundFlag =
+          detail && typeof detail === "object" && detail.party_not_found === true;
+        if (partyNotFoundFlag) {
+          setPartyNotFound(true);
+          updateStep(2, {
+            status: "error",
+            error:
+              detail.message ||
+              "Your party is not registered on this environment. Please register a new one.",
+          });
+          return;
+        }
+        throw new Error(
+          (typeof detail === "string" ? detail : detail?.message) ||
+            "Session recovery failed",
+        );
+      }
+
+      if (!loginResp.ok) {
+        const data = await loginResp.json().catch(() => ({}));
+        const msg =
+          typeof data.detail === "string"
+            ? data.detail
+            : data.detail?.message || "Login failed";
+        throw new Error(msg);
+      }
+
+      const { token, party_id, display_name, fingerprint } = await loginResp.json();
+      setRegisteredPartyId(party_id);
+      setPartyName(display_name);
+      setAuthSubStep("");
+      login(token, party_id, display_name, fingerprint);
+      updateStep(2, { status: "success" });
+      setCurrentStep(3);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      updateStep(2, { status: "error", error: msg });
+    }
+  };
+
+  // Switch from failed login back to registration flow (party not found case).
+  const handleSwitchToRegister = () => {
+    setIsReturningUser(false);
+    setPartyNotFound(false);
+    updateStep(1, { status: "idle", error: "" });
+    updateStep(2, { status: "idle", error: "" });
+    setCurrentStep(1);
+  };
+
+  // ── Step 3b: Register & Authenticate ─────────────────────────
   const handleRegister = async () => {
     if (!keyPair) return;
     updateStep(2, { status: "loading" });
@@ -457,23 +550,30 @@ export function SetupWizard(): ReactNode {
             {stepStates[2]!.status === "idle" && (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-border bg-muted p-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Party Name</span>
-                    <span className="text-foreground">{partyName}</span>
-                  </div>
+                  {!isReturningUser && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Party Name</span>
+                      <span className="text-foreground">{partyName}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Fingerprint</span>
                     <span className="font-mono text-xs text-foreground/60">
                       {keyPair?.fingerprint.slice(0, 24)}...
                     </span>
                   </div>
+                  {isReturningUser && (
+                    <p className="text-xs text-muted-foreground pt-1">
+                      Returning user detected — we will recover your existing party session.
+                    </p>
+                  )}
                 </div>
 
                 <button
-                  onClick={handleRegister}
+                  onClick={isReturningUser ? handleLogin : handleRegister}
                   className="w-full rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition-colors hover:bg-foreground/90"
                 >
-                  Register on Canton
+                  {isReturningUser ? "Recover Session" : "Register on Canton"}
                 </button>
               </div>
             )}
@@ -490,19 +590,32 @@ export function SetupWizard(): ReactNode {
                 <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
                     <AlertCircle className="h-4 w-4" />
-                    Registration failed
+                    {partyNotFound
+                      ? "Party not found"
+                      : isReturningUser
+                        ? "Session recovery failed"
+                        : "Registration failed"}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground whitespace-pre-line">
                     {stepStates[2]!.error}
                   </p>
                 </div>
-                <button
-                  onClick={handleRegister}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted px-6 py-3 font-semibold text-foreground transition-all hover:bg-muted/80"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Retry
-                </button>
+                {partyNotFound ? (
+                  <button
+                    onClick={handleSwitchToRegister}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition-colors hover:bg-foreground/90"
+                  >
+                    Register a New Party
+                  </button>
+                ) : (
+                  <button
+                    onClick={isReturningUser ? handleLogin : handleRegister}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-muted px-6 py-3 font-semibold text-foreground transition-all hover:bg-muted/80"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Retry
+                  </button>
+                )}
               </div>
             )}
           </motion.div>

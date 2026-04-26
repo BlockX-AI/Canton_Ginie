@@ -65,7 +65,7 @@ function CopyButton({ text }: { text: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
-      className="ml-1 shrink-0 rounded-md p-1 text-white/30 transition-colors hover:bg-white/10 hover:text-white/60"
+      className="ml-1 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       title="Copy"
     >
       {copied ? <Check className="h-3 w-3 text-accent" /> : <Copy className="h-3 w-3" />}
@@ -126,7 +126,7 @@ function ContractsTab() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-accent" />
-        <span className="ml-3 text-white/50">Querying ledger...</span>
+        <span className="ml-3 text-muted-foreground">Querying ledger...</span>
       </div>
     );
   }
@@ -136,7 +136,7 @@ function ContractsTab() {
       <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 text-center">
         <XCircle className="mx-auto h-8 w-8 text-red-400" />
         <p className="mt-2 text-sm text-red-300">{error}</p>
-        <button onClick={() => void fetchContracts()} className="mt-3 rounded-lg bg-white/5 px-4 py-2 text-xs text-white/60 hover:bg-white/10">
+        <button onClick={() => void fetchContracts()} className="mt-3 rounded-lg bg-muted px-4 py-2 text-xs text-foreground/60 hover:bg-muted">
           Retry
         </button>
       </div>
@@ -147,28 +147,28 @@ function ContractsTab() {
     <div>
       <div className="mb-4 flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
           <input
             type="text"
             placeholder="Search by contract ID or template..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-accent/50 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-muted py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-accent/50 focus:outline-none"
           />
         </div>
-        <button onClick={() => void fetchContracts()} className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-white/50 hover:bg-white/10 hover:text-white">
+        <button onClick={() => void fetchContracts()} className="rounded-lg border border-border bg-muted p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="py-16 text-center text-white/40">
-          <FileText className="mx-auto h-10 w-10 text-white/20" />
+        <div className="py-16 text-center text-muted-foreground">
+          <FileText className="mx-auto h-10 w-10 text-muted-foreground/50" />
           <p className="mt-3">No contracts found on ledger</p>
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+          <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             <div className="col-span-3">Contract ID</div>
             <div className="col-span-5">Template ID</div>
             <div className="col-span-2">Signatories</div>
@@ -181,48 +181,48 @@ function ContractsTab() {
                 className={`grid cursor-pointer grid-cols-12 gap-4 rounded-lg border px-4 py-3 transition-all ${
                   selected?.contractId === c.contractId
                     ? "border-accent/40 bg-accent/10"
-                    : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]"
+                    : "border-border bg-muted hover:border-border hover:bg-muted/80"
                 }`}
                 onClick={() => setSelected(selected?.contractId === c.contractId ? null : c)}
               >
                 <div className="col-span-3 flex items-center gap-2">
-                  <span className="font-mono text-xs text-white/80">{truncate(c.contractId, 16)}</span>
+                  <span className="font-mono text-xs text-foreground/80">{truncate(c.contractId, 16)}</span>
                   <CopyButton text={c.contractId} />
                 </div>
                 <div className="col-span-5">
                   <span className="font-mono text-xs text-accent">{truncate(c.templateId, 50)}</span>
                 </div>
                 <div className="col-span-2 flex items-center gap-1">
-                  <Users className="h-3 w-3 text-white/30" />
-                  <span className="text-xs text-white/50">{c.signatories.length}</span>
+                  <Users className="h-3 w-3 text-muted-foreground/70" />
+                  <span className="text-xs text-muted-foreground">{c.signatories.length}</span>
                 </div>
                 <div className="col-span-2 flex items-center justify-end">
                   {selected?.contractId === c.contractId ? (
-                    <ChevronUp className="h-4 w-4 text-white/30" />
+                    <ChevronUp className="h-4 w-4 text-muted-foreground/70" />
                   ) : (
-                    <ChevronDown className="h-4 w-4 text-white/30" />
+                    <ChevronDown className="h-4 w-4 text-muted-foreground/70" />
                   )}
                 </div>
               </div>
 
               {selected?.contractId === c.contractId && (
-                <div className="mx-2 mt-1 space-y-4 rounded-b-lg border border-t-0 border-white/5 bg-white/[0.02] p-5">
+                <div className="mx-2 mt-1 space-y-4 rounded-b-lg border border-t-0 border-border bg-muted p-5">
                   <div>
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Contract ID</h4>
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Contract ID</h4>
                     <div className="mt-1 flex items-center">
-                      <code className="break-all font-mono text-xs text-white/70">{c.contractId}</code>
+                      <code className="break-all font-mono text-xs text-foreground/70">{c.contractId}</code>
                       <CopyButton text={c.contractId} />
                     </div>
                   </div>
                   <div>
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Template</h4>
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Template</h4>
                     <div className="mt-1 flex items-center">
                       <code className="break-all font-mono text-xs text-accent">{c.templateId}</code>
                       <CopyButton text={c.templateId} />
                     </div>
                   </div>
                   <div>
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Signatories</h4>
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Signatories</h4>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {c.signatories.map((s, i) => (
                         <span key={i} className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1 text-xs text-accent border border-accent/20">
@@ -235,7 +235,7 @@ function ContractsTab() {
                   </div>
                   {c.observers.length > 0 && (
                     <div>
-                      <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Observers</h4>
+                      <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Observers</h4>
                       <div className="mt-1 flex flex-wrap gap-2">
                         {c.observers.map((o, i) => (
                           <span key={i} className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-3 py-1 text-xs text-blue-300 border border-blue-500/20">
@@ -248,8 +248,8 @@ function ContractsTab() {
                     </div>
                   )}
                   <div>
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Contract Payload</h4>
-                    <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-white/5 bg-black/40 p-4 font-mono text-xs text-white/60">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Contract Payload</h4>
+                    <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-border bg-muted p-4 font-mono text-xs text-foreground/60">
                       {JSON.stringify(c.payload, null, 2)}
                     </pre>
                   </div>
@@ -259,7 +259,7 @@ function ContractsTab() {
           ))}
         </div>
       )}
-      <div className="mt-4 text-center text-xs text-white/30">{filtered.length} contract{filtered.length !== 1 ? "s" : ""} on ledger</div>
+      <div className="mt-4 text-center text-xs text-muted-foreground/70">{filtered.length} contract{filtered.length !== 1 ? "s" : ""} on ledger</div>
     </div>
   );
 }
@@ -291,7 +291,7 @@ function PartiesTab() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-accent" />
-        <span className="ml-3 text-white/50">Fetching parties...</span>
+        <span className="ml-3 text-muted-foreground">Fetching parties...</span>
       </div>
     );
   }
@@ -308,29 +308,29 @@ function PartiesTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-white/40">{parties.length} parties on ledger</span>
-        <button onClick={() => void fetchParties()} className="rounded-lg border border-white/10 bg-white/5 p-2 text-white/50 hover:bg-white/10 hover:text-white">
+        <span className="text-sm text-muted-foreground">{parties.length} parties on ledger</span>
+        <button onClick={() => void fetchParties()} className="rounded-lg border border-border bg-muted p-2 text-muted-foreground hover:bg-muted hover:text-foreground">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
 
       <div className="space-y-2">
-        <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+        <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
           <div className="col-span-3">Display Name</div>
           <div className="col-span-7">Identifier</div>
           <div className="col-span-2 text-right">Local</div>
         </div>
 
         {parties.map((p, idx) => (
-          <div key={idx} className="grid grid-cols-12 gap-4 rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3 hover:border-white/10 hover:bg-white/[0.04] transition-all">
+          <div key={idx} className="grid grid-cols-12 gap-4 rounded-lg border border-border bg-muted px-4 py-3 hover:border-border hover:bg-muted/80 transition-all">
             <div className="col-span-3 flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
                 {(p.displayName || "?").charAt(0).toUpperCase()}
               </div>
-              <span className="text-sm font-medium text-white/80">{p.displayName || "—"}</span>
+              <span className="text-sm font-medium text-foreground/80">{p.displayName || "—"}</span>
             </div>
             <div className="col-span-7 flex items-center gap-1">
-              <code className="truncate font-mono text-xs text-white/50">{p.identifier}</code>
+              <code className="truncate font-mono text-xs text-muted-foreground">{p.identifier}</code>
               <CopyButton text={p.identifier} />
             </div>
             <div className="col-span-2 flex items-center justify-end">
@@ -339,7 +339,7 @@ function PartiesTab() {
                   <CheckCircle2 className="h-3 w-3" /> Local
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/40 border border-white/10">
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-[10px] font-medium text-muted-foreground border border-border">
                   Remote
                 </span>
               )}
@@ -381,7 +381,7 @@ function PackagesTab() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-accent" />
-        <span className="ml-3 text-white/50">Fetching packages...</span>
+        <span className="ml-3 text-muted-foreground">Fetching packages...</span>
       </div>
     );
   }
@@ -399,41 +399,41 @@ function PackagesTab() {
     <div>
       <div className="mb-4 flex items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
           <input
             type="text"
             placeholder="Search packages..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:border-accent/50 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-muted py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-accent/50 focus:outline-none"
           />
         </div>
-        <button onClick={() => void fetchPackages()} className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-white/50 hover:bg-white/10 hover:text-white">
+        <button onClick={() => void fetchPackages()} className="rounded-lg border border-border bg-muted p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="py-16 text-center text-white/40">
-          <Package className="mx-auto h-10 w-10 text-white/20" />
+        <div className="py-16 text-center text-muted-foreground">
+          <Package className="mx-auto h-10 w-10 text-muted-foreground/50" />
           <p className="mt-3">No packages found</p>
         </div>
       ) : (
         <div className="space-y-2">
           {filtered.map((pkg, idx) => (
-            <div key={idx} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3 hover:border-white/10 hover:bg-white/[0.04] transition-all">
+            <div key={idx} className="flex items-center justify-between rounded-lg border border-border bg-muted px-4 py-3 hover:border-border hover:bg-muted/80 transition-all">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20">
                   <Package className="h-4 w-4 text-accent" />
                 </div>
-                <code className="font-mono text-xs text-white/70">{pkg}</code>
+                <code className="font-mono text-xs text-foreground/70">{pkg}</code>
               </div>
               <CopyButton text={pkg} />
             </div>
           ))}
         </div>
       )}
-      <div className="mt-4 text-center text-xs text-white/30">{filtered.length} package{filtered.length !== 1 ? "s" : ""} uploaded</div>
+      <div className="mt-4 text-center text-xs text-muted-foreground/70">{filtered.length} package{filtered.length !== 1 ? "s" : ""} uploaded</div>
     </div>
   );
 }
@@ -470,7 +470,7 @@ function VerifyTab() {
   return (
     <div className="space-y-6">
       <div>
-        <label className="text-xs font-semibold uppercase tracking-wider text-white/30">Contract ID</label>
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Contract ID</label>
         <div className="mt-2 flex gap-3">
           <input
             type="text"
@@ -478,7 +478,7 @@ function VerifyTab() {
             value={contractId}
             onChange={(e) => setContractId(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void verify(); }}
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white placeholder:text-white/30 focus:border-accent/50 focus:outline-none"
+            className="flex-1 rounded-lg border border-border bg-muted px-4 py-3 font-mono text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-accent/50 focus:outline-none"
           />
           <button
             onClick={() => void verify()}
@@ -515,13 +515,13 @@ function VerifyTab() {
           {result.verified && (
             <div className="mt-6 space-y-4">
               <div>
-                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Template</h4>
+                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Template</h4>
                 <code className="mt-1 block font-mono text-xs text-accent">{result.templateId ?? ""}</code>
               </div>
 
               {result.signatories && result.signatories.length > 0 && (
                 <div>
-                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Signatories</h4>
+                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Signatories</h4>
                   <div className="mt-1 flex flex-wrap gap-2">
                     {result.signatories.map((s, i) => (
                       <span key={i} className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1 text-xs text-accent border border-accent/20">
@@ -535,8 +535,8 @@ function VerifyTab() {
 
               {result.payload && (
                 <div>
-                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-white/30">Payload</h4>
-                  <pre className="mt-1 max-h-48 overflow-auto rounded-lg border border-white/5 bg-black/40 p-4 font-mono text-xs text-white/60">
+                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Payload</h4>
+                  <pre className="mt-1 max-h-48 overflow-auto rounded-lg border border-border bg-muted p-4 font-mono text-xs text-foreground/60">
                     {JSON.stringify(result.payload, null, 2)}
                   </pre>
                 </div>
@@ -576,27 +576,27 @@ export default function ExplorerPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-white/5 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
+      <div className="border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/" className="flex items-center gap-2 text-white/50 hover:text-white transition-colors">
+            <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft className="h-4 w-4" />
               <span className="text-sm">Home</span>
             </Link>
-            <div className="h-5 w-px bg-white/10" />
+            <div className="h-5 w-px bg-border" />
             <div className="flex items-center gap-2">
               <Database className="h-5 w-5 text-accent" />
-              <h1 className="text-lg font-semibold text-white">Ledger Explorer</h1>
+              <h1 className="text-lg font-semibold text-foreground">Ledger Explorer</h1>
             </div>
           </div>
 
           {ledgerStatus && (
-            <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-1.5">
+            <div className="flex items-center gap-3 rounded-full border border-border bg-muted px-4 py-1.5">
               <StatusDot online={ledgerStatus.status === "online"} />
-              <span className="text-xs text-white/60">
+              <span className="text-xs text-foreground/60">
                 {ledgerStatus.status === "online" ? "Canton Online" : "Canton Offline"}
               </span>
-              <span className="text-[10px] text-white/30">
+              <span className="text-[10px] text-muted-foreground/70">
                 {ledgerStatus.environment?.toUpperCase()}
               </span>
             </div>
@@ -608,47 +608,47 @@ export default function ExplorerPage() {
         {/* Ledger summary cards */}
         {ledgerStatus?.status === "online" && (
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
+            <div className="rounded-xl border border-border bg-muted p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
                   <Activity className="h-5 w-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">Online</p>
-                  <p className="text-[10px] uppercase tracking-wider text-white/30">Ledger Status</p>
+                  <p className="text-2xl font-bold text-foreground">Online</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Ledger Status</p>
                 </div>
               </div>
             </div>
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
+            <div className="rounded-xl border border-border bg-muted p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
                   <Users className="h-5 w-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{ledgerStatus.parties >= 0 ? ledgerStatus.parties : "—"}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-white/30">Parties</p>
+                  <p className="text-2xl font-bold text-foreground">{ledgerStatus.parties >= 0 ? ledgerStatus.parties : "—"}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Parties</p>
                 </div>
               </div>
             </div>
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
+            <div className="rounded-xl border border-border bg-muted p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
                   <Package className="h-5 w-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white">{ledgerStatus.packages >= 0 ? ledgerStatus.packages : "—"}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-white/30">Packages</p>
+                  <p className="text-2xl font-bold text-foreground">{ledgerStatus.packages >= 0 ? ledgerStatus.packages : "—"}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70">Packages</p>
                 </div>
               </div>
             </div>
-            <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
+            <div className="rounded-xl border border-border bg-muted p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
                   <Database className="h-5 w-5 text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-mono font-bold text-white truncate">{ledgerStatus.canton_url || "—"}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-white/30">{ledgerStatus.environment} endpoint</p>
+                  <p className="text-sm font-mono font-bold text-foreground truncate">{ledgerStatus.canton_url || "—"}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70">{ledgerStatus.environment} endpoint</p>
                 </div>
               </div>
             </div>
@@ -656,7 +656,7 @@ export default function ExplorerPage() {
         )}
 
         {/* Tabs */}
-        <div className="mb-6 flex items-center gap-1 rounded-xl border border-white/5 bg-white/[0.02] p-1">
+        <div className="mb-6 flex items-center gap-1 rounded-xl border border-border bg-muted p-1">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -664,14 +664,14 @@ export default function ExplorerPage() {
               className={`flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium transition-all ${
                 activeTab === tab.key
                   ? "bg-accent text-black shadow-lg shadow-accent/20"
-                  : "text-white/40 hover:bg-white/5 hover:text-white/70"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground/70"
               }`}
             >
               {tab.icon}
               {tab.label}
               {tab.count !== undefined && (
                 <span className={`ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  activeTab === tab.key ? "bg-black/20 text-black" : "bg-white/5 text-white/30"
+                  activeTab === tab.key ? "bg-background/20 text-black" : "bg-muted text-muted-foreground/70"
                 }`}>
                   {tab.count}
                 </span>
@@ -681,7 +681,7 @@ export default function ExplorerPage() {
         </div>
 
         {/* Tab content */}
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-6">
+        <div className="rounded-xl border border-border bg-muted p-6">
           {activeTab === "contracts" && <ContractsTab />}
           {activeTab === "parties" && <PartiesTab />}
           {activeTab === "packages" && <PackagesTab />}

@@ -1,0 +1,94 @@
+name: Community Contract Submission
+description: Share a Canton contract you deployed using Ginie so it can be listed in COMMUNITY_CONTRACTS.md.
+title: "[Community Contract] <short description>"
+labels: ["community-contract", "m1-external-usage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Ginie! This form submits a real Canton contract you deployed
+        using the hosted UI or the `canton-ginie` Python SDK. Once a maintainer verifies
+        the `contract_id` is reachable, you will be added to
+        [COMMUNITY_CONTRACTS.md](../../blob/main/COMMUNITY_CONTRACTS.md).
+
+        > **Why this exists:** Our Canton grant M1 acceptance criteria commits to
+        > **minimum 10 external-user contract deployments**. Your submission helps us
+        > prove adoption.
+
+  - type: input
+    id: github_handle
+    attributes:
+      label: GitHub handle (or "anonymous")
+      description: How you want to be credited. Use "anonymous" to be listed without a link.
+      placeholder: "@your-handle"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Canton environment
+      options:
+        - sandbox
+        - devnet
+        - mainnet
+      default: 1
+    validations:
+      required: true
+
+  - type: input
+    id: contract_id
+    attributes:
+      label: Contract ID
+      description: The `contract_id` value from the Ginie result page or `GinieClient` response.
+      placeholder: "0050e287c28a17a7100a5db4160fb47c344d6fe847a7..."
+    validations:
+      required: true
+
+  - type: input
+    id: template
+    attributes:
+      label: Template name
+      description: What kind of contract? (e.g. Bond, Escrow, Option, Custody, LetterOfCredit)
+      placeholder: "Bond"
+    validations:
+      required: true
+
+  - type: input
+    id: explorer_link
+    attributes:
+      label: Explorer link (devnet / mainnet) or screenshot URL (sandbox)
+      description: A verifiable link on cantonscan.com, or a public screenshot URL for sandbox deployments.
+      placeholder: "https://cantonscan.com/contract/0050e287..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt used (optional)
+      description: The English description you gave Ginie. Helps us improve the RAG library.
+      placeholder: |
+        "Create a bond contract between issuer and investor, $1M principal, 5% annual coupon, maturity in 10 years."
+      render: markdown
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes (optional)
+      description: Anything else worth recording — use case, which contract IDs generated, what worked, what didn't.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Consent
+      options:
+        - label: I deployed this contract myself (or on behalf of my team) using Ginie.
+          required: true
+        - label: I consent to this submission being listed publicly in COMMUNITY_CONTRACTS.md under the repository's Apache 2.0 license.
+          required: true

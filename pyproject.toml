@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "canton-ginie"
+version = "0.1.0"
+description = "Python SDK for the Ginie AI-powered Canton / Daml smart-contract generation platform"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "BlockX AI", email = "team@blockxai.com" },
+]
+keywords = [
+    "canton",
+    "daml",
+    "smart-contracts",
+    "blockchain",
+    "ai",
+    "code-generation",
+    "sdk",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "httpx>=0.24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "build>=1.0",
+    "twine>=4.0",
+]
+
+[project.urls]
+Homepage = "https://canton.ginie.xyz"
+Repository = "https://github.com/BlockX-AI/Canton_Ginie"
+Documentation = "https://github.com/BlockX-AI/Canton_Ginie/blob/main/sdk/README.md"
+Issues = "https://github.com/BlockX-AI/Canton_Ginie/issues"
+"Community Contracts" = "https://github.com/BlockX-AI/Canton_Ginie/blob/main/COMMUNITY_CONTRACTS.md"
+
+# ---------------------------------------------------------------------------
+# Packaging — we ship two top-level packages:
+#   `ginie` — user-facing namespace (`from ginie import GinieClient`)
+#   `sdk`   — underlying implementation (kept for backward compatibility)
+# Everything else in the repo (backend/, frontend_dark/, canton/, etc.)
+# is explicitly excluded.
+# ---------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ginie*", "sdk*"]
+exclude = [
+    "backend*",
+    "frontend*",
+    "canton*",
+    "scripts*",
+    "schemas*",
+    "rag*",
+    "log*",
+    "tests*",
+    "sdk.tests*",
+]
+
+[tool.setuptools.package-data]
+"*" = ["README.md", "LICENSE"]

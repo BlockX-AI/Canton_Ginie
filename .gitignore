@@ -70,7 +70,6 @@ DEMO_SCRIPT_5MIN.md
 
 # Deprecated / unused frontend directories
 frontend/
-ginie-saas-frontend/
 
 # OS & editor
 .DS_Store

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
   Loader2,
@@ -42,6 +42,26 @@ interface Contract {
   signatories: string[];
   observers: string[];
   agreementText: string;
+  jobId?: string;
+  history?: boolean;
+  prompt?: string;
+  createdAt?: string;
+  hasDar?: boolean;
+}
+
+interface MyContractItem {
+  job_id: string;
+  contract_id: string;
+  package_id: string;
+  template_id: string;
+  party_id: string | null;
+  canton_env: string;
+  explorer_link: string | null;
+  created_at: string | null;
+  signatories: string[];
+  observers: string[];
+  prompt: string;
+  has_dar: boolean;
 }
 
 interface LedgerStatus {
@@ -88,7 +108,15 @@ function StatusDot({ online }: { online: boolean }) {
 // Tab Components
 // ---------------------------------------------------------------------------
 
-function ContractsTab({ partyId }: { partyId: string | null }) {
+function ContractsTab({
+  partyId,
+  token,
+  onContractsLoaded,
+}: {
+  partyId: string | null;
+  token: string | null;
+  onContractsLoaded?: (contracts: Contract[]) => void;
+}) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -99,18 +127,56 @@ function ContractsTab({ partyId }: { partyId: string | null }) {
     setLoading(true);
     setError("");
     try {
-      // Scope query to this party so Daml privacy filters out contracts
-      // where the current user is neither signatory nor observer.
-      const body = partyId ? { party: partyId } : {};
-      const resp = await fetch(`${API_URL}/ledger/contracts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data: unknown = await resp.json();
-      const parsed = data as { contracts?: Contract[] };
-      setContracts(parsed.contracts ?? []);
+      // 1. Live ACS for the current party (Canton-side privacy filter).
+      const livePromise = (async (): Promise<Contract[]> => {
+        const body = partyId ? { party: partyId } : {};
+        const r = await fetch(`${API_URL}/ledger/contracts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) return [];
+        const d = (await r.json()) as { contracts?: Contract[] };
+        return d.contracts ?? [];
+      })();
+
+      // 2. User's full deployment history (across every party they ever
+      //    created), keyed off email account on the backend.
+      const myPromise = (async (): Promise<Contract[]> => {
+        if (!token) return [];
+        const r = await fetch(`${API_URL}/me/contracts`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) return [];
+        const d = (await r.json()) as { contracts?: MyContractItem[] };
+        return (d.contracts ?? []).map((c) => ({
+          contractId: c.contract_id,
+          templateId: c.template_id || "",
+          payload: {},
+          signatories: c.signatories || (c.party_id ? [c.party_id] : []),
+          observers: c.observers || [],
+          agreementText: "",
+          jobId: c.job_id,
+          history: true,
+          prompt: c.prompt || "",
+          createdAt: c.created_at || undefined,
+          hasDar: !!c.has_dar,
+        }));
+      })();
+
+      const [live, mine] = await Promise.all([livePromise, myPromise]);
+
+      // Merge: live wins on contractId conflict (richer payload), but keep the
+      // historical entries that the current party can no longer see on-ledger.
+      const byId = new Map<string, Contract>();
+      for (const c of mine) byId.set(c.contractId, c);
+      for (const c of live) {
+        const prev = byId.get(c.contractId);
+        byId.set(c.contractId, prev ? { ...prev, ...c, history: false } : c);
+      }
+      const merged = Array.from(byId.values());
+      setContracts(merged);
+      onContractsLoaded?.(merged);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to fetch contracts");
     } finally {
@@ -118,17 +184,13 @@ function ContractsTab({ partyId }: { partyId: string | null }) {
     }
   };
 
-  useEffect(() => { void fetchContracts(); }, [partyId]);
+  useEffect(() => { void fetchContracts(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [partyId, token]);
 
-  // Defensive client-side filter: even if the backend returns extra contracts,
-  // only show those visible to the current party.
-  const visible = partyId
-    ? contracts.filter(
-        (c) => c.signatories.includes(partyId) || c.observers.includes(partyId)
-      )
-    : contracts;
-
-  const filtered = visible.filter(
+  // No defensive client-side party filter here: /me/contracts already returns
+  // only this user's history, and /ledger/contracts is already scoped to the
+  // current party server-side. We deliberately keep historical contracts from
+  // older parties visible (user is the stable identity, not party).
+  const filtered = contracts.filter(
     (c) =>
       c.contractId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.templateId.toLowerCase().includes(searchTerm.toLowerCase())
@@ -177,15 +239,15 @@ function ContractsTab({ partyId }: { partyId: string | null }) {
         <div className="py-16 text-center text-muted-foreground/80">
           <FileText className="mx-auto h-10 w-10 text-muted-foreground/40" />
           <p className="mt-3">
-            {partyId
-              ? "No contracts visible to your party yet"
-              : "No contracts found on ledger"}
+            {token
+              ? "You haven\u2019t deployed any contracts yet"
+              : partyId
+                ? "No contracts visible to your party yet"
+                : "No contracts found on ledger"}
           </p>
-          {partyId && (
-            <p className="mt-1 text-xs text-muted-foreground/60">
-              Deploy a contract from the home page to see it here.
-            </p>
-          )}
+          <p className="mt-1 text-xs text-muted-foreground/60">
+            Deploy a contract from the home page to see it here.
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -216,8 +278,33 @@ function ContractsTab({ partyId }: { partyId: string | null }) {
                 <div className="col-span-2 flex items-center gap-1">
                   <Users className="h-3 w-3 text-muted-foreground/70" />
                   <span className="text-xs text-muted-foreground">{c.signatories.length}</span>
+                  {c.history && (
+                    <span className="ml-1 rounded-full bg-foreground/5 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground" title="Deployed by you in an earlier session">
+                      history
+                    </span>
+                  )}
                 </div>
-                <div className="col-span-2 flex items-center justify-end">
+                <div className="col-span-2 flex items-center justify-end gap-2">
+                  {c.jobId && (
+                    <a
+                      href={`${API_URL}/download/${c.jobId}/source`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded-md border border-border bg-foreground/5 px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                      title="Download source zip"
+                    >
+                      Source
+                    </a>
+                  )}
+                  {c.jobId && c.hasDar && (
+                    <a
+                      href={`${API_URL}/download/${c.jobId}/dar`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded-md border border-accent/30 bg-accent/10 px-2 py-1 text-[10px] font-medium text-accent hover:bg-accent/20"
+                      title="Download compiled DAR"
+                    >
+                      DAR
+                    </a>
+                  )}
                   {selected?.contractId === c.contractId ? (
                     <ChevronUp className="h-4 w-4 text-muted-foreground/70" />
                   ) : (
@@ -285,7 +372,7 @@ function ContractsTab({ partyId }: { partyId: string | null }) {
   );
 }
 
-function PartiesTab() {
+function PartiesTab({ relevantPartyIds, currentPartyId }: { relevantPartyIds: Set<string>; currentPartyId: string | null }) {
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -326,10 +413,22 @@ function PartiesTab() {
     );
   }
 
+  // Show only parties that are relevant to the authenticated user: their own
+  // current party, plus any parties that appear as signatories/observers in
+  // contracts they have deployed. This hides unrelated parties created by
+  // other users on the shared sandbox.
+  const visible = parties.filter((p) => {
+    if (currentPartyId && p.identifier === currentPartyId) return true;
+    if (relevantPartyIds.has(p.identifier)) return true;
+    return false;
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-muted-foreground/80">{parties.length} parties on ledger</span>
+        <span className="text-sm text-muted-foreground/80">
+          {visible.length} of {parties.length} parties (yours &amp; counterparties)
+        </span>
         <button onClick={() => void fetchParties()} className="rounded-lg border border-border bg-foreground/5 p-2 text-muted-foreground hover:bg-foreground/10 hover:text-foreground">
           <RefreshCw className="h-4 w-4" />
         </button>
@@ -342,7 +441,13 @@ function PartiesTab() {
           <div className="col-span-2 text-right">Local</div>
         </div>
 
-        {parties.map((p, idx) => (
+        {visible.length === 0 && (
+          <div className="py-12 text-center text-xs text-muted-foreground/70">
+            No parties linked to your account yet. Deploy a contract first.
+          </div>
+        )}
+
+        {visible.map((p, idx) => (
           <div key={idx} className="grid grid-cols-12 gap-4 rounded-lg border border-border bg-foreground/[0.03] px-4 py-3 hover:border-border hover:bg-foreground/[0.05] transition-all">
             <div className="col-span-3 flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
@@ -579,8 +684,21 @@ type TabKey = "contracts" | "parties" | "packages" | "verify";
 export default function ExplorerPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("contracts");
   const [ledgerStatus, setLedgerStatus] = useState<LedgerStatus | null>(null);
-  const { isAuthenticated, partyId } = useAuth();
+  const { isAuthenticated, partyId, token } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [userContracts, setUserContracts] = useState<Contract[]>([]);
+
+  // Build the set of party identifiers that should be visible in the Parties
+  // tab: every signatory/observer that appears in this user's contracts.
+  const relevantPartyIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of userContracts) {
+      for (const sig of c.signatories) s.add(sig);
+      for (const obs of c.observers) s.add(obs);
+    }
+    if (partyId) s.add(partyId);
+    return s;
+  }, [userContracts, partyId]);
 
   useEffect(() => {
     setMounted(true);
@@ -748,8 +866,12 @@ export default function ExplorerPage() {
 
         {/* Tab content */}
         <div className="rounded-xl border border-border bg-frame p-6">
-          {activeTab === "contracts" && <ContractsTab partyId={partyId} />}
-          {activeTab === "parties" && <PartiesTab />}
+          {activeTab === "contracts" && (
+            <ContractsTab partyId={partyId} token={token} onContractsLoaded={setUserContracts} />
+          )}
+          {activeTab === "parties" && (
+            <PartiesTab relevantPartyIds={relevantPartyIds} currentPartyId={partyId} />
+          )}
           {activeTab === "packages" && <PackagesTab />}
           {activeTab === "verify" && <VerifyTab />}
         </div>

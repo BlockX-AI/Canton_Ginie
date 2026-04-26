@@ -24,18 +24,12 @@ import {
   FolderTree,
   ExternalLink,
   Database,
+  Download,
+  FileArchive,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
-
-interface JobStatus {
-  job_id: string;
-  status: "queued" | "running" | "complete" | "failed";
-  current_step: string;
-  progress: number;
-  error_message?: string;
-}
 
 interface AuditFinding {
   id?: string;
@@ -194,6 +188,7 @@ export default function SandboxPage() {
       const timer = setTimeout(() => router.push("/"), 3000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [status, router]);
 
   const isProcessing =
@@ -583,7 +578,7 @@ export default function SandboxPage() {
             )}
 
             {/* Actions */}
-            <div className="flex items-center gap-3 border-t border-border pt-6">
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-6">
               <Link
                 href="/"
                 className="group inline-flex items-center gap-2 rounded-xl bg-foreground px-6 py-3 text-sm font-semibold text-background transition-colors hover:bg-foreground/90"
@@ -599,6 +594,22 @@ export default function SandboxPage() {
                 Canton Ledger Explorer
                 <ExternalLink className="h-3.5 w-3.5 text-accent transition-transform group-hover:translate-x-0.5" />
               </Link>
+              <a
+                href={`${API_URL}/download/${jobId}/dar`}
+                download
+                className="group inline-flex items-center gap-2 rounded-xl border border-border bg-muted px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80"
+              >
+                <Download className="h-4 w-4" />
+                Download .dar
+              </a>
+              <a
+                href={`${API_URL}/download/${jobId}/source`}
+                download
+                className="group inline-flex items-center gap-2 rounded-xl border border-border bg-muted px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80"
+              >
+                <FileArchive className="h-4 w-4" />
+                Download Source (.zip)
+              </a>
             </div>
           </div>
         )}
