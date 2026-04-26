@@ -592,34 +592,42 @@ async def list_my_parties(user: dict = Depends(get_current_user)):
     Owned parties are the union of:
       * The party linked to the user's ``EmailAccount`` (their primary
         signing identity).
-      * Every distinct ``DeployedContract.party_id`` they have ever
-        deployed under \u2014 the deploy agent rotates parties per session,
-        so a single user can accumulate several legitimate identities.
-      * The deploy parties (signatories / observers) recorded in each of
-        their job's ``result_json.parties`` blob.
+      * Every distinct ``party_id`` from ``DeployedContract`` rows
+        belonging to this user. Ownership is determined the same way
+        ``/me/contracts`` does: via ``DeployedContract.user_email`` OR
+        a join through ``JobHistory.user_email``. The OR is what lets
+        legacy deploys (where the contract row's ``user_email`` was
+        never populated) still surface their parties.
+      * The deploy parties recorded in each of the user's job
+        ``result_json.parties`` blobs.
+
+    Each individual data source is wrapped in its own try/except so a
+    single failing query (e.g. a missing EmailAccount table on a stale
+    schema) cannot black-hole the whole endpoint into a 500. The
+    response always returns 200 with whatever we managed to collect.
 
     The response shape matches ``/ledger/parties`` so the frontend can
     swap endpoints without other changes.
     """
+    settings = get_settings()
+    canton_env = settings.canton_environment
     user_email = _user_email_from_claims(user)
     if not user_email:
         return {
             "parties": [],
             "count": 0,
             "user_email": None,
-            "environment": get_settings().canton_environment,
+            "environment": canton_env,
             "scope": "user-owned",
         }
 
-    settings = get_settings()
-    canton_env = settings.canton_environment
     seen: dict[str, dict] = {}
+    source_errors: list[str] = []
 
     def _add(party_id: str, display_name: str = "", source: str = "deployed"):
         if not party_id or not isinstance(party_id, str):
             return
         if party_id in seen:
-            # Upgrade display name if we now have a better one.
             if display_name and not seen[party_id].get("displayName"):
                 seen[party_id]["displayName"] = display_name
             return
@@ -630,16 +638,28 @@ async def list_my_parties(user: dict = Depends(get_current_user)):
             "source": source,
         }
 
+    from db.session import get_db_session
     try:
-        from db.session import get_db_session
         from db.models import (
             DeployedContract,
             EmailAccount,
             JobHistory,
             RegisteredParty,
         )
+    except Exception as e:
+        logger.warning("/me/parties: model import failed", error=str(e))
+        return {
+            "parties": [],
+            "count": 0,
+            "user_email": user_email,
+            "environment": canton_env,
+            "scope": "user-owned",
+            "error": f"models: {e}",
+        }
+
+    # 1. Primary identity from the email account (best-effort).
+    try:
         with get_db_session() as session:
-            # 1. Primary identity from the email account.
             account = (
                 session.query(EmailAccount)
                 .filter(EmailAccount.email == user_email)
@@ -656,19 +676,40 @@ async def list_my_parties(user: dict = Depends(get_current_user)):
                     display_name=(rp.display_name if rp else "") or (account.display_name or ""),
                     source="primary",
                 )
+    except Exception as e:
+        logger.warning("/me/parties: EmailAccount lookup failed", error=str(e))
+        source_errors.append(f"email_account: {e}")
 
-            # 2. Every party_id from this user's deployed contracts.
-            contracts = (
-                session.query(DeployedContract)
-                .filter(DeployedContract.user_email == user_email)
+    # 2. Parties from this user's deployed contracts. Ownership = the
+    # SAME OR pattern that ``/me/contracts`` uses: either the contract
+    # row carries the email directly, or its parent job does. Without
+    # the JobHistory join, legacy contracts (where DeployedContract
+    # was created before user_email was being stamped) silently
+    # disappear from this view.
+    try:
+        with get_db_session() as session:
+            rows = (
+                session.query(DeployedContract, JobHistory)
+                .outerjoin(JobHistory, DeployedContract.job_id == JobHistory.job_id)
                 .filter(DeployedContract.canton_env == canton_env)
+                .filter(
+                    (DeployedContract.user_email == user_email)
+                    | (JobHistory.user_email == user_email)
+                )
                 .all()
             )
-            for c in contracts:
+            for c, _j in rows:
                 if c.party_id:
                     _add(c.party_id, source="deployed")
+    except Exception as e:
+        logger.warning("/me/parties: DeployedContract lookup failed", error=str(e))
+        source_errors.append(f"deployed_contract: {e}")
 
-            # 3. Parties referenced inside the user's job result_json blobs.
+    # 3. Parties referenced inside the user's job result_json blobs.
+    # This catches signatories / observers that never made it into a
+    # DeployedContract row (e.g. failed jobs, multi-party deploys).
+    try:
+        with get_db_session() as session:
             jobs = (
                 session.query(JobHistory)
                 .filter(JobHistory.user_email == user_email)
@@ -687,15 +728,96 @@ async def list_my_parties(user: dict = Depends(get_current_user)):
                         if isinstance(pid, str):
                             _add(pid, source="job")
     except Exception as e:
-        logger.warning("/me/parties query failed", error=str(e), user_email=user_email)
-        raise HTTPException(status_code=500, detail="Failed to load your parties")
+        logger.warning("/me/parties: JobHistory.result_json scan failed", error=str(e))
+        source_errors.append(f"job_history: {e}")
 
     parties = list(seen.values())
     parties.sort(key=lambda p: (p.get("source") != "primary", p["identifier"]))
 
-    return {
+    out: dict = {
         "parties": parties,
         "count": len(parties),
+        "user_email": user_email,
+        "environment": canton_env,
+        "scope": "user-owned",
+    }
+    if source_errors:
+        out["partial_errors"] = source_errors
+    return out
+
+
+@router.get("/me/packages")
+async def list_my_packages(user: dict = Depends(get_current_user)):
+    """Return only the DAR package_ids this authenticated user has
+    uploaded (i.e. the union of ``DeployedContract.package_id`` over
+    every contract they own).
+
+    Same ownership pattern as ``/me/parties`` and ``/me/contracts``:
+    OR over ``DeployedContract.user_email`` and ``JobHistory.user_email``
+    so legacy rows still surface. Sourced entirely from Postgres so
+    this works even when Canton's ``/v1/packages`` endpoint is failing.
+    """
+    settings = get_settings()
+    canton_env = settings.canton_environment
+    user_email = _user_email_from_claims(user)
+    if not user_email:
+        return {
+            "packages": [],
+            "count": 0,
+            "user_email": None,
+            "environment": canton_env,
+            "scope": "user-owned",
+        }
+
+    seen: dict[str, dict] = {}
+    try:
+        from db.session import get_db_session
+        from db.models import DeployedContract, JobHistory
+        with get_db_session() as session:
+            rows = (
+                session.query(DeployedContract, JobHistory)
+                .outerjoin(JobHistory, DeployedContract.job_id == JobHistory.job_id)
+                .filter(DeployedContract.canton_env == canton_env)
+                .filter(
+                    (DeployedContract.user_email == user_email)
+                    | (JobHistory.user_email == user_email)
+                )
+                .order_by(DeployedContract.created_at.desc())
+                .all()
+            )
+            for c, j in rows:
+                pkg = (c.package_id or "").strip()
+                if not pkg:
+                    continue
+                if pkg in seen:
+                    seen[pkg]["contracts"] += 1
+                    continue
+                rj = (j.result_json if j and isinstance(j.result_json, dict) else {}) or {}
+                seen[pkg] = {
+                    "package_id": pkg,
+                    "template_id": (
+                        c.template_id
+                        or rj.get("template_id")
+                        or rj.get("template", "")
+                    ),
+                    "first_seen": c.created_at.isoformat() if c.created_at else None,
+                    "contracts": 1,
+                }
+    except Exception as e:
+        logger.warning("/me/packages query failed", error=str(e), user_email=user_email)
+        return {
+            "packages": [],
+            "count": 0,
+            "user_email": user_email,
+            "environment": canton_env,
+            "scope": "user-owned",
+            "error": f"{type(e).__name__}: {e}",
+        }
+
+    packages = list(seen.values())
+    return {
+        "packages": packages,
+        "count": len(packages),
         "user_email": user_email,
         "environment": canton_env,
         "scope": "user-owned",

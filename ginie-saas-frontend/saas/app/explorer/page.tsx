@@ -520,21 +520,52 @@ function PartiesTab({
   );
 }
 
-function PackagesTab() {
-  const [packages, setPackages] = useState<string[]>([]);
+function PackagesTab({ token }: { token: string | null }) {
+  // ``packages`` may be either a list of raw package_id strings (the
+  // shape ``/ledger/packages`` returns) OR a list of objects from
+  // ``/me/packages``. Normalise to {package_id, template_id?, contracts?}
+  // so the renderer doesn't care which endpoint we hit.
+  type PackageEntry = { package_id: string; template_id?: string; contracts?: number };
+  const [packages, setPackages] = useState<PackageEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [scope, setScope] = useState<"user-owned" | "ledger">("ledger");
 
   const fetchPackages = async () => {
     setLoading(true);
     setError("");
     try {
+      // Authenticated path first \u2014 sourced from our DB so it works
+      // even when Canton's /v1/packages 500s with a JWT-scope error.
+      if (token) {
+        const resp = await fetch(`${API_URL}/me/packages`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (resp.ok) {
+          const data = (await resp.json()) as { packages?: PackageEntry[] };
+          setPackages(data.packages ?? []);
+          setScope("user-owned");
+          return;
+        }
+        // Non-2xx \u2014 fall through to the public ledger listing.
+      }
+
       const resp = await fetch(`${API_URL}/ledger/packages`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data: unknown = await resp.json();
-      const parsed = data as { packages?: string[] };
-      setPackages(parsed.packages ?? []);
+      const data = (await resp.json()) as {
+        packages?: (string | PackageEntry)[];
+        ledger_error?: string;
+      };
+      const raw = data.packages ?? [];
+      const normalised: PackageEntry[] = raw.map((p) =>
+        typeof p === "string" ? { package_id: p } : p
+      );
+      setPackages(normalised);
+      setScope("ledger");
+      if (data.ledger_error && normalised.length === 0) {
+        setError(`Canton ledger temporarily unavailable: ${data.ledger_error}`);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to fetch packages");
     } finally {
@@ -542,9 +573,16 @@ function PackagesTab() {
     }
   };
 
-  useEffect(() => { void fetchPackages(); }, []);
+  useEffect(() => { void fetchPackages(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [token]);
 
-  const filtered = packages.filter((p) => p.toLowerCase().includes(searchTerm.toLowerCase()));
+  const needle = searchTerm.toLowerCase();
+  const filtered = packages.filter((p) => {
+    if (!needle) return true;
+    return (
+      p.package_id.toLowerCase().includes(needle) ||
+      (p.template_id ?? "").toLowerCase().includes(needle)
+    );
+  });
 
   if (loading) {
     return (
@@ -591,18 +629,34 @@ function PackagesTab() {
         <div className="space-y-2">
           {filtered.map((pkg, idx) => (
             <div key={idx} className="flex items-center justify-between rounded-lg border border-border bg-foreground/[0.03] px-4 py-3 hover:border-border hover:bg-foreground/[0.05] transition-all">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-accent/20">
                   <Package className="h-4 w-4 text-accent" />
                 </div>
-                <code className="font-mono text-xs text-foreground/70">{pkg}</code>
+                <div className="min-w-0">
+                  <code className="block truncate font-mono text-xs text-foreground/70">{pkg.package_id}</code>
+                  {pkg.template_id && (
+                    <span className="block truncate text-[10px] text-muted-foreground/60">{pkg.template_id}</span>
+                  )}
+                </div>
               </div>
-              <CopyButton text={pkg} />
+              <div className="flex items-center gap-2">
+                {typeof pkg.contracts === "number" && (
+                  <span className="rounded-full bg-foreground/5 px-2 py-0.5 text-[10px] text-muted-foreground/80 border border-border">
+                    {pkg.contracts} contract{pkg.contracts === 1 ? "" : "s"}
+                  </span>
+                )}
+                <CopyButton text={pkg.package_id} />
+              </div>
             </div>
           ))}
         </div>
       )}
-      <div className="mt-4 text-center text-xs text-muted-foreground/70">{filtered.length} package{filtered.length !== 1 ? "s" : ""} uploaded</div>
+      <div className="mt-4 text-center text-xs text-muted-foreground/70">
+        {scope === "user-owned"
+          ? `${filtered.length} package${filtered.length !== 1 ? "s" : ""} you uploaded`
+          : `${filtered.length} package${filtered.length !== 1 ? "s" : ""} on ledger`}
+      </div>
     </div>
   );
 }
@@ -919,7 +973,7 @@ export default function ExplorerPage() {
               token={token}
             />
           )}
-          {activeTab === "packages" && <PackagesTab />}
+          {activeTab === "packages" && <PackagesTab token={token} />}
           {activeTab === "verify" && <VerifyTab />}
         </div>
       </div>

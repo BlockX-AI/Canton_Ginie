@@ -332,10 +332,37 @@ async def list_packages():
     """List all uploaded DAR packages on the ledger.
 
     Returns package IDs that have been uploaded to Canton.
-    """
-    data = await _json_api_request("GET", "/v1/packages")
-    result = data.get("result", [])
 
+    Soft-fails on Canton errors with the same shape as ``/ledger/parties``:
+    a 200 response carrying an empty list and a ``ledger_error`` field
+    rather than propagating Canton's 500. Authenticated users keep their
+    own listing via ``/me/packages``; unauthenticated visitors see the
+    Explorer's empty state instead of a red error box.
+    """
+    try:
+        data = await _json_api_request("GET", "/v1/packages")
+    except HTTPException as e:
+        logger.warning(
+            "/ledger/packages soft-failing: Canton call failed",
+            status=e.status_code,
+            detail=str(e.detail)[:200],
+        )
+        return {
+            "packages": [],
+            "count": 0,
+            "environment": _canton_env(),
+            "ledger_error": f"Canton {e.status_code}: {str(e.detail)[:200]}",
+        }
+    except Exception as e:
+        logger.warning("/ledger/packages soft-failing: unexpected error", error=str(e))
+        return {
+            "packages": [],
+            "count": 0,
+            "environment": _canton_env(),
+            "ledger_error": f"Unexpected: {str(e)[:200]}",
+        }
+
+    result = data.get("result", [])
     return {
         "packages": result,
         "count": len(result),
