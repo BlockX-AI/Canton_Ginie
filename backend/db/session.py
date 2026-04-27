@@ -102,6 +102,12 @@ def _apply_inline_schema_upgrades(engine) -> None:
         "CREATE INDEX IF NOT EXISTS idx_job_history_user_email ON job_history (user_email)",
         "ALTER TABLE deployed_contracts ADD COLUMN IF NOT EXISTS user_email TEXT",
         "CREATE INDEX IF NOT EXISTS idx_deployed_contracts_user_email ON deployed_contracts (user_email)",
+        # Migration 004: direct ownership of deploy-allocated parties so the
+        # Explorer Parties tab can render them via /me/parties even when the
+        # user's job result_json blob is missing or the Canton ledger list
+        # endpoint is flaky.
+        "ALTER TABLE registered_parties ADD COLUMN IF NOT EXISTS user_email TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_registered_parties_user_email ON registered_parties (user_email)",
     ]
     from sqlalchemy import text
     for stmt in statements:

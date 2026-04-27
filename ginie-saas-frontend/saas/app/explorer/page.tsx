@@ -519,7 +519,17 @@ function PartiesTab({
 
         {visible.length === 0 && (
           <div className="py-12 text-center text-xs text-muted-foreground/70">
-            No parties linked to your account yet. Deploy a contract first.
+            {scope === "user-owned" ? (
+              <>
+                No parties linked to your account yet. Parties get
+                auto-registered to your account when you deploy a contract
+                from the Sandbox &mdash; head there to create one.
+              </>
+            ) : haveCounterpartyHints ? (
+              <>No counterparties for your current session yet.</>
+            ) : (
+              <>No parties visible on this ledger.</>
+            )}
           </div>
         )}
 

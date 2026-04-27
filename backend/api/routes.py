@@ -680,6 +680,29 @@ async def list_my_parties(user: dict = Depends(get_current_user)):
         logger.warning("/me/parties: EmailAccount lookup failed", error=str(e))
         source_errors.append(f"email_account: {e}")
 
+    # 1b. Parties directly owned by this user in ``registered_parties``.
+    # Populated by ``record_deploy_parties`` after each successful deploy,
+    # this is the most authoritative source once it's been written \u2014 it
+    # survives job_history cleanup and doesn't depend on parsing
+    # result_json blobs.
+    try:
+        with get_db_session() as session:
+            owned = (
+                session.query(RegisteredParty)
+                .filter(RegisteredParty.user_email == user_email)
+                .filter(RegisteredParty.canton_env == canton_env)
+                .all()
+            )
+            for rp in owned:
+                _add(
+                    rp.party_id,
+                    display_name=rp.display_name or "",
+                    source="registered",
+                )
+    except Exception as e:
+        logger.warning("/me/parties: RegisteredParty lookup failed", error=str(e))
+        source_errors.append(f"registered_party: {e}")
+
     # 2. Parties from this user's deployed contracts. Ownership = the
     # SAME OR pattern that ``/me/contracts`` uses: either the contract
     # row carries the email directly, or its parent job does. Without

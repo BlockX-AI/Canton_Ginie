@@ -26,6 +26,11 @@ class RegisteredParty(Base):
     display_name = Column(Text, nullable=False)
     public_key_fp = Column(Text, nullable=True)
     canton_env = Column(Text, nullable=False, default="sandbox")
+    # Direct ownership link for deploy-allocated parties. Populated when a
+    # pipeline deploy allocates counterparties on behalf of an authenticated
+    # user; remains NULL for parties registered via the standalone
+    # /auth/register path (those still link via EmailAccount.party_id).
+    user_email = Column(Text, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     sessions = relationship("UserSession", back_populates="party", cascade="all, delete-orphan")

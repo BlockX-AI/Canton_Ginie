@@ -738,6 +738,27 @@ def deploy_node(state: dict) -> dict:
                 template_id=result.get("template_id"),
                 explorer_link=result.get("explorer_link"),
             )
+
+            # Persist the allocated parties to ``registered_parties`` with the
+            # deploying user's email as the owner, so the Explorer's Parties
+            # tab can render them via /me/parties on the very next page load.
+            # Without this, parties allocated by the deploy agent only exist
+            # on Canton itself + inside ``JobHistory.result_json.parties`` \u2014
+            # which means a user who deploys and then hits the Parties tab
+            # before the result blob lands will see "0 parties".
+            try:
+                from auth.party_manager import record_deploy_parties
+                record_deploy_parties(
+                    parties=result.get("parties") or {},
+                    user_email=state.get("user_email"),
+                    canton_env=canton_env,
+                )
+            except Exception as _e:
+                logger.warning(
+                    "Failed to record deploy parties (deploy itself succeeded)",
+                    error=str(_e),
+                    job_id=state.get("job_id"),
+                )
             emit_stage_started(state, "verify", "Verifying contract is active on the ledger\u2026")
             emit_stage_completed(
                 state,

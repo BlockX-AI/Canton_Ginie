@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Mail } from "lucide-react";
+import Image from "next/image";
 import type { ReactNode } from "react";
 
 const footerLinks = {
@@ -10,13 +11,12 @@ const footerLinks = {
     { label: "DAML Docs", href: "https://docs.daml.com" },
   ],
   company: [
-    { label: "About BlockXAI", href: "#" },
-    { label: "Terms", href: "#" },
-    { label: "Security", href: "#" },
+    { label: "About BlockX", href: "https://blockxint.com/" },
+    { label: "Terms", href: "https://blockxint.com/about/" },
   ],
   social: [
-    { label: "GitHub", href: "https://github.com/BlockXAI/Canton_Ginie" },
-    { label: "X (Twitter)", href: "#" },
+    { label: "GitHub", href: "https://github.com/BlockX-AI/Canton_Ginie" },
+    { label: "X (Twitter)", href: "https://x.com/giniedev" },
   ],
 };
 
@@ -61,50 +61,48 @@ export function Footer(): ReactNode {
       <div className="bg-accent rounded-tr-[3rem] rounded-tl-[3rem] pt-96 pb-16 max-[850px]:pt-72">
         <div className="max-w-5xl mx-auto px-6">
           <div className="flex items-start justify-between gap-12 max-[850px]:flex-col max-[850px]:gap-10">
-            <a href="#" className="flex items-center gap-2" aria-label="Ginie DAML home">
-              <div className="w-8 h-8 rounded-full bg-neutral-900" />
+            <a href="/" className="flex items-center gap-2" aria-label="Ginie DAML home">
+              <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-neutral-900">
+                <Image
+                  src="/ginie-logo.ico"
+                  alt="Ginie"
+                  width={24}
+                  height={24}
+                  unoptimized
+                  className="h-6 w-6 object-contain"
+                />
+              </span>
               <span className="text-xl font-semibold text-neutral-900 leading-0">Ginie</span>
             </a>
 
             <nav className="flex gap-16 max-[850px]:gap-10 max-[850px]:flex-wrap" aria-label="Footer navigation">
-              <div>
-                <h3 className="text-xs font-medium text-neutral-900/50 uppercase tracking-wider mb-4">Menu</h3>
-                <ul className="space-y-2">
-                  {footerLinks.menu.map((link) => (
-                    <li key={link.label}>
-                      <a href={link.href} className="text-sm text-neutral-900 hover:text-neutral-900/70 transition-colors">
-                        {link.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-xs font-medium text-neutral-900/50 uppercase tracking-wider mb-4">Company</h3>
-                <ul className="space-y-2">
-                  {footerLinks.company.map((link) => (
-                    <li key={link.label}>
-                      <a href={link.href} className="text-sm text-neutral-900 hover:text-neutral-900/70 transition-colors">
-                        {link.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-xs font-medium text-neutral-900/50 uppercase tracking-wider mb-4">Social</h3>
-                <ul className="space-y-2">
-                  {footerLinks.social.map((link) => (
-                    <li key={link.label}>
-                      <a href={link.href} className="text-sm text-neutral-900 hover:text-neutral-900/70 transition-colors">
-                        {link.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {([
+                { title: "Menu", items: footerLinks.menu },
+                { title: "Company", items: footerLinks.company },
+                { title: "Social", items: footerLinks.social },
+              ] as const).map((col) => (
+                <div key={col.title}>
+                  <h3 className="text-xs font-medium text-neutral-900/50 uppercase tracking-wider mb-4">{col.title}</h3>
+                  <ul className="space-y-2">
+                    {col.items.map((link) => {
+                      const isExternal = link.href.startsWith("http");
+                      return (
+                        <li key={link.label}>
+                          <a
+                            href={link.href}
+                            className="text-sm text-neutral-900 hover:text-neutral-900/70 transition-colors"
+                            {...(isExternal
+                              ? { target: "_blank", rel: "noopener noreferrer" }
+                              : {})}
+                          >
+                            {link.label}
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
             </nav>
           </div>
 
