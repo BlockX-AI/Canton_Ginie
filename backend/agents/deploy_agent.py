@@ -88,7 +88,7 @@ def _wait_for_package_vetting(
     canton_url: str,
     package_id: str,
     auth: dict,
-    max_attempts: int = 10,
+    max_attempts: int = 15,
     delay: float = 2.0,
 ) -> bool:
     """Poll GET /v1/packages until the uploaded package is visible on the ledger.
@@ -164,6 +164,25 @@ def _allocate_party(client: httpx.Client, canton_url: str, display_name: str, au
     raise RuntimeError(f"Failed to allocate or find party '{display_name}': HTTP {resp.status_code} — {resp.text[:200]}")
 
 
+_TRANSIENT_LEDGER_MARKERS = (
+    # Package was uploaded but the vetting topology tx hasn't propagated
+    # to all informee participants on the domain yet.
+    "NO_DOMAIN_FOR_SUBMISSION",
+    "domainsNotUsed",
+    "Some packages are not known to all informees",
+    # Newly-allocated party not yet observable on the domain.
+    "PARTY_NOT_KNOWN_ON_LEDGER",
+    "UNKNOWN_INFORMEES",
+    "UNKNOWN_SUBMITTERS",
+    # Generic Canton "try again" responses we've observed under load.
+    "REQUEST_TIME_OUT",
+    "ABORTED",
+)
+
+def _is_transient_ledger_error(body: str) -> bool:
+    return any(m in body for m in _TRANSIENT_LEDGER_MARKERS)
+
+
 def _create_contract(
     client: httpx.Client,
     canton_url: str,
@@ -182,24 +201,55 @@ def _create_contract(
     }
     if acting_parties:
         body["meta"]["actAs"] = acting_parties
-    resp = client.post(
-        f"{canton_url}/v1/create",
-        json=body,
-        headers={**auth, "Content-Type": "application/json"},
-        timeout=60.0,
+
+    # Retry on transient ledger errors. Canton package-vetting and party
+    # allocation are eventually-consistent topology transactions; the create
+    # can race ahead of the domain's view by a few seconds. We back off
+    # geometrically up to ~45s before giving up.
+    delays = [0.0, 2.0, 4.0, 6.0, 10.0, 14.0]
+    last_status = 0
+    last_body = ""
+    for attempt, delay in enumerate(delays, start=1):
+        if delay:
+            logger.info(
+                "Retrying contract creation after transient ledger error",
+                attempt=attempt,
+                delay=delay,
+                marker=last_body[:200],
+            )
+            time.sleep(delay)
+        try:
+            resp = client.post(
+                f"{canton_url}/v1/create",
+                json=body,
+                headers={**auth, "Content-Type": "application/json"},
+                timeout=60.0,
+            )
+        except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as exc:
+            last_status = 0
+            last_body = f"network error: {exc}"
+            continue
+
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            contract_id = (
+                data.get("result", {}).get("contractId")
+                or data.get("contractId")
+            )
+            if not contract_id:
+                raise RuntimeError(
+                    f"No contractId in Canton response: {resp.text[:300]}"
+                )
+            return contract_id
+
+        last_status = resp.status_code
+        last_body = resp.text[:600]
+        if not _is_transient_ledger_error(last_body):
+            break
+
+    raise RuntimeError(
+        f"Contract creation failed — HTTP {last_status}: {last_body}"
     )
-    if resp.status_code not in (200, 201):
-        raise RuntimeError(
-            f"Contract creation failed — HTTP {resp.status_code}: {resp.text[:400]}"
-        )
-    data = resp.json()
-    contract_id = (
-        data.get("result", {}).get("contractId")
-        or data.get("contractId")
-    )
-    if not contract_id:
-        raise RuntimeError(f"No contractId in Canton response: {resp.text[:300]}")
-    return contract_id
 
 
 def run_deploy_agent(
@@ -668,7 +718,27 @@ def _build_payload(fields: list[dict], party_values: dict, daml_code: str = "", 
         elif ftype == "Bool":
             payload[name] = True
         elif ftype.startswith("["):
-            payload[name] = []
+            # Daml templates almost always reject empty lists in `ensure`
+            # (e.g. `not (null voters)`, `length signers > 0`). Seed lists
+            # with at least one valid element keyed off the inner type.
+            inner = ftype[1:-1].strip() if ftype.endswith("]") else ""
+            if inner == "Party" and party_ids:
+                # Prefer parties not yet used by this payload, fall back to
+                # all allocated parties so voters / observers / signers etc.
+                # come pre-populated with the deploying user's identities.
+                unused = [pid for pid in party_ids if pid not in used_party_ids]
+                payload[name] = unused if unused else list(party_ids)
+            elif inner == "Text":
+                payload[name] = [f"sample-{name}-1"]
+            elif inner in ("Int", "Int64"):
+                payload[name] = [1]
+            elif inner in ("Decimal", "Numeric") or inner.startswith("Numeric "):
+                payload[name] = ["100.0000000000"]
+            elif inner == "Bool":
+                payload[name] = [True]
+            else:
+                # Unknown element type — empty is the safest fallback.
+                payload[name] = []
         elif ftype.startswith("Optional"):
             payload[name] = None
         else:

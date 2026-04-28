@@ -419,6 +419,16 @@ export default function SandboxPage() {
               </div>
             </div>
 
+            {/* AI disclaimer */}
+            <div className="flex items-start gap-3 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400" />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Canton.Ginie is an AI and can make mistakes.</span>{" "}
+                Review the generated DAML, security findings, and compliance report carefully before
+                deploying to a production network.
+              </p>
+            </div>
+
             {/* Security & Compliance Dashboard */}
             {(result.security_score != null || result.compliance_score != null) && (
               <div className="rounded-2xl border border-border bg-muted p-6">

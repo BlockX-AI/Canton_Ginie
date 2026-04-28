@@ -909,8 +909,8 @@ export default function ExplorerPage() {
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; count?: number }[] = [
     { key: "contracts", label: "Contracts", icon: <FileText className="h-4 w-4" /> },
-    { key: "parties", label: "Parties", icon: <Users className="h-4 w-4" />, ...(ledgerStatus?.parties != null ? { count: ledgerStatus.parties } : {}) },
-    { key: "packages", label: "Packages", icon: <Package className="h-4 w-4" />, ...(ledgerStatus?.packages != null ? { count: ledgerStatus.packages } : {}) },
+    { key: "parties", label: "Parties", icon: <Users className="h-4 w-4" />, ...(ledgerStatus?.parties != null && ledgerStatus.parties >= 0 ? { count: ledgerStatus.parties } : {}) },
+    { key: "packages", label: "Packages", icon: <Package className="h-4 w-4" />, ...(ledgerStatus?.packages != null && ledgerStatus.packages >= 0 ? { count: ledgerStatus.packages } : {}) },
     { key: "verify", label: "Verify", icon: <Shield className="h-4 w-4" /> },
   ];
 

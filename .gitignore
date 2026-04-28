@@ -84,3 +84,4 @@ Thumbs.db
 *.key
 *.cert
 audit.md
+.vercel

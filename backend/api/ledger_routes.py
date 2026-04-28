@@ -422,9 +422,48 @@ async def allocate_party(display_name: str, identifier_hint: str | None = None):
 # 7. Ledger Health / Status
 # ---------------------------------------------------------------------------
 
+def _db_derived_counts() -> tuple[int, int]:
+    """Best-effort counts derived from our own Postgres tables.
+
+    Used as a fallback (and floor) for ``/ledger/status`` when Canton's
+    JSON API rejects the bootstrap JWT or is otherwise unreachable. The
+    DB rows are what the Explorer's Parties / Packages tabs already
+    render, so anchoring the stat cards to the same source guarantees
+    the numbers and the lists agree.
+    """
+    try:
+        from db.session import get_db_session
+        from db.models import RegisteredParty, DeployedContract
+        from sqlalchemy import func, distinct
+        with get_db_session() as session:
+            party_count = (
+                session.query(func.count(distinct(RegisteredParty.party_id))).scalar()
+                or 0
+            )
+            package_count = (
+                session.query(func.count(distinct(DeployedContract.package_id)))
+                .filter(
+                    DeployedContract.package_id.isnot(None),
+                    DeployedContract.package_id != "",
+                )
+                .scalar()
+                or 0
+            )
+            return int(party_count), int(package_count)
+    except Exception as exc:
+        logger.warning("DB-derived counts unavailable", error=str(exc))
+        return 0, 0
+
+
 @ledger_router.get("/status")
 async def ledger_status():
-    """Check Canton ledger connectivity and basic stats."""
+    """Check Canton ledger connectivity and basic stats.
+
+    Counts are reported as ``max(canton_side, db_side)``: the DB knows
+    everything we ourselves deployed, so even when Canton's listing
+    endpoints reject our bootstrap JWT we never show ``-1`` / "—" to
+    the user.
+    """
     canton_url = _canton_url()
     env = _canton_env()
 
@@ -440,34 +479,46 @@ async def ledger_status():
     except Exception:
         reachable = False
 
+    db_party_count, db_package_count = _db_derived_counts()
+
     if not reachable:
+        # Even when Canton is unreachable we surface DB-known counts so
+        # the dashboard never collapses to dashes after a transient
+        # network blip or sandbox restart.
         return {
             "status": "offline",
             "canton_url": canton_url,
             "environment": env,
+            "parties": db_party_count,
+            "packages": db_package_count,
             "error": "Canton JSON API is not reachable",
         }
 
-    # Get party count
+    # Canton-side counts (best-effort).
+    party_count = -1
+    package_count = -1
     try:
         party_data = await _json_api_request("GET", "/v1/parties")
         party_count = len(party_data.get("result", []))
-    except Exception:
-        party_count = -1
-
-    # Get package count
+    except Exception as exc:
+        logger.info("Canton /v1/parties unavailable, falling back to DB count", error=str(exc))
     try:
         pkg_data = await _json_api_request("GET", "/v1/packages")
         package_count = len(pkg_data.get("result", []))
-    except Exception:
-        package_count = -1
+    except Exception as exc:
+        logger.info("Canton /v1/packages unavailable, falling back to DB count", error=str(exc))
+
+    # Take the max so we never under-report what we know exists. Negative
+    # placeholders from a failed Canton call are dropped here.
+    final_parties = max(party_count, db_party_count) if party_count >= 0 else db_party_count
+    final_packages = max(package_count, db_package_count) if package_count >= 0 else db_package_count
 
     return {
         "status": "online",
         "canton_url": canton_url,
         "environment": env,
-        "parties": party_count,
-        "packages": package_count,
+        "parties": final_parties,
+        "packages": final_packages,
     }
 
 

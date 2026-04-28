@@ -170,6 +170,17 @@ class CantonClientV2:
     def set_token(self, token: str) -> None:
         self.token = token
 
+    _TRANSIENT_LEDGER_MARKERS = (
+        "NO_DOMAIN_FOR_SUBMISSION",
+        "domainsNotUsed",
+        "Some packages are not known to all informees",
+        "PARTY_NOT_KNOWN_ON_LEDGER",
+        "UNKNOWN_INFORMEES",
+        "UNKNOWN_SUBMITTERS",
+        "REQUEST_TIME_OUT",
+        "ABORTED",
+    )
+
     async def create_contract(
         self,
         template_id: str,
@@ -177,16 +188,39 @@ class CantonClientV2:
         acting_party: str,
         command_id: Optional[str] = None,
     ) -> tuple[bool, str, str]:
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/v1/create",
-                    json={
-                        "templateId": template_id,
-                        "payload": payload,
-                    },
-                    headers=self._headers(),
+        # Transient-error retry: Canton package vetting and party allocation
+        # are eventually-consistent topology transactions. The create can
+        # arrive at the domain before either has propagated, surfacing as
+        # NO_DOMAIN_FOR_SUBMISSION / PARTY_NOT_KNOWN_ON_LEDGER. We back off
+        # geometrically up to ~45s before giving up.
+        import asyncio as _asyncio
+
+        delays = [0.0, 2.0, 4.0, 6.0, 10.0, 14.0]
+        last_err = ""
+        for attempt, delay in enumerate(delays, start=1):
+            if delay:
+                logger.info(
+                    "Retrying create_contract after transient ledger error",
+                    attempt=attempt,
+                    delay=delay,
                 )
+                await _asyncio.sleep(delay)
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        f"{self.base_url}/v1/create",
+                        json={
+                            "templateId": template_id,
+                            "payload": payload,
+                        },
+                        headers=self._headers(),
+                    )
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as exc:
+                last_err = f"network error: {exc}"
+                continue
+            except Exception as exc:
+                # Unknown failure — don't retry, surface immediately.
+                return False, "", str(exc)
 
             if response.status_code in (200, 201):
                 data = response.json()
@@ -197,10 +231,12 @@ class CantonClientV2:
                     return True, contract_id, ""
                 return False, "", f"No contractId in response: {response.text[:300]}"
 
-            return False, "", f"HTTP {response.status_code}: {response.text[:400]}"
+            body = response.text[:600]
+            last_err = f"HTTP {response.status_code}: {body}"
+            if not any(m in body for m in self._TRANSIENT_LEDGER_MARKERS):
+                break
 
-        except Exception as exc:
-            return False, "", str(exc)
+        return False, "", last_err
 
     # ------------------------------------------------------------------
     # Contract verification  →  POST /v1/query
