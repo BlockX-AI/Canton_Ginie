@@ -1,7 +1,7 @@
 "use client";
 
 import { LogoLoop, type LogoItem } from "@/components/logo-loop";
-import { ArrowDownRight, Send, Users, FileCode, Shield, Loader2 } from "lucide-react";
+import { ArrowDownRight, Send, Users, FileCode, Shield, Loader2, CheckCircle2 } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import { useRef, useState, type ReactNode, type MouseEvent, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -37,7 +37,12 @@ export function Hero(): ReactNode {
   const sectionRef = useRef<HTMLElement>(null);
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, partyId, needsParty } = useAuth();
+  // A user with a party already shouldn't be re-prompted to allocate one;
+  // we surface a passive ``Party Generated`` confirmation instead so the
+  // CTA real-estate stays useful without encouraging duplicate parties
+  // in the same session.
+  const hasParty = isAuthenticated && !!partyId && !needsParty;
   
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
@@ -147,23 +152,43 @@ export function Hero(): ReactNode {
             Describe your smart contract in plain English. Ginie generates production-ready DAML, compiles it, audits it, and deploys it to Canton.
           </motion.p>
 
-          <motion.a
-            href="/setup"
-            className="group relative cursor-pointer inline-flex items-center max-[850px]:w-full"
-            variants={fadeInScale}
-            transition={{ duration: 0.8, ease }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <span className="absolute right-0 inset-y-0 w-[calc(100%-2rem)] max-[850px]:w-full rounded-xl bg-accent" />
-            <span className="relative z-10 px-6 py-3 rounded-xl bg-black text-white font-medium max-[850px]:flex-1 flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Add Parties
-            </span>
-            <span className="relative -left-px z-10 w-11 h-11 rounded-xl flex items-center justify-center text-black">
-              <ArrowDownRight className="w-5 h-5 transition-transform duration-300 group-hover:-rotate-45" />
-            </span>
-          </motion.a>
+          {hasParty ? (
+            <motion.div
+              role="status"
+              aria-disabled="true"
+              title="You already have a party allocated for this session"
+              className="group relative inline-flex items-center max-[850px]:w-full cursor-default select-none"
+              variants={fadeInScale}
+              transition={{ duration: 0.8, ease }}
+            >
+              <span className="absolute right-0 inset-y-0 w-[calc(100%-2rem)] max-[850px]:w-full rounded-xl bg-accent/60" />
+              <span className="relative z-10 px-6 py-3 rounded-xl bg-black/80 text-white/90 font-medium max-[850px]:flex-1 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-accent" />
+                Party Generated
+              </span>
+              <span className="relative -left-px z-10 w-11 h-11 rounded-xl flex items-center justify-center text-black/70">
+                <CheckCircle2 className="w-5 h-5" />
+              </span>
+            </motion.div>
+          ) : (
+            <motion.a
+              href="/setup"
+              className="group relative cursor-pointer inline-flex items-center max-[850px]:w-full"
+              variants={fadeInScale}
+              transition={{ duration: 0.8, ease }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <span className="absolute right-0 inset-y-0 w-[calc(100%-2rem)] max-[850px]:w-full rounded-xl bg-accent" />
+              <span className="relative z-10 px-6 py-3 rounded-xl bg-black text-white font-medium max-[850px]:flex-1 flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Add Parties
+              </span>
+              <span className="relative -left-px z-10 w-11 h-11 rounded-xl flex items-center justify-center text-black">
+                <ArrowDownRight className="w-5 h-5 transition-transform duration-300 group-hover:-rotate-45" />
+              </span>
+            </motion.a>
+          )}
         </motion.div>
       </div>
 
