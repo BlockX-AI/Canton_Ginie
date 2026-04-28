@@ -269,11 +269,21 @@ export default function SandboxPage() {
             Canton Sandbox
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            {status?.status === "complete"
-              ? "Contract Deployed"
-              : status?.status === "failed"
-                ? "Deployment Failed"
-                : "Deploying Contract"}
+            {(() => {
+              // Prefer a terminal status from EITHER source so re-opened
+              // jobs (where the live WS may not re-broadcast status but
+              // ``result`` was rehydrated from the DB snapshot) render
+              // the correct heading on first paint.
+              const terminal =
+                status?.status === "complete" || status?.status === "failed"
+                  ? status.status
+                  : result?.status === "complete" || result?.status === "failed"
+                    ? result.status
+                    : null;
+              if (terminal === "complete") return "Contract Deployed";
+              if (terminal === "failed") return "Deployment Failed";
+              return "Deploying Contract";
+            })()}
           </h1>
           <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground font-mono">
             Job {jobId.substring(0, 8)}...
