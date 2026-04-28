@@ -526,80 +526,182 @@ async def ledger_status():
 # 8. Verify Contract (convenience — checks if contract exists on ledger)
 # ---------------------------------------------------------------------------
 
+def _lookup_deployed_contract(contract_id: str) -> dict | None:
+    """Return persisted {template_id, package_id, party_id, deployed_at} for a
+    contract from our ``deployed_contracts`` table, or None if unknown.
+
+    This is the authoritative local source of truth for what we ourselves
+    deployed — survives backend restarts, unlike the in-memory job dict.
+    """
+    try:
+        from db.session import get_db_session
+        from db.models import DeployedContract
+        with get_db_session() as session:
+            row = (
+                session.query(DeployedContract)
+                .filter(DeployedContract.contract_id == contract_id)
+                .order_by(DeployedContract.id.desc())
+                .first()
+            )
+            if not row:
+                return None
+            return {
+                "template_id": row.template_id or "",
+                "package_id": row.package_id or "",
+                "party_id": row.party_id or "",
+                "deployed_at": row.deployed_at.isoformat() if getattr(row, "deployed_at", None) else "",
+                "canton_env": row.canton_env or "",
+            }
+    except Exception as exc:
+        logger.warning("DeployedContract lookup failed", error=str(exc))
+        return None
+
+
+async def _reader_auth_header(act_as_party: str | None) -> dict:
+    """Auth header scoped to a specific reader party when possible.
+
+    Using a JWT that names the contract's signatory as ``actAs``/``readAs``
+    is the *only* way ``/v1/query`` and ``/v1/fetch`` will return that
+    contract; the generic bootstrap JWT is a reader of the ``sandbox``
+    party which sees nothing.
+    """
+    env = _canton_env()
+    if env == "sandbox" and act_as_party:
+        token = make_sandbox_jwt([act_as_party])
+        return {"Authorization": f"Bearer {token}"}
+    return await _auth_header()
+
+
 @ledger_router.get("/verify/{contract_id}")
 async def verify_contract(contract_id: str):
     """Verify that a contract exists on the Canton ledger.
 
-    Returns verification status and contract details if found.
-    Useful for confirming successful deployments.
+    Strategy (in order — each step is independent so one broken path
+    never starves the others):
 
-    Strategy:
-      1. Query with each discovered templateId (Canton 2.x requires templateIds)
-      2. Search the results for the matching contractId
-      Falls back to /v1/fetch with templateId when found via job store.
+      1. Look up ``template_id`` + signatory ``party_id`` from the
+         persistent ``deployed_contracts`` table.
+      2. ``/v1/fetch`` with a JWT scoped to that signatory (fast path).
+      3. ``/v1/query`` with the same scoped JWT and known template.
+      4. ``/v1/query`` with the bootstrap JWT over every discovered
+         template (legacy fallback — covers contracts we didn't deploy
+         ourselves, e.g. those created directly via Navigator).
+      5. If all ledger paths fail but we have a DB row, report
+         ``deployed_but_unreachable`` so the UI can distinguish
+         "ledger wiped" from "unknown contract id".
     """
     canton_url = _canton_url()
-    headers = {**await _auth_header(), "Content-Type": "application/json"}
+
+    # Step 1: persistent lookup (survives backend restarts).
+    db_row = _lookup_deployed_contract(contract_id)
+    db_template_id = db_row.get("template_id") if db_row else ""
+    db_party_id = db_row.get("party_id") if db_row else ""
+
+    # Fallback to in-memory job cache for contracts that were deployed
+    # after the DB row was somehow missed (should be rare).
+    if not db_template_id:
+        try:
+            from api.routes import _in_memory_jobs
+            for job_data in _in_memory_jobs.values():
+                if job_data.get("contract_id") == contract_id:
+                    db_template_id = job_data.get("template_id", "") or db_template_id
+                    db_party_id = job_data.get("party_id", "") or db_party_id
+                    break
+        except Exception:
+            pass
+
+    scoped_headers = {
+        **await _reader_auth_header(db_party_id),
+        "Content-Type": "application/json",
+    }
+    generic_headers = {**await _auth_header(), "Content-Type": "application/json"}
+
+    async def _render(result: dict) -> dict:
+        return {
+            "verified": True,
+            "contract_id": contract_id,
+            "templateId": result.get("templateId", ""),
+            "signatories": result.get("signatories", []),
+            "observers": result.get("observers", []),
+            "payload": result.get("payload", {}),
+            "environment": _canton_env(),
+        }
 
     try:
-        # Strategy 1: Look up the template_id for this contract from job store
-        from api.routes import _in_memory_jobs
-        job_template_id = None
-        for job_data in _in_memory_jobs.values():
-            if job_data.get("contract_id") == contract_id:
-                job_template_id = job_data.get("template_id", "")
-                break
-
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # If we know the template, try /v1/fetch directly (fast path)
-            if job_template_id:
-                resp = await client.post(
-                    f"{canton_url}/v1/fetch",
-                    headers=headers,
-                    json={"contractId": contract_id, "templateId": job_template_id},
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    result = data.get("result")
-                    if result:
-                        return {
-                            "verified": True,
-                            "contract_id": contract_id,
-                            "templateId": result.get("templateId", ""),
-                            "signatories": result.get("signatories", []),
-                            "observers": result.get("observers", []),
-                            "payload": result.get("payload", {}),
-                            "environment": _canton_env(),
-                        }
+            # Step 2: scoped /v1/fetch (exact, cheapest).
+            if db_template_id:
+                try:
+                    resp = await client.post(
+                        f"{canton_url}/v1/fetch",
+                        headers=scoped_headers,
+                        json={"contractId": contract_id, "templateId": db_template_id},
+                    )
+                    if resp.status_code == 200:
+                        result = resp.json().get("result")
+                        if result:
+                            return await _render(result)
+                except Exception as exc:
+                    logger.info("Scoped /v1/fetch failed", error=str(exc))
 
-            # Strategy 2: Query with all known template IDs and search for contract
+            # Step 3: scoped /v1/query over the known template.
+            if db_template_id:
+                try:
+                    resp = await client.post(
+                        f"{canton_url}/v1/query",
+                        headers=scoped_headers,
+                        json={"templateIds": [db_template_id]},
+                    )
+                    if resp.status_code == 200:
+                        for entry in resp.json().get("result", []):
+                            if entry.get("contractId") == contract_id:
+                                return await _render(entry)
+                except Exception as exc:
+                    logger.info("Scoped /v1/query failed", error=str(exc))
+
+            # Step 4: generic fallback — sweep every discovered template
+            # with the bootstrap JWT. Slow but covers the "imported a
+            # contract ID we never deployed" case.
             template_ids = _discover_template_ids()
+            # Ensure we also try the DB-known template even if discovery
+            # missed it (common after Canton restart wipes packages).
+            if db_template_id and db_template_id not in template_ids:
+                template_ids = [db_template_id, *template_ids]
             for tid in template_ids:
                 try:
                     resp = await client.post(
                         f"{canton_url}/v1/query",
-                        headers=headers,
+                        headers=generic_headers,
                         json={"templateIds": [tid]},
                     )
                     if resp.status_code == 200:
                         for entry in resp.json().get("result", []):
                             if entry.get("contractId") == contract_id:
-                                return {
-                                    "verified": True,
-                                    "contract_id": contract_id,
-                                    "templateId": entry.get("templateId", ""),
-                                    "signatories": entry.get("signatories", []),
-                                    "observers": entry.get("observers", []),
-                                    "payload": entry.get("payload", {}),
-                                    "environment": _canton_env(),
-                                }
+                                return await _render(entry)
                 except Exception:
                     continue
 
+        # Step 5: contract not visible on the live ledger. Differentiate.
+        if db_row:
+            return {
+                "verified": False,
+                "contract_id": contract_id,
+                "status": "deployed_but_unreachable",
+                "error": (
+                    "Contract was deployed (see deployment history) but is "
+                    "no longer visible on the ledger. The Canton sandbox "
+                    "state may have been reset since this contract was "
+                    "created — redeploy to restore."
+                ),
+                "template_id": db_template_id,
+                "deployed_at": db_row.get("deployed_at"),
+                "environment": _canton_env(),
+            }
         return {
             "verified": False,
             "contract_id": contract_id,
-            "error": "Contract not found on ledger",
+            "status": "unknown",
+            "error": "Contract not found on ledger and not in deployment history.",
             "environment": _canton_env(),
         }
 

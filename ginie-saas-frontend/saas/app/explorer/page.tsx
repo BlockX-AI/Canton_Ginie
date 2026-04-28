@@ -721,6 +721,9 @@ function PackagesTab({ token }: { token: string | null }) {
 interface VerifyResult {
   verified: boolean;
   error?: string;
+  status?: string;
+  template_id?: string;
+  deployed_at?: string;
   templateId?: string;
   signatories?: string[];
   payload?: Record<string, unknown>;
@@ -783,10 +786,19 @@ function VerifyTab() {
               </>
             ) : (
               <>
-                <XCircle className="h-8 w-8 text-red-500 dark:text-red-400" />
+                <XCircle className={`h-8 w-8 ${result.status === "deployed_but_unreachable" ? "text-yellow-500 dark:text-yellow-400" : "text-red-500 dark:text-red-400"}`} />
                 <div>
-                  <h3 className="text-lg font-semibold text-red-500 dark:text-red-300">Not Found</h3>
-                  <p className="text-sm text-red-500 dark:text-red-300/60">{result.error ?? "Contract not found on ledger"}</p>
+                  <h3 className={`text-lg font-semibold ${result.status === "deployed_but_unreachable" ? "text-yellow-500 dark:text-yellow-300" : "text-red-500 dark:text-red-300"}`}>
+                    {result.status === "deployed_but_unreachable" ? "Deployed, but not currently on ledger" : "Not Found"}
+                  </h3>
+                  <p className={`text-sm ${result.status === "deployed_but_unreachable" ? "text-yellow-500/70 dark:text-yellow-300/70" : "text-red-500/70 dark:text-red-300/70"}`}>
+                    {result.error ?? "Contract not found on ledger"}
+                  </p>
+                  {result.status === "deployed_but_unreachable" && result.deployed_at && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Originally deployed {new Date(result.deployed_at).toLocaleString()}
+                    </p>
+                  )}
                 </div>
               </>
             )}
