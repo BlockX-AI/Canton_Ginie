@@ -248,6 +248,11 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 "test_file_path":    final_state.get("test_file_path", ""),
                 "must_fail_count":   final_state.get("must_fail_count", 0),
                 "test_coverage_ok":  final_state.get("test_coverage_ok", False),
+                # Test-package compile (Tier E.4): proves the scaffold
+                # actually builds against the production DAR.
+                "test_compile_success": final_state.get("test_compile_success", False),
+                "test_dar_path":        final_state.get("test_dar_path", ""),
+                "test_compile_summary": final_state.get("test_compile_summary", ""),
                 "updated_at":        datetime.now(timezone.utc).isoformat(),
             }
             # Stamp user_email so later /me/contracts queries can find this row

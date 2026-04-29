@@ -402,7 +402,139 @@ def _post_process(code: str, template_name: str, party1: str, party2: str) -> st
     # Clean up excessive blank lines
     code = re.sub(r"\n{4,}", "\n\n\n", code)
 
+    # SEC-GEN-016 enforcement: insert ``nonconsuming`` on observation
+    # choices the LLM forgot to mark. We are conservative \u2014 only
+    # match choices whose body has NO ``create`` and NO ``archive`` and
+    # ends in ``return ()`` / ``pure ()``. Same logic as the static
+    # checker, but applied as a transformation rather than a finding.
+    code = _enforce_nonconsuming(code)
+
+    # SEC-GEN-020 enforcement: drop unused stdlib imports the LLM
+    # boilerplated in. Only safe to remove imports we have a usage map
+    # for; leave anything exotic alone.
+    code = _strip_unused_imports(code)
+
     return code.strip()
+
+
+# ---------------------------------------------------------------------------
+# Deterministic post-processors for SEC-GEN-016 / SEC-GEN-020
+# ---------------------------------------------------------------------------
+
+# Choice-name keywords that almost certainly imply read-only intent.
+_OBSERVATION_NAMES = re.compile(
+    r"^(Track|Log|Observe|Check|View|Query|Inspect|Report|Get|Read|Show|"
+    r"Validate|Verify|Compute)\w*$",
+    re.IGNORECASE,
+)
+
+
+def _enforce_nonconsuming(code: str) -> str:
+    """Prepend ``nonconsuming`` to no-op choices that lack it.
+
+    Detection mirrors ``security.static_checks._check_consuming_no_op``
+    but operates as a rewrite. We split the source into lines, walk
+    every line that begins a ``choice`` (without the keyword already)
+    and inspect the body up to the next ``choice`` / ``template`` /
+    EOF. If the body contains no ``create``, no ``archive``, and
+    terminates with ``return ()`` / ``pure ()``, we inject the keyword.
+
+    Skipping any line that already has ``nonconsuming`` / ``preconsuming``
+    / ``postconsuming`` keeps this idempotent.
+    """
+    lines = code.split("\n")
+    n = len(lines)
+
+    # Pre-compute boundary indices: anything that ends a choice block.
+    boundary_re = re.compile(
+        r"^\s*(?:nonconsuming\s+|preconsuming\s+|postconsuming\s+)?choice\s+\w+|"
+        r"^\s*template\s+\w+",
+    )
+
+    out: list[str] = []
+    i = 0
+    while i < n:
+        line = lines[i]
+        # Match a bare ``choice <Name>`` (NOT already prefixed).
+        m = re.match(r"^(\s*)choice\s+(\w+)\b", line)
+        already_marked = bool(re.match(r"^\s*(nonconsuming|preconsuming|postconsuming)\s+choice\b", line))
+        if not m or already_marked:
+            out.append(line)
+            i += 1
+            continue
+        indent, choice_name = m.group(1), m.group(2)
+
+        # Find body end: next boundary line.
+        j = i + 1
+        while j < n and not boundary_re.match(lines[j]):
+            j += 1
+        body_lines = lines[i + 1 : j]
+        body_text = "\n".join(body_lines)
+        body_no_comments = re.sub(r"--[^\n]*", "", body_text)
+
+        has_create  = bool(re.search(r"\bcreate\b\s+\w+", body_no_comments))
+        has_archive = bool(re.search(r"\barchive\s+self\b", body_no_comments))
+        ends_unit   = bool(re.search(r"\b(?:return|pure)\s+\(\)\s*$", body_no_comments.rstrip()))
+
+        # Trigger nonconsuming when:
+        #   (a) body is a strict no-op (no create/archive AND ends in return ()), OR
+        #   (b) the choice name screams observation AND body has no archive
+        #       (lets us catch ``TrackPayment`` even if it ``return ()``s
+        #       without having ``create`` AND has trailing whitespace).
+        observation_name = bool(_OBSERVATION_NAMES.match(choice_name))
+        is_no_op = (not has_create) and (not has_archive) and ends_unit
+        is_observation_no_archive = observation_name and (not has_archive) and (not has_create)
+
+        if is_no_op or is_observation_no_archive:
+            out.append(f"{indent}nonconsuming choice {choice_name}" + line[m.end():])
+        else:
+            out.append(line)
+        i += 1
+
+    return "\n".join(out)
+
+
+# Identifiers whose presence justifies each stdlib import.
+_IMPORT_USAGE_FOR_STRIP: dict[str, list[str]] = {
+    "DA.Date": ["addDays", "subDays", "fromGregorian", "toGregorian", "Month",
+                "DayOfWeek", "isLeapYear", "subDate"],
+    "DA.Time": ["getTime", "addRelTime", "subTime", "toDateUTC", "toTimeOfDay",
+                "RelTime", "days", "hours", "minutes", "seconds"],
+    "DA.List": ["sortBy", "groupBy", "intercalate", "transpose", "partition",
+                "dedup", "dedupBy"],
+    "DA.Optional": ["fromOptional", "fromOptionalEx", "catOptionals",
+                    "mapOptional"],
+    "DA.Text": ["isEmpty", "length", "toLower", "toUpper", "split", "splitOn",
+                "intercalate", "replace"],
+}
+
+
+def _strip_unused_imports(code: str) -> str:
+    """Remove stdlib imports whose identifiers never appear in the body.
+
+    Conservative: only handles the modules we have a usage map for;
+    everything else (including user-defined modules) is left untouched.
+    """
+    no_comments = re.sub(r"--[^\n]*", "", code)
+    lines = code.split("\n")
+    out: list[str] = []
+    for line in lines:
+        m = re.match(r"^\s*import\s+(?:qualified\s+)?([A-Za-z][A-Za-z0-9_.]+)", line)
+        if not m:
+            out.append(line)
+            continue
+        module = m.group(1)
+        usage_idents = _IMPORT_USAGE_FOR_STRIP.get(module)
+        if not usage_idents:
+            out.append(line)
+            continue
+        # Strip the import line itself before searching to avoid
+        # self-justification.
+        body = no_comments.replace(line, "", 1)
+        if any(re.search(rf"\b{re.escape(ident)}\b", body) for ident in usage_idents):
+            out.append(line)
+        # else: drop the import entirely.
+    return "\n".join(out)
 
 
 def fetch_rag_context(structured_intent: dict) -> list[str]:

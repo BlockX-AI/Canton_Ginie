@@ -7,6 +7,7 @@ from agents.intent_agent import run_intent_agent
 from agents.writer_agent import run_writer_agent, fetch_rag_context
 from agents.project_writer_agent import run_project_writer_agent
 from agents.test_writer_agent import run_test_writer_agent
+from agents.test_compile_agent import run_test_compile_agent
 from pipeline.spec_synth import synthesize_spec
 from agents.compile_agent import run_compile_agent
 from agents.fix_agent import run_fix_agent
@@ -643,12 +644,53 @@ def audit_node(state: dict) -> dict:
             high_finding_count=len(high_sev),
         )
         if not deploy_gate:
+            # Build a structured, actionable message. Categorise findings
+            # by severity so the user sees the breakdown rather than a
+            # vague "gate closed" warning.
+            sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            for f in findings:
+                s = (f.get("severity") or "").upper()
+                if s in sev_counts:
+                    sev_counts[s] += 1
+            parts = []
+            if sev_counts["CRITICAL"]:
+                parts.append(f"{sev_counts['CRITICAL']} CRITICAL")
+            if sev_counts["HIGH"]:
+                parts.append(f"{sev_counts['HIGH']} HIGH")
+            if sev_counts["MEDIUM"]:
+                parts.append(f"{sev_counts['MEDIUM']} MEDIUM")
+            if sev_counts["LOW"]:
+                parts.append(f"{sev_counts['LOW']} LOW")
+            breakdown = ", ".join(parts) or "no findings recorded"
+
+            settings = get_settings()
+            on_sandbox = settings.canton_environment == "sandbox"
+
+            if on_sandbox:
+                # Sandbox is for iterating; deploy proceeds.
+                msg = (
+                    f"Security review: {breakdown}. "
+                    "Sandbox policy allows deploy \u2014 fix findings before MainNet."
+                )
+                level = "info"
+            else:
+                # Production-ish target; deploy will be refused downstream.
+                msg = (
+                    f"Security review: {breakdown}. "
+                    "Production gate requires zero CRITICAL/HIGH and score \u2265 85 \u2014 deployment will be refused."
+                )
+                level = "warn"
+
             emit(
                 state,
                 "audit_gate_blocked",
-                "Security gate is closed — deployment will be blocked unless on sandbox",
-                level="warn",
-                data={"deploy_gate": False},
+                msg,
+                level=level,
+                data={
+                    "deploy_gate": False,
+                    "severity_counts": sev_counts,
+                    "on_sandbox": on_sandbox,
+                },
             )
 
         logger.info(
@@ -702,8 +744,19 @@ def deploy_node(state: dict) -> dict:
                 "progress":       90,
             }
         else:
-            logger.warning("Security gate would block deployment but sandbox mode — proceeding anyway", job_id=state.get("job_id"))
-            emit_log(state, "Sandbox mode: bypassing closed security gate", level="warn")
+            # Sandbox path: deploy proceeds. The audit_node has already
+            # surfaced the finding breakdown; here we keep the log line
+            # informational rather than alarming \u2014 "bypass" reads
+            # like a hack, "policy" reads like a deliberate choice.
+            logger.info(
+                "Sandbox policy: deploy proceeds despite open audit findings",
+                job_id=state.get("job_id"),
+            )
+            emit_log(
+                state,
+                "Sandbox policy: deploy proceeds despite audit findings. Review the audit report before MainNet.",
+                level="info",
+            )
 
     _push_status(state, "Deploying to Canton ledger...", 90)
     emit_stage_started(
@@ -931,6 +984,121 @@ def test_writer_node(state: dict) -> dict:
     }
 
 
+def test_compile_node(state: dict) -> dict:
+    """Compile the Daml-Script test scaffold against the production DAR.
+
+    Builds a sibling ``<job>-tests`` package that imports the production
+    DAR as a data-dependency and adds ``daml-script`` only there. This
+    keeps the production DAR clean (no test runtime in the deployed
+    artifact) while still proving the test scaffold compiles.
+
+    Failure here NEVER blocks the pipeline. The production DAR was
+    already built by ``compile_node``; this only adds verification of
+    the *test* scaffold. On compile failure we surface a MEDIUM finding
+    in the audit report so the user can see exactly which test broke.
+    """
+    job_id = state.get("job_id", "unknown")
+    test_code = state.get("test_daml_code", "")
+    if not test_code:
+        # Nothing to compile \u2014 test_writer was skipped or failed soft.
+        return state
+
+    dar_path = state.get("dar_path", "")
+    if not dar_path:
+        logger.info("test_compile skipped \u2014 no production DAR yet")
+        return state
+
+    logger.info("Node: test_compile", job_id=job_id)
+    _push_status(state, "Compiling Daml-Script test scaffold...", 88)
+    emit_stage_started(
+        state,
+        "test_compile",
+        "Building <job>-tests package against the production DAR\u2026",
+    )
+
+    try:
+        result = run_test_compile_agent(
+            job_id=job_id,
+            production_dar_path=dar_path,
+            production_daml_code=state.get("generated_code", ""),
+            test_daml_code=test_code,
+            test_module_name=state.get("test_module_name", ""),
+            test_file_path=state.get("test_file_path", ""),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("test_compile crashed; continuing", error=str(exc))
+        emit_log(state, f"Test compile skipped: {exc}", level="warn")
+        return state
+
+    if result.get("success"):
+        emit_stage_completed(
+            state,
+            "test_compile",
+            f"Test scaffold compiled \u2014 DAR at {result.get('test_dar_path')}",
+        )
+        return {
+            **state,
+            "test_dar_path":              result.get("test_dar_path", ""),
+            "test_compile_success":       True,
+            "test_compile_errors":        [],
+            "test_compile_summary":       result.get("test_compile_output_summary", ""),
+        }
+
+    # Failure: surface as a MEDIUM audit finding without blocking deploy.
+    if not result.get("soft_failure"):
+        _append_test_compile_finding(state, result)
+    summary = result.get("test_compile_output_summary") or "Test scaffold did not compile."
+    emit_log(state, summary, level="warn")
+    emit_stage_completed(
+        state,
+        "test_compile",
+        summary + " \u2014 production DAR is unaffected and will still deploy.",
+    )
+    return {
+        **state,
+        "test_dar_path":              "",
+        "test_compile_success":       False,
+        "test_compile_errors":        result.get("errors") or [],
+        "test_compile_summary":       summary,
+    }
+
+
+def _append_test_compile_finding(state: dict, result: dict) -> None:
+    """Inject a MEDIUM finding into the live audit report so the
+    user-visible findings panel reflects the test-compile failure."""
+    audit = state.setdefault("audit_reports", {})
+    sec = audit.setdefault("security_audit", {})
+    findings = sec.setdefault("findings", [])
+    err_summary = "\n".join(
+        f"  {e.get('file','?')}:{e.get('line','?')}: {e.get('message','')}"
+        for e in (result.get("errors") or [])[:5]
+    ) or "(no parseable error head; see test_compile_summary for raw output)"
+    findings.append({
+        "id":          "DSV-022::test-compile",
+        "severity":    "MEDIUM",
+        "category":    "Test Scaffolding",
+        "title":       "Generated Daml-Script test scaffold did not compile",
+        "description": (
+            "The auto-generated ``Test/<Template>Test.daml`` scaffold "
+            "failed to build in its sibling ``-tests`` package. The "
+            "production DAR is unaffected and was deployed normally, "
+            "but the documented happy-path / submitMustFail cases are "
+            "NOT verified to compile, let alone pass.\n\nFirst errors:\n"
+            + err_summary
+        ),
+        "location":    {"template": None, "choice": None, "lineNumbers": [0, 0]},
+        "recommendation": (
+            "Open the test scaffold at the path reported in "
+            "``test_file_path``, fix the compile errors above, and "
+            "re-run ``daml build`` in the ``-tests`` project. Test "
+            "compilation does not block deploy on sandbox; it must "
+            "be green before MainNet."
+        ),
+        "references": ["DSV-022"],
+        "source":     "test_compile",
+    })
+
+
 def _build_pipeline() -> CompiledStateGraph:
     graph = StateGraph(dict)
 
@@ -944,6 +1112,7 @@ def _build_pipeline() -> CompiledStateGraph:
     graph.add_node("fallback",         fallback_node)
     graph.add_node("audit",            audit_node)
     graph.add_node("test_writer",      test_writer_node)
+    graph.add_node("test_compile",     test_compile_node)
     graph.add_node("diagram",          diagram_node)
     graph.add_node("deploy",           deploy_node)
     graph.add_node("error",            error_node)
@@ -966,9 +1135,10 @@ def _build_pipeline() -> CompiledStateGraph:
     )
     graph.add_edge("fix", "compile")
     graph.add_edge("fallback", "compile")  # recompile after fallback — guaranteed success
-    graph.add_edge("audit",       "test_writer")
-    graph.add_edge("test_writer", "diagram")
-    graph.add_edge("diagram",     "deploy")
+    graph.add_edge("audit",        "test_writer")
+    graph.add_edge("test_writer",  "test_compile")
+    graph.add_edge("test_compile", "diagram")
+    graph.add_edge("diagram",      "deploy")
     graph.add_edge("deploy", END)
     graph.add_edge("error",  END)
 

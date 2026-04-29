@@ -162,6 +162,78 @@ GENERATION_SECURITY_RULES: list[dict] = [
         ),
         "severity": "high",
     },
+    {
+        "id": "SEC-GEN-016",
+        "rule": (
+            "ANY choice whose body has no side effect on ledger state "
+            "(no `create`, no `archive`, just `return ()` / `pure ()`) "
+            "MUST be declared `nonconsuming`. Without this keyword Daml "
+            "auto-archives the host contract on every exercise \u2014 a "
+            "single call to a misnamed `TrackPayment` / `LogActivity` / "
+            "`CheckBalance` choice silently destroys the live agreement. "
+            "Heuristic: if the choice name starts with Track, Log, "
+            "Observe, Check, View, Query, Inspect, Report, Get, Read, "
+            "Show, Validate, or Verify, it is almost certainly meant to "
+            "be `nonconsuming`. If the choice is meant to record an "
+            "event, prefer `create <AuditRecord> with \u2026` over "
+            "`return ()`."
+        ),
+        "example": (
+            "nonconsuming choice TrackPayment : () "
+            "with paymentAmount : Decimal "
+            "controller lender "
+            "do assertMsg \"Payment must be positive\" (paymentAmount > 0.0); "
+            "return ()"
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-017",
+        "rule": (
+            "Any template whose `ensure` clause enforces "
+            "`<balance> > 0` AND that exposes a choice subtracting "
+            "from `<balance>` MUST also expose a terminal-state "
+            "choice (`FullRepay`, `Close`, `Settle`, `Finalize`) that "
+            "either archives the contract cleanly OR creates a "
+            "`Settled<Template>` / `Repaid<Template>` audit-record "
+            "successor. Without this path the final payment fails "
+            "with `ENSURE_VIOLATED` because the resulting contract "
+            "violates its own `> 0` invariant \u2014 the agreement "
+            "becomes permanently un-closable. Inside the mutating "
+            "choice (e.g. `MakePayment`), branch on "
+            "`balance - param == 0.0` and route to the terminal "
+            "path automatically."
+        ),
+        "example": (
+            "choice FullRepay : ContractId RepaidLoan "
+            "controller borrower "
+            "do now <- getTime; "
+            "create RepaidLoan with borrower; lender; "
+            "originalAmount = loanAmount; repaidAt = now"
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-018",
+        "rule": (
+            "Any choice that subtracts a parameter from a template "
+            "field MUST first assert "
+            "`assertMsg \"<param> cannot exceed <field>\" "
+            "(<param> <= <field>)`. Relying on a downstream `ensure` "
+            "clause to reject negative balances produces an opaque "
+            "`ENSURE_VIOLATED` error that hides the real cause. The "
+            "fail-fast assertion gives the user a clear, actionable "
+            "message and lets the transaction abort early."
+        ),
+        "example": (
+            "do "
+            "assertMsg \"Payment must be positive\" (paymentAmount > 0.0); "
+            "assertMsg \"Payment cannot exceed loanAmount\" "
+            "(paymentAmount <= loanAmount); "
+            "create this with loanAmount = loanAmount - paymentAmount"
+        ),
+        "severity": "medium",
+    },
 ]
 
 
