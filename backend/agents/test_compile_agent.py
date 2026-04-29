@@ -110,9 +110,18 @@ def run_test_compile_agent(
         f.write(test_daml_code)
 
     # Write daml.yaml with daml-script + production DAR data-dep.
+    # Daml package names must match
+    # ``^[A-Za-z][A-Za-z0-9]*(-[A-Za-z][A-Za-z0-9]*)*$`` \u2014 every
+    # hyphen-separated segment has to *start* with a letter. UUID job
+    # IDs like ``f8e80a8d-4321-...`` violate this because ``4321``
+    # begins with a digit. We use a constant base name for the test
+    # package (it is never published as a dependency, so collision is
+    # not a concern) and only embed a sanitised job suffix for log
+    # traceability.
+    safe_suffix = "j" + "".join(c for c in job_id if c.isalnum())[:16]
     yaml_text = _TEST_DAML_YAML.format(
         sdk_version=settings.daml_sdk_version,
-        project_name=f"ginie-{job_id}",
+        project_name=f"ginie-tests-{safe_suffix}",
         # The data-dependencies path is relative to the project_dir.
         # We copy the DAR in so the path is short and portable.
         production_dar_path=os.path.basename(production_dar_path),

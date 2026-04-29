@@ -85,7 +85,11 @@ def generate_markdown_report(audit_result: dict, compliance_result: dict = None)
                     lines.append(f"{f['description']}\n")
                 if f.get("location"):
                     loc = f["location"]
-                    loc_str = loc.get("template", "")
+                    # Defensive: callers may pass ``{"template": None}``
+                    # rather than omitting the key. ``dict.get(k, "")``
+                    # returns ``None`` (not the default) when the value
+                    # is explicitly None, so ``+= str`` would crash.
+                    loc_str = loc.get("template") or ""
                     if loc.get("choice"):
                         loc_str += f"::{loc['choice']}"
                     lines.append(f"**Location:** `{loc_str}`\n")

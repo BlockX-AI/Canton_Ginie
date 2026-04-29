@@ -44,8 +44,20 @@ Domain mapping rules (most important):
   "attestation", "soulbound" -> domain="credential", pattern="soulbound-credential"
   (non-transferable). Required fields typically include name, description,
   issuedAt, criteria, optional metadataUri.
-- "bond", "note", "debt", "coupon", "principal" -> domain="finance",
+- "bond", "note", "coupon" -> domain="finance",
   pattern="bond-tokenization".
+- "loan", "borrow", "lend", "repay", "interest", "principal repayment",
+  "lender tracks payments" -> domain="finance",
+  pattern="loan-agreement". Required fields: ``principal : Decimal``,
+  ``interestRate : Decimal``, ``maturity : Time``, ``issuedAt : Time``.
+  Required behaviours: ``MakePayment`` (controller=borrower, reduces
+  principal), ``TrackPayment`` (controller=lender, **nonconsuming**),
+  ``FullRepay`` (controller=borrower, **archives by creating
+  RepaidLoan**), plus a propose-accept proposal template with
+  ``Reject`` / ``Cancel`` / ``Expire`` choices that each create a
+  matching ``RejectedLoanProposal`` / ``CancelledLoanProposal`` /
+  ``ExpiredLoanProposal`` audit record. Add ``expiresAt : Time`` to the
+  proposal.
 - "share", "equity", "stock", "dividend" -> domain="finance", pattern="equity-token".
 - "escrow", "hold", "release on condition" -> domain="payments", pattern="escrow".
 - "auction", "bid" -> domain="finance", pattern="auction".
@@ -483,17 +495,41 @@ def validate_spec(spec: dict[str, Any] | None) -> list[str]:
             )
 
     # ----- Bond / fixed income --------------------------------------------
+    # Detect bonds *only* by explicit pattern / coupon-field signals, NOT
+    # by domain==finance + principal. The latter heuristic was too eager
+    # and mis-flagged loan-agreement / lending specs (which legitimately
+    # have ``principal`` but no ``maturity``), forcing the synth into a
+    # bond retry that lost loan-specific behaviours like ``FullRepay``.
     is_bond = (
-        "bond" in pattern or "note" in pattern
-        or domain == "finance" and ("coupon" in field_names or "principal" in field_names)
+        "bond" in pattern
+        or pattern == "note"
+        or "coupon" in field_names
     )
-    if is_bond:
+    is_loan = "loan" in pattern or any(
+        kw in field_names for kw in ("loanamount", "interestrate")
+    )
+    if is_bond and not is_loan:
         if "principal" not in field_names and "amount" not in field_names:
             issues.append(
                 "Bond pattern must include a `principal` (or `amount`) field of type Decimal."
             )
         if not any(kw in field_names for kw in ("maturity", "matur", "expir")):
             issues.append("Bond pattern must include a `maturity` field of type Time.")
+
+    # ----- Loan / lending -------------------------------------------------
+    # Mirror Tier A's loan-pattern requirements at the spec level so we
+    # never accept a lending plan that lacks the audit-trail termination
+    # paths. Without these the writer downstream cannot safely emit
+    # SEC-GEN-017 terminal-state choices.
+    if is_loan:
+        if not any(kw in field_names for kw in ("principal", "loanamount", "amount")):
+            issues.append(
+                "Loan pattern must include a `principal` / `loanAmount` field of type Decimal."
+            )
+        # Soft-warn (not hard-fail) on the audit-trail behaviours so a
+        # short prompt that omits Reject is still accepted; the writer's
+        # generation rules supply the missing pieces.
+        # (No hard issues appended.)
 
     # ----- Escrow ---------------------------------------------------------
     is_escrow = "escrow" in pattern or domain == "payments"
