@@ -30,10 +30,21 @@ by the orchestrator (we expose the count so the gate can be tuned).
 
 from __future__ import annotations
 
+import concurrent.futures
+import os
 import re
 import structlog
 
 from utils.llm_client import call_llm
+
+# Hard wall-clock budget for the LLM call. Anthropic / OpenAI SDKs honour
+# a per-request httpx timeout but can still spend minutes inside their
+# retry loop (default ``max_retries=2`` = 3 attempts) when the upstream
+# is slow. The pipeline at large does NOT need a perfect test scaffold
+# \u2014 the production DAR is already compiled and audit-cleared by the
+# time we get here \u2014 so we cap the call hard and fall back to the
+# deterministic template on timeout. Override via ``TEST_WRITER_BUDGET_S``.
+_LLM_BUDGET_SECONDS = float(os.getenv("TEST_WRITER_BUDGET_S", "60"))
 
 logger = structlog.get_logger()
 
@@ -105,15 +116,41 @@ def run_test_writer_agent(
         party_names=party_names,
     )
 
+    # Enforce a hard wall-clock budget around the LLM call. The SDK
+    # already exposes a per-request timeout, but its internal retry
+    # loop (``max_retries=2`` by default) can still consume several
+    # minutes when the upstream is slow \u2014 a real production
+    # incident we observed in the deploy log. ThreadPoolExecutor with
+    # ``.result(timeout=...)`` gives us a deterministic ceiling.
+    # IMPORTANT: do NOT use ``with ThreadPoolExecutor() as ex`` here.
+    # Its ``__exit__`` calls ``shutdown(wait=True)``, which blocks
+    # until the worker thread finishes \u2014 silently re-introducing
+    # the exact hang we are trying to escape. We create the executor
+    # manually and pass ``wait=False`` so the pipeline can move on
+    # while a slow LLM thread eventually drains in the background.
+    raw = ""
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        raw = call_llm(
+        fut = ex.submit(
+            call_llm,
             system_prompt=_TEST_SYSTEM_PROMPT,
             user_message=user_message,
             max_tokens=2048,
         )
-    except Exception as exc:  # noqa: BLE001 - LLM transport errors are best-effort
-        logger.warning("test_writer LLM call failed; using fallback", error=str(exc))
-        raw = ""
+        try:
+            raw = fut.result(timeout=_LLM_BUDGET_SECONDS)
+        except concurrent.futures.TimeoutError:
+            logger.warning(
+                "test_writer LLM call exceeded budget; falling back",
+                budget_s=_LLM_BUDGET_SECONDS,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("test_writer LLM call failed; using fallback", error=str(exc))
+    finally:
+        # Detach the worker thread without waiting for it. The httpx
+        # client will eventually time out per its own settings; the
+        # leaked thread is harmless in long-running server processes.
+        ex.shutdown(wait=False, cancel_futures=True)
 
     test_code = _post_process(raw, module_name, primary_template, party_names)
 
