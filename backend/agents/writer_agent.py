@@ -17,6 +17,25 @@ logger = structlog.get_logger()
 WRITER_SYSTEM_PROMPT = """You are an expert Daml 2.x engineer for Canton Network smart contracts.
 You produce COMPILABLE Daml code. Follow these rules EXACTLY:
 
+TEMPLATE-COUNT POLICY (read this first):
+- SINGLE TEMPLATE is correct ONLY for self-sovereign / single-signatory
+  patterns: NFTs, soulbound credentials, single-issuer records.
+- MULTI-TEMPLATE (4-5 templates) is REQUIRED for any contract with two
+  or more parties whose mutual consent matters (swaps, loans, bonds,
+  invoices, escrows, agreements). The canonical shape is:
+    1. `Proposal`     — signatory = proposer, observer = counterparty
+    2. `Agreement`    — signatory = BOTH parties (created via Accept)
+    3. `RejectedProposal`  — audit record (signatory = counterparty)
+    4. `CancelledProposal` — audit record (signatory = proposer)
+    5. `ExpiredProposal`   — audit record (signatory = proposer)
+  This is non-negotiable: a single template with `signatory partyA` and
+  an `Accept` choice that flips a Bool is LEGALLY REPUDIABLE on Canton
+  because partyB never cryptographically signed. Use the multi-template
+  shape so `create Agreement with proposer, counterparty` is authorised
+  by the union of `signatory(Proposal)` + `controller(Accept)`.
+- Order multi-template files as: Proposal first, then Agreement, then
+  audit records. The first template is the deploy target.
+
 MANDATORY STRUCTURE — every file you produce MUST follow this layout:
 
 module Main where
@@ -46,13 +65,20 @@ template <Name>
 ABSOLUTE RULES:
 1. Module MUST be named Main: `module Main where`
 2. ALWAYS import DA.Time, DA.Date, DA.Text at the top
-3. Define exactly ONE template (no multiple templates or modules)
+3. Define ONE module named Main. Inside it, define EITHER one template
+   (single-signatory patterns) OR the canonical 4-5 templates listed
+   in TEMPLATE-COUNT POLICY above (multi-party patterns). Never
+   produce two unrelated modules in one file.
 4. Use Party for all participant fields
 5. Use Decimal (not Float, not Int) for all financial amounts
 6. Every template MUST have `signatory` with at least one Party field
 7. Every template MUST have `observer` with at least one Party field
 8. Every template MUST have exactly ONE `ensure` clause (combine with &&)
-9. Every template MUST have at least one `choice`
+9. The PRIMARY template (Proposal in multi-template files, the only
+   template in single-template files) MUST have at least one `choice`.
+   Audit-record templates (RejectedProposal / CancelledProposal /
+   ExpiredProposal / similar successor records) are terminal and may
+   have NO choices — they exist purely as queryable history.
 10. Choice syntax: `choice Name : ReturnType` then `with` params then `controller` then `do`
 11. `with` (parameters) MUST come BEFORE `controller` in choices
 12. Inside choices use field names directly — NEVER `this.fieldName`
@@ -112,7 +138,10 @@ def run_writer_agent(
     choices = structured_intent.get("suggested_choices", ["Transfer"])
     description = structured_intent.get("description", "")
 
-    # Force single template
+    # The PRIMARY template name (used for fallback + downstream lookup).
+    # In a multi-template Propose-Accept file the LLM may emit a
+    # ``Proposal`` template alongside; we only care that *some* sensible
+    # primary name exists for fallback paths.
     template_name = templates[0] if templates else "Main"
     if template_name == "Main":
         template_name = _derive_template_name(contract_type, description)
@@ -295,10 +324,12 @@ def _validate_daml(code: str) -> list[str]:
         issues.append("missing_ensure")
     if not re.search(r"^\s+choice\s+\w+", code, re.MULTILINE):
         issues.append("missing_choice")
-    # Check for multiple templates
-    template_matches = re.findall(r"^\s*template\s+\w+", code, re.MULTILINE)
-    if len(template_matches) > 1:
-        issues.append("multiple_templates")
+    # Multi-template is now ALLOWED (canonical Propose-Accept-Audit shape
+    # has 4-5 templates). We only flag if the file contains TWO or more
+    # ``module`` declarations, which is genuinely broken.
+    module_matches = re.findall(r"^\s*module\s+\w+\s+where", code, re.MULTILINE)
+    if len(module_matches) > 1:
+        issues.append("multiple_modules")
     return issues
 
 
@@ -319,11 +350,11 @@ def _auto_fix_structure(code: str, template_name: str, party1: str, party2: str)
         if imp not in code:
             code = code.replace("module Main where", f"module Main where\n{imp}", 1)
 
-    # Remove multiple templates — keep only the first
-    template_starts = [(m.start(), m.group()) for m in re.finditer(r"^template\s+\w+", code, re.MULTILINE)]
-    if len(template_starts) > 1:
-        # Keep everything up to the second template
-        code = code[:template_starts[1][0]].rstrip()
+    # NOTE: We previously truncated at the second `template` keyword to
+    # enforce a single-template invariant. The canonical Propose-Accept
+    # shape requires 4-5 templates, so we no longer truncate. The
+    # compiler is the source of truth for whether the multi-template
+    # output is valid.
 
     # Add missing signatory
     if not re.search(r"^\s+signatory\s+", code, re.MULTILINE):

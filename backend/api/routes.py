@@ -239,6 +239,15 @@ def _run_pipeline_thread(job_id: str, user_input: str, canton_environment: str, 
                 "deployment_note":   final_state.get("deployment_note", ""),
                 "diagram_mermaid":   final_state.get("diagram_mermaid", ""),
                 "project_files":     final_state.get("original_project_files") or final_state.get("project_files"),
+                # Tier B test artifacts: a Daml-Script test scaffold and
+                # the submitMustFail coverage gate. Surfaced so the
+                # frontend / QA can download the test file and the
+                # downstream tooling can read the coverage gate.
+                "test_daml_code":    final_state.get("test_daml_code", ""),
+                "test_module_name":  final_state.get("test_module_name", ""),
+                "test_file_path":    final_state.get("test_file_path", ""),
+                "must_fail_count":   final_state.get("must_fail_count", 0),
+                "test_coverage_ok":  final_state.get("test_coverage_ok", False),
                 "updated_at":        datetime.now(timezone.utc).isoformat(),
             }
             # Stamp user_email so later /me/contracts queries can find this row

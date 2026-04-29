@@ -6,6 +6,7 @@ from langgraph.graph.state import CompiledStateGraph
 from agents.intent_agent import run_intent_agent
 from agents.writer_agent import run_writer_agent, fetch_rag_context
 from agents.project_writer_agent import run_project_writer_agent
+from agents.test_writer_agent import run_test_writer_agent
 from pipeline.spec_synth import synthesize_spec
 from agents.compile_agent import run_compile_agent
 from agents.fix_agent import run_fix_agent
@@ -860,6 +861,76 @@ def _route_after_generate(state: dict) -> Literal["compile", "error"]:
     return "compile"
 
 
+def test_writer_node(state: dict) -> dict:
+    """Generate a Daml-Script test file alongside the production DAML.
+
+    The test artifact ships as part of the job result so QA / audit can
+    compile and run it in a separate ``-tests`` package without
+    polluting the production DAR with ``daml-script``. Coverage is
+    measured by counting ``submitMustFail`` calls; below the floor we
+    surface a non-fatal warning so the deploy still proceeds but the
+    user (and any downstream gate) sees the gap.
+
+    Failure here NEVER blocks the pipeline. The test file is a
+    deliverable artifact, not a deployment prerequisite.
+    """
+    job_id = state.get("job_id", "unknown")
+    logger.info("Node: test_writer", job_id=job_id)
+    daml_code = state.get("generated_code", "")
+    if not daml_code:
+        logger.warning("test_writer skipped \u2014 no generated_code")
+        return state
+
+    _push_status(state, "Generating Daml-Script test scaffold...", 86)
+    emit_stage_started(
+        state,
+        "test_writer",
+        "Drafting Daml-Script tests (\u2265 5 submitMustFail cases)\u2026",
+    )
+
+    try:
+        result = run_test_writer_agent(
+            daml_code=daml_code,
+            structured_intent=state.get("structured_intent"),
+            contract_spec=state.get("contract_spec"),
+        )
+    except Exception as exc:  # noqa: BLE001 - test artifact is non-fatal
+        logger.warning("test_writer crashed; continuing", error=str(exc))
+        emit_log(
+            state,
+            f"Test scaffold generation skipped: {exc}",
+            level="warn",
+        )
+        return state
+
+    must_fail = int(result.get("must_fail_count") or 0)
+    coverage_ok = bool(result.get("coverage_ok"))
+
+    summary = (
+        f"Test scaffold generated \u2014 {must_fail} submitMustFail case(s)"
+        + ("" if coverage_ok else f" (coverage gate: minimum 5 required)")
+    )
+    if coverage_ok:
+        emit_stage_completed(state, "test_writer", summary)
+    else:
+        # Non-fatal warning. We still advance the pipeline.
+        emit_log(state, summary, level="warn")
+        emit_stage_completed(
+            state,
+            "test_writer",
+            summary + " \u2014 deploy continues; hand-author the missing cases before MainNet.",
+        )
+
+    return {
+        **state,
+        "test_daml_code":     result.get("test_daml_code", ""),
+        "test_module_name":   result.get("test_module_name", ""),
+        "test_file_path":     result.get("test_file_path", ""),
+        "must_fail_count":    must_fail,
+        "test_coverage_ok":   coverage_ok,
+    }
+
+
 def _build_pipeline() -> CompiledStateGraph:
     graph = StateGraph(dict)
 
@@ -872,6 +943,7 @@ def _build_pipeline() -> CompiledStateGraph:
     graph.add_node("fix",              fix_node)
     graph.add_node("fallback",         fallback_node)
     graph.add_node("audit",            audit_node)
+    graph.add_node("test_writer",      test_writer_node)
     graph.add_node("diagram",          diagram_node)
     graph.add_node("deploy",           deploy_node)
     graph.add_node("error",            error_node)
@@ -894,8 +966,9 @@ def _build_pipeline() -> CompiledStateGraph:
     )
     graph.add_edge("fix", "compile")
     graph.add_edge("fallback", "compile")  # recompile after fallback — guaranteed success
-    graph.add_edge("audit", "diagram")
-    graph.add_edge("diagram", "deploy")
+    graph.add_edge("audit",       "test_writer")
+    graph.add_edge("test_writer", "diagram")
+    graph.add_edge("diagram",     "deploy")
     graph.add_edge("deploy", END)
     graph.add_edge("error",  END)
 

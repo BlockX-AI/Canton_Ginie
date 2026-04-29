@@ -120,6 +120,48 @@ GENERATION_SECURITY_RULES: list[dict] = [
         ),
         "severity": "medium",
     },
+    {
+        "id": "SEC-GEN-014",
+        "rule": (
+            "Every Proposal-style template (i.e. any template whose "
+            "name ends in `Proposal` or that is part of a Propose-"
+            "Accept lifecycle) MUST carry an `expiresAt : Time` field, "
+            "and its `Accept` choice MUST guard against acceptance "
+            "after expiry. Without this, a stale proposal can be "
+            "accepted years later at terms the proposer no longer "
+            "intends \u2014 a documented financial-loss vector. The "
+            "template should also expose an `Expire` choice that "
+            "produces an `ExpiredProposal` audit record once the "
+            "deadline has passed."
+        ),
+        "example": (
+            "do now <- getTime; "
+            "assertMsg \"Proposal has expired\" (now <= expiresAt); "
+            "create Agreement with ..."
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-015",
+        "rule": (
+            "Termination choices (Reject, Cancel, Expire, Terminate, "
+            "Abort, etc.) MUST create a successor audit-record "
+            "template that captures who terminated, when, and (where "
+            "applicable) why. A bare `return ()` or `pure ()` archives "
+            "the contract silently and discards the rejection reason "
+            "\u2014 forensics years later cannot reconstruct the "
+            "decision. Always: `create RejectedProposal with ...; "
+            "rejectedAt = now`."
+        ),
+        "example": (
+            "choice Reject : ContractId RejectedProposal "
+            "with reason : Text controller counterparty "
+            "do now <- getTime; "
+            "create RejectedProposal with proposer; counterparty; "
+            "reason; rejectedAt = now"
+        ),
+        "severity": "high",
+    },
 ]
 
 

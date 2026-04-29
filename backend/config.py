@@ -7,12 +7,21 @@ import structlog
 
 _logger = structlog.get_logger()
 
-_ENV_FILE = str(Path(__file__).parent / ".env.ginie")
+# pydantic-settings honours a tuple of env files in priority order: later
+# entries override earlier ones. We keep ``.env.ginie`` (legacy / committed
+# template) as the base and let a developer-local ``.env`` override it.
+# This way the user can drop AWS / API keys into the conventional ``.env``
+# without renaming files.
+_BACKEND_DIR = Path(__file__).parent
+_ENV_FILES = (
+    str(_BACKEND_DIR / ".env.ginie"),
+    str(_BACKEND_DIR / ".env"),
+)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILE,
+        env_file=_ENV_FILES,
         case_sensitive=False,
         extra='ignore'
     )
@@ -21,6 +30,16 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     openai_api_key: str = ""
     llm_provider: str = "openai"
+
+    # AWS Bedrock (Claude / other model families hosted by AWS). Used when
+    # ``llm_provider == "bedrock"``. The model ID format is e.g.
+    # ``us.anthropic.claude-sonnet-4-5-20250929-v1:0`` (cross-region
+    # inference profile) or ``anthropic.claude-opus-4-20250514-v1:0``.
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_session_token: str = ""
+    aws_region: str = "us-east-1"
+    bedrock_model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
     redis_url: str = "redis://localhost:6379/0"
     database_url: str = ""
@@ -66,6 +85,10 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expiry_days: int = 7
+
+    # Canton JWT signing (for production JWT auth)
+    canton_jwt_private_key: str = ""
+    canton_jwt_algorithm: str = "RS256"
 
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://canton.ginie.xyz,https://*.vercel.app"

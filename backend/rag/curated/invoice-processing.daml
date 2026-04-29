@@ -66,15 +66,21 @@ template InvoiceProposal
           vendor; client; invoiceId; amount; dueDate; description
           status = Issued
 
-    -- Client rejects -> bare archive is correct here because the
-    -- business meaning is genuinely "discard, no successor record".
-    choice RejectProposal : ()
+    -- Client rejects -> produces a RejectedInvoiceProposal audit
+    -- record so the rejection reason survives forever (regulators,
+    -- dispute resolution). Silent `return ()` is forbidden by
+    -- SEC-GEN-015.
+    choice RejectProposal : ContractId RejectedInvoiceProposal
       with
         reason : Text
       controller client
       do
         assertMsg "Rejection reason must be provided" (reason /= "")
-        return ()
+        now <- getTime
+        create RejectedInvoiceProposal with
+          vendor; client; invoiceId; amount; description
+          reason
+          rejectedAt = now
 
     -- Vendor revises before acceptance \xe2\x80\x94 mutates fields, never bare
     -- ``create this``. The new proposal supersedes the old one.
@@ -166,3 +172,44 @@ template PaidInvoice
         && invoiceId /= ""
         && amount > 0.0
         && paymentRef /= ""
+
+-- | Audit record: vendor's invoice proposal was rejected by the
+--   client. Preserves the rejection reason and amount so disputes
+--   are reconstructible without replaying the transaction stream.
+template RejectedInvoiceProposal
+  with
+    vendor      : Party
+    client      : Party
+    invoiceId   : Text
+    amount      : Decimal
+    description : Text
+    reason      : Text
+    rejectedAt  : Time
+  where
+    signatory client
+    observer vendor
+
+    ensure vendor /= client
+        && invoiceId /= ""
+        && amount > 0.0
+        && reason /= ""
+-- | Audit record: vendor's invoice proposal was rejected by the
+--   client. Preserves the rejection reason and amount so disputes
+--   are reconstructible without replaying the transaction stream.
+template RejectedInvoiceProposal
+  with
+    vendor      : Party
+    client      : Party
+    invoiceId   : Text
+    amount      : Decimal
+    description : Text
+    reason      : Text
+    rejectedAt  : Time
+  where
+    signatory client
+    observer vendor
+
+    ensure vendor /= client
+        && invoiceId /= ""
+        && amount > 0.0
+        && reason /= ""

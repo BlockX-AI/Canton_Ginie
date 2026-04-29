@@ -82,15 +82,50 @@ def refresh_user_jwt(token: str) -> str:
 
 
 def create_canton_jwt(party_ids: list[str]) -> str:
-    """Create a Canton-compatible unsigned JWT for sandbox ledger operations.
+    """Create a Canton-compatible JWT for ledger operations.
 
-    This wraps the existing make_sandbox_jwt() for consistency.
+    Uses RS256 signing if private key is configured, otherwise falls back to
+    unsigned wildcard JWT for sandbox mode only.
 
     Args:
         party_ids: List of party IDs to include in actAs/readAs.
 
     Returns:
-        Unsigned JWT string accepted by Canton wildcard auth.
+        Signed JWT string for production, or unsigned for sandbox.
     """
+    from config import get_settings
+    settings = get_settings()
+
+    # If private key is configured, sign the JWT
+    if settings.canton_jwt_private_key:
+        import jwt
+        import time
+        from pathlib import Path
+
+        # Load private key from file or string
+        key_path = Path(settings.canton_jwt_private_key)
+        if key_path.exists():
+            with open(key_path, "rb") as f:
+                private_key = f.read()
+        else:
+            private_key = settings.canton_jwt_private_key.encode()
+
+        payload = {
+            "sub": "ginie-backend",
+            "ledgerId": "participant1",
+            "applicationId": "ginie-daml",
+            "actAs": party_ids,
+            "readAs": party_ids,
+            "admin": True,
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()),
+        }
+
+        token = jwt.encode(payload, private_key, algorithm=settings.canton_jwt_algorithm)
+        logger.info("Created signed Canton JWT", algorithm=settings.canton_jwt_algorithm, parties=len(party_ids))
+        return token
+
+    # Fallback to unsigned wildcard JWT for sandbox
     from canton.canton_client_v2 import make_sandbox_jwt
+    logger.warning("Using unsigned wildcard JWT (sandbox mode) — configure CANTON_JWT_PRIVATE_KEY for production")
     return make_sandbox_jwt(party_ids)

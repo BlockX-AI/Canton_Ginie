@@ -40,11 +40,31 @@ template NFT
         create this with owner = newOwner
 
     -- Minter retains a Burn right (e.g. for content takedowns).
-    -- Consuming \xe2\x80\x94 the NFT is permanently destroyed.
-    choice Burn : ()
+    -- Consuming — the NFT is destroyed BUT a BurnedNFT audit row
+    -- persists with the reason so takedowns are auditable forever.
+    choice Burn : ContractId BurnedNFT
       with
         reason : Text
       controller minter
       do
         assertMsg "Burn reason must be supplied" (reason /= "")
-        return ()
+        now <- getTime
+        create BurnedNFT with
+          minter; lastOwner = owner; tokenId; name; reason
+          burnedAt = now
+
+-- | Audit record: NFT was burned by the minter. Preserves the last
+--   known owner + reason so legal takedowns are reconstructible.
+template BurnedNFT
+  with
+    minter    : Party
+    lastOwner : Party
+    tokenId   : Text
+    name      : Text
+    reason    : Text
+    burnedAt  : Time
+  where
+    signatory minter
+    observer lastOwner
+
+    ensure tokenId /= "" && name /= "" && reason /= ""

@@ -47,13 +47,17 @@ template Bond
           (now < maturity)
         create this with couponsPaid = couponsPaid + 1
 
-    -- Issuer redeems at maturity, repaying principal. Terminal.
-    choice Redeem : ()
+    -- Issuer redeems at maturity, repaying principal. Terminal —
+    -- produces a RedeemedBond audit record so the redemption is
+    -- queryable on-ledger forever.
+    choice Redeem : ContractId RedeemedBond
       controller issuer
       do
         now <- getTime
         assertMsg "Bond has not yet matured" (now >= maturity)
-        return ()
+        create RedeemedBond with
+          issuer; holder; principal; currency; couponsPaid
+          redeemedAt = now
 
     -- Holder may transfer the bond to a new holder before maturity.
     choice TransferHolding : ContractId Bond
@@ -63,3 +67,19 @@ template Bond
       do
         assertMsg "New holder must differ from issuer" (newHolder /= issuer)
         create this with holder = newHolder
+
+-- | Audit record: bond was redeemed at maturity. Captures total
+--   coupons paid so the full lifecycle is reconstructible.
+template RedeemedBond
+  with
+    issuer       : Party
+    holder       : Party
+    principal    : Decimal
+    currency     : Text
+    couponsPaid  : Int
+    redeemedAt   : Time
+  where
+    signatory issuer
+    observer holder
+
+    ensure principal > 0.0 && currency /= "" && couponsPaid >= 0

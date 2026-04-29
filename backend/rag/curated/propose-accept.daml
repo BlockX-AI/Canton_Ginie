@@ -1,57 +1,159 @@
 -- =============================================================
--- Curated reference pattern: Two-party agreement (propose-accept lite)
+-- Curated reference pattern: Propose-Accept (canonical 5-template)
 -- =============================================================
--- Generic two-party contract where one side accepts terms before
--- it activates. Useful as a structural reference for ANY pattern
--- that needs mutual consent (escrow agreements, service contracts,
--- supply orders, NDA, etc.).
+-- Bilateral agreement between two parties (proposer + counterparty)
+-- using the union-of-authority rule: a Proposal signed only by the
+-- proposer transitions into an Agreement signed by BOTH on Accept.
+-- Every termination path produces a permanent audit record.
 --
--- Key idioms demonstrated:
---   * Single template with `signatory partyA` and the live state
---     reached after `Accept` is exercised.
---   * `Accept` and `Reject` are mutually exclusive consuming choices
---     controlled by the counterparty.
---   * `Renegotiate` recreates with new terms \xe2\x80\x94 NEVER mutate `terms`
---     in place; consuming-recreate gives a clean ledger history.
+-- WHY this shape (and not a single-template "accepted: Bool" flag):
+--   * Canton enforces signatory authority cryptographically. A
+--     contract with `signatory proposer` only is legally a unilateral
+--     declaration; the receiver "accepting" it via a flag flip leaves
+--     them able to repudiate ("I never signed").
+--   * The Accept choice's `controller counterparty` adds the
+--     counterparty's authority to the proposer's authority that is
+--     already in scope (RULE B). Their union covers BOTH signatories
+--     of the new Agreement, so `create Agreement with proposer,
+--     counterparty` is authorised.
+--   * Every Reject / Cancel / Expire produces a successor template
+--     (RejectedProposal / CancelledProposal / ExpiredProposal) so
+--     regulators and post-mortems can reconstruct WHO killed the
+--     deal, WHEN, and WHY. Silent `return ()` archival is forbidden.
+--
+-- Adapt this shape to ANY two-party contract that requires mutual
+-- consent: swaps, loans, NDAs, service agreements, supply orders.
 -- =============================================================
 
 module Main where
 
-template Agreement
+import DA.Time
+import DA.Date
+import DA.Text
+
+-- | Pre-agreement state. Signed only by the proposer; the
+--   counterparty observes and decides via Accept / Reject.
+template Proposal
   with
-    proposer  : Party
-    receiver  : Party
-    terms     : Text
-    accepted  : Bool
-    createdAt : Time
+    proposer     : Party
+    counterparty : Party
+    terms        : Text
+    proposedAt   : Time
+    expiresAt    : Time
   where
     signatory proposer
-    observer receiver
+    observer counterparty
 
-    ensure proposer /= receiver && terms /= ""
+    ensure proposer /= counterparty
+        && terms /= ""
+        && expiresAt > proposedAt
 
-    -- Receiver accepts the terms; flips the `accepted` flag.
+    -- | Counterparty accepts \u2014 produces a bilateral Agreement
+    --   signed by BOTH parties (union-of-authority).
     choice Accept : ContractId Agreement
-      controller receiver
+      controller counterparty
       do
-        assertMsg "Already accepted" (not accepted)
-        create this with accepted = True
+        now <- getTime
+        assertMsg "Proposal has expired" (now <= expiresAt)
+        create Agreement with
+          proposer
+          counterparty
+          terms
+          executedAt = now
 
-    -- Receiver rejects \xe2\x80\x94 archives the proposal entirely.
-    choice Reject : ()
+    -- | Counterparty rejects with an auditable reason.
+    choice Reject : ContractId RejectedProposal
       with
         reason : Text
-      controller receiver
+      controller counterparty
       do
         assertMsg "Rejection reason must be provided" (reason /= "")
-        return ()
+        now <- getTime
+        create RejectedProposal with
+          proposer
+          counterparty
+          terms
+          reason
+          rejectedAt = now
 
-    -- Proposer revises terms; only valid before acceptance.
-    choice Renegotiate : ContractId Agreement
+    -- | Proposer cancels before acceptance with an auditable reason.
+    choice Cancel : ContractId CancelledProposal
       with
-        newTerms : Text
+        reason : Text
       controller proposer
       do
-        assertMsg "Cannot renegotiate after acceptance" (not accepted)
-        assertMsg "New terms must be non-empty" (newTerms /= "")
-        create this with terms = newTerms
+        assertMsg "Cancellation reason must be provided" (reason /= "")
+        now <- getTime
+        create CancelledProposal with
+          proposer
+          counterparty
+          terms
+          reason
+          cancelledAt = now
+
+    -- | Anyone may sweep an expired proposal once the deadline has
+    --   passed; produces an ExpiredProposal audit record.
+    choice Expire : ContractId ExpiredProposal
+      controller proposer
+      do
+        now <- getTime
+        assertMsg "Proposal has not yet expired" (now > expiresAt)
+        create ExpiredProposal with
+          proposer
+          counterparty
+          terms
+          expiredAt = now
+
+-- | Bilateral, binding agreement \u2014 both parties cryptographically
+--   signed (signatory proposer, counterparty).
+template Agreement
+  with
+    proposer     : Party
+    counterparty : Party
+    terms        : Text
+    executedAt   : Time
+  where
+    signatory proposer, counterparty
+
+    ensure proposer /= counterparty && terms /= ""
+
+-- | Audit record: proposal was rejected by the counterparty.
+template RejectedProposal
+  with
+    proposer     : Party
+    counterparty : Party
+    terms        : Text
+    reason       : Text
+    rejectedAt   : Time
+  where
+    signatory counterparty
+    observer proposer
+
+    ensure reason /= "" && terms /= ""
+
+-- | Audit record: proposal was cancelled by the proposer.
+template CancelledProposal
+  with
+    proposer     : Party
+    counterparty : Party
+    terms        : Text
+    reason       : Text
+    cancelledAt  : Time
+  where
+    signatory proposer
+    observer counterparty
+
+    ensure reason /= "" && terms /= ""
+
+-- | Audit record: proposal expired without a decision.
+template ExpiredProposal
+  with
+    proposer     : Party
+    counterparty : Party
+    terms        : Text
+    expiredAt    : Time
+  where
+    signatory proposer
+    observer counterparty
+
+    ensure terms /= ""

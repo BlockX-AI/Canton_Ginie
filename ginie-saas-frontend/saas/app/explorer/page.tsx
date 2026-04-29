@@ -833,6 +833,26 @@ function VerifyTab() {
                   </pre>
                 </div>
               )}
+
+              {/*
+                Privacy-projection disclaimer. Canton's privacy guarantees
+                rely on PARTICIPANT-LEVEL projection: each participant
+                sees only the subset of transactions its parties signed
+                or observed. Single-participant sandbox cannot prove this
+                \u2014 every party shares one participant, so "visible to"
+                is meaningless. Surface the limitation here so users do
+                not infer privacy guarantees from a green Verify badge.
+                See "The Complete Guide" \u00a72.11.
+              */}
+              <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3 text-[11px] leading-relaxed text-yellow-700 dark:text-yellow-300/80">
+                <strong className="font-semibold">Privacy not yet validated.</strong>{" "}
+                This contract has been validated on a single-participant
+                Canton sandbox. Cross-participant privacy projection
+                (the property that Party B&apos;s participant cannot see
+                Party A&apos;s contracts) has <em>not</em> been tested.
+                Re-run on a multi-participant LocalNet or DevNet before
+                claiming privacy guarantees.
+              </div>
             </div>
           )}
         </div>

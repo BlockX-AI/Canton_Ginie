@@ -28,6 +28,61 @@ class ContractFetchRequest(BaseModel):
 
 logger = structlog.get_logger()
 
+
+def _parse_acs_response(resp: httpx.Response) -> list[dict]:
+    """Tolerant parser for Canton ACS query responses.
+
+    Across Canton 3.4.x patch versions ``/v1/query`` /
+    ``/v2/state/active-contracts`` can return ANY of three shapes:
+
+    1. Envelope-wrapped JSON  : ``{"result": [{...}, ...]}``  (Canton 2.x default)
+    2. Plain JSON array       : ``[{...}, {...}]``            (some 3.4 patches)
+    3. Newline-delimited JSON : ``{...}\\n{...}\\n``           (other 3.4 patches)
+
+    Production code that hard-codes shape #1 has been observed to break
+    on patch upgrades (see "The Complete Guide" \u00a72.12). This helper
+    accepts all three so the explorer survives Canton minor-version
+    drift without manual intervention.
+
+    Returns an empty list if the body is unparseable. Never raises.
+    """
+    text = (resp.text or "").strip()
+    if not text:
+        return []
+
+    # Shape 1 / 2 : standard JSON.
+    try:
+        parsed = _json.loads(text)
+    except _json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, dict):
+        # Envelope-wrapped (most common). Some implementations nest
+        # under ``result``, others under ``contracts`` or ``activeContracts``.
+        for key in ("result", "contracts", "activeContracts"):
+            inner = parsed.get(key)
+            if isinstance(inner, list):
+                return [c for c in inner if isinstance(c, dict)]
+        # Single-row dict response (rare, but treat it as a list of one).
+        return [parsed] if parsed.get("contractId") else []
+
+    if isinstance(parsed, list):
+        return [c for c in parsed if isinstance(c, dict)]
+
+    # Shape 3 : NDJSON. Parse line-by-line; ignore garbage lines.
+    rows: list[dict] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or not line.startswith("{"):
+            continue
+        try:
+            obj = _json.loads(line)
+        except _json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
+    return rows
+
 ledger_router = APIRouter(prefix="/ledger", tags=["ledger-explorer"])
 
 
@@ -265,10 +320,10 @@ async def list_contracts(req: ContractQueryRequest = ContractQueryRequest()):
             logger.warning("Contract query batch failed", status=resp.status_code, batch_start=i)
             continue
 
-        data = resp.json()
-        result = data.get("result", [])
-
-        for c in result:
+        # Tolerant parsing: handle envelope-wrapped, plain-array, and
+        # NDJSON shapes that Canton 3.4.x patches have been observed to
+        # use interchangeably. See ``_parse_acs_response``.
+        for c in _parse_acs_response(resp):
             all_contracts.append({
                 "contractId": c.get("contractId", ""),
                 "templateId": c.get("templateId", ""),

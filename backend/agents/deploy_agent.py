@@ -1,7 +1,8 @@
+import hashlib
+import json
 import os
 import re
 import time
-import uuid
 import zipfile
 import structlog
 import httpx
@@ -183,6 +184,39 @@ def _is_transient_ledger_error(body: str) -> bool:
     return any(m in body for m in _TRANSIENT_LEDGER_MARKERS)
 
 
+def _build_command_id(template_id: str, payload: dict, acting_parties: list[str] | None) -> str:
+    """Derive a deterministic ``commandId`` from the business inputs.
+
+    Canton has a command-deduplication window (default 24h): a
+    ``commandId`` submitted twice inside the window is silently
+    de-duplicated and returns the original transaction. With a random
+    UUID, every retry creates a duplicate contract; with a hash of the
+    business keys, retries are natural no-ops.
+
+    The hash inputs:
+      * ``template_id``  \u2014 the fully-qualified Canton template ID.
+      * ``payload``      \u2014 canonical JSON of the create arguments.
+      * ``acting_parties`` \u2014 sorted list of submitter parties.
+
+    Two distinct deploys (different parties OR different payload) get
+    different IDs; the same deploy retried gets the same ID and Canton
+    dedupes for us. The ``ginie-`` prefix lets ledger operators trace
+    submissions back to this generator.
+    """
+    canonical = json.dumps(
+        {
+            "template_id": template_id,
+            "payload":     payload,
+            "act_as":      sorted(acting_parties or []),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"ginie-deploy-{digest[:24]}"
+
+
 def _create_contract(
     client: httpx.Client,
     canton_url: str,
@@ -191,7 +225,7 @@ def _create_contract(
     auth: dict,
     acting_parties: list[str] | None = None,
 ) -> str:
-    command_id = f"ginie-deploy-{uuid.uuid4().hex[:16]}"
+    command_id = _build_command_id(template_id, payload, acting_parties)
     body: dict = {
         "templateId": template_id,
         "payload": payload,
@@ -362,13 +396,25 @@ def run_deploy_agent(
             if not payload:
                 payload = dict(allocated)
 
-            # Build fully-qualified template ID
+            # Build fully-qualified template ID. Short-form
+            # ``Module:Template`` works on a single-version sandbox but
+            # is ambiguous on production participants where multiple
+            # package versions can be loaded simultaneously \u2014 Canton
+            # may pick the wrong version or reject the command. We
+            # ALWAYS prefer ``<packageId>:Module:Template`` and warn
+            # loudly when forced to fall back.
             module_name = (_extract_module_name(daml_code) if daml_code else None) or "Main"
             if package_id:
                 template_id = f"{package_id}:{module_name}:{template_name}"
             else:
                 template_id = f"{module_name}:{template_name}"
-            logger.info("Template ID resolved", module=module_name, template=template_name, template_id=template_id)
+                logger.error(
+                    "Falling back to SHORT-FORM template ID \u2014 multi-version "
+                    "production participants may pick the wrong package",
+                    module=module_name,
+                    template=template_name,
+                )
+            logger.info("Template ID resolved", module=module_name, template=template_name, template_id=template_id, full_form=bool(package_id))
 
             logger.info("Creating contract", template_id=template_id, payload=payload)
 

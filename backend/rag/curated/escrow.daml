@@ -8,11 +8,15 @@
 --
 -- Key idioms demonstrated:
 --   * Three-party signatory: arbiter holds, buyer + seller observe.
---   * `Confirm` and `Refund` both consuming \xe2\x80\x94 the escrow has a
+--   * `Confirm` and `Refund` both consuming — the escrow has a
 --     terminal lifecycle, not a perpetual one.
 --   * Time-bounded refund window via `deadline : Time`.
 --   * Decimal field `amount` IS appropriate here (this is a financial
 --     escrow). Other patterns must NOT carry an amount field by default.
+--   * Every terminal choice produces an AUDIT RECORD successor
+--     (`ConfirmedEscrow` / `RefundedEscrow` / `ReclaimedEscrow`)
+--     so regulators can reconstruct WHO closed the escrow and WHEN
+--     by ACS-querying these rows — silent `return ()` is forbidden.
 -- =============================================================
 
 module Main where
@@ -36,25 +40,85 @@ template Escrow
         && arbiter /= buyer
         && arbiter /= seller
 
-    -- Arbiter releases funds to seller. Closes the escrow.
-    choice Confirm : ()
+    -- Arbiter releases funds to seller. Closes the escrow with a
+    -- ConfirmedEscrow audit row.
+    choice Confirm : ContractId ConfirmedEscrow
       controller arbiter
       do
-        return ()
+        now <- getTime
+        create ConfirmedEscrow with
+          arbiter; buyer; seller; amount; currency; memo
+          confirmedAt = now
 
-    -- Arbiter refunds the buyer. Closes the escrow.
-    choice Refund : ()
+    -- Arbiter refunds the buyer. Closes the escrow with a
+    -- RefundedEscrow audit row that captures the reason.
+    choice Refund : ContractId RefundedEscrow
       with
         reason : Text
       controller arbiter
       do
         assertMsg "Refund reason must be supplied" (reason /= "")
-        return ()
+        now <- getTime
+        create RefundedEscrow with
+          arbiter; buyer; seller; amount; currency; memo
+          reason
+          refundedAt = now
 
     -- After deadline, buyer may unilaterally reclaim if arbiter is silent.
-    choice ReclaimAfterDeadline : ()
+    choice ReclaimAfterDeadline : ContractId ReclaimedEscrow
       controller buyer
       do
         now <- getTime
         assertMsg "Deadline has not yet passed" (now >= deadline)
-        return ()
+        create ReclaimedEscrow with
+          arbiter; buyer; seller; amount; currency; memo
+          reclaimedAt = now
+
+-- | Audit record: arbiter confirmed and released to seller.
+template ConfirmedEscrow
+  with
+    arbiter     : Party
+    buyer       : Party
+    seller      : Party
+    amount      : Decimal
+    currency    : Text
+    memo        : Text
+    confirmedAt : Time
+  where
+    signatory arbiter
+    observer buyer, seller
+
+    ensure amount > 0.0 && currency /= ""
+
+-- | Audit record: arbiter refunded to buyer with documented reason.
+template RefundedEscrow
+  with
+    arbiter    : Party
+    buyer      : Party
+    seller     : Party
+    amount     : Decimal
+    currency   : Text
+    memo       : Text
+    reason     : Text
+    refundedAt : Time
+  where
+    signatory arbiter
+    observer buyer, seller
+
+    ensure amount > 0.0 && currency /= "" && reason /= ""
+
+-- | Audit record: buyer reclaimed funds after deadline expired.
+template ReclaimedEscrow
+  with
+    arbiter     : Party
+    buyer       : Party
+    seller      : Party
+    amount      : Decimal
+    currency    : Text
+    memo        : Text
+    reclaimedAt : Time
+  where
+    signatory buyer
+    observer arbiter, seller
+
+    ensure amount > 0.0 && currency /= ""
