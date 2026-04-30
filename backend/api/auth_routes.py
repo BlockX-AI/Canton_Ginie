@@ -285,6 +285,7 @@ class EmailSignupRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=120)
     password: str = Field(..., min_length=8, max_length=200)
     display_name: Optional[str] = Field(None, max_length=60)
+    invite_code: str = Field(..., min_length=10, max_length=20, description="Invite code required for signup")
 
 
 class EmailLoginRequest(BaseModel):
@@ -320,14 +321,31 @@ def _create_email_token(email: str, display_name: str, party_id: Optional[str]) 
 @auth_router.post("/email/signup", response_model=EmailAuthResponse)
 @limiter.limit("5/minute")
 async def email_signup(request: Request, body: EmailSignupRequest = Body()):
-    """Create a new email/password account. Party is created later via /setup."""
+    """Create a new email/password account. Party is created later via /setup.
+    
+    Requires a valid invite code for signup.
+    """
+    from auth.invite_manager import validate_invite_code, mark_invite_code_used
+    
     settings = get_settings()
+    
+    # Validate invite code
+    if not validate_invite_code(body.invite_code):
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid or already used invite code"
+        )
+    
     try:
         account = create_email_account(
             email=body.email,
             password=body.password,
             display_name=body.display_name,
         )
+        
+        # Mark invite code as used
+        mark_invite_code_used(body.invite_code, body.email)
+        
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:

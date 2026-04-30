@@ -16,6 +16,7 @@ export default function LoginPage(): ReactNode {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -32,13 +33,21 @@ export default function LoginPage(): ReactNode {
       setError("Password must be at least 8 characters.");
       return;
     }
+    if (mode === "signup" && !inviteCode) {
+      setError("Invite code is required for signup.");
+      return;
+    }
+    if (mode === "signup" && !/^GS-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(inviteCode)) {
+      setError("Invalid invite code format. Use: GS-XXXX-XXXX");
+      return;
+    }
 
     setSubmitting(true);
     try {
       const result =
         mode === "signin"
           ? await loginEmail(email, password)
-          : await signupEmail(email, password, displayName || undefined);
+          : await signupEmail(email, password, displayName || undefined, inviteCode);
 
       if (result.needsParty) {
         router.push("/setup");
@@ -85,19 +94,39 @@ export default function LoginPage(): ReactNode {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             {mode === "signup" && (
-              <div>
-                <label className="text-sm font-medium text-foreground">
-                  Display Name <span className="text-muted-foreground">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Your name"
-                  className="mt-1.5 w-full rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-                  maxLength={60}
-                />
-              </div>
+              <>
+                <div>
+                  <label className="text-sm font-medium text-foreground">
+                    Display Name <span className="text-muted-foreground">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Your name"
+                    className="mt-1.5 w-full rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                    maxLength={60}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground">
+                    Invite Code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    placeholder="GS-XXXX-XXXX"
+                    required
+                    pattern="GS-[A-Z0-9]{4}-[A-Z0-9]{4}"
+                    className="mt-1.5 w-full rounded-xl border border-border bg-muted px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/60 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                    maxLength={13}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Enter your invite code to create an account
+                  </p>
+                </div>
+              </>
             )}
 
             <div>

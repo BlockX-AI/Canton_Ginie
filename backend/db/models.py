@@ -148,3 +148,26 @@ class JobEvent(Base):
         Index("idx_job_events_job_seq", "job_id", "seq"),
         Index("idx_job_events_job", "job_id"),
     )
+
+
+class InviteCode(Base):
+    """Invite codes for invite-only signup.
+    
+    Each code can be used once. After a successful signup, the code is marked
+    as used and linked to the email account that claimed it.
+    """
+
+    __tablename__ = "invite_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(Text, nullable=False, unique=True, index=True)
+    used = Column(Integer, nullable=False, default=0)
+    used_by_email = Column(Text, nullable=True, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_by = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_invite_codes_used", "used"),
+    )

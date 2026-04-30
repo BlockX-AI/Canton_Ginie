@@ -40,7 +40,7 @@ interface AuthContextValue extends AuthState {
   hydrated: boolean;
   login: (token: string, partyId: string, displayName: string, fingerprint: string) => void;
   loginEmail: (email: string, password: string) => Promise<EmailAuthResult>;
-  signupEmail: (email: string, password: string, displayName?: string) => Promise<EmailAuthResult>;
+  signupEmail: (email: string, password: string, displayName?: string, inviteCode?: string) => Promise<EmailAuthResult>;
   linkParty: (partyId: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signupEmail = useCallback(
-    async (email: string, password: string, displayName?: string): Promise<EmailAuthResult> => {
+    async (email: string, password: string, displayName?: string, inviteCode?: string): Promise<EmailAuthResult> => {
       const resp = await fetch(`${API_URL}/auth/email/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -160,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email,
           password,
           display_name: displayName,
+          invite_code: inviteCode,
         }),
       });
       if (!resp.ok) {
