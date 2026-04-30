@@ -35,10 +35,16 @@ async def lifespan(app: FastAPI):
 
     # Seed badge catalog (idempotent)
     try:
-        from services.badge_service import seed_badges
+        from services.badge_service import seed_badges, backfill_all_user_badges
         added = seed_badges()
         if added:
             logger.info("Badge catalog seeded", added=added)
+        # Backfill XP/badges for any existing users that pre-date badge logic
+        try:
+            stats = backfill_all_user_badges()
+            logger.info("Badge backfill ran on startup", **stats)
+        except Exception as e:
+            logger.warning("Badge backfill failed", error=str(e))
     except Exception as e:
         logger.warning("Badge seeding deferred", error=str(e))
 

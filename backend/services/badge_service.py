@@ -220,7 +220,7 @@ def check_and_award_badges(email: str) -> List[str]:
     """Check all criteria-based badges and award any newly earned ones.
     
     Returns list of newly-awarded badge slugs. Safe to call after every
-    contract generation / deployment.
+    contract generation / deployment, and also periodically for backfill.
     """
     email = email.strip().lower()
     newly_awarded: List[str] = []
@@ -245,11 +245,16 @@ def check_and_award_badges(email: str) -> List[str]:
             # Iterate through all badges and check criteria
             badges = session.query(Badge).all()
             for badge in badges:
-                if badge.criteria_type == "contract_count" and contract_count >= badge.criteria_value:
-                    ub = _award_badge_internal(session, account.id, badge.slug)
-                    if ub:
-                        newly_awarded.append(badge.slug)
+                awarded = False
+                if badge.criteria_type == "signup":
+                    # Every registered user gets the signup badge
+                    awarded = True
+                elif badge.criteria_type == "contract_count" and contract_count >= badge.criteria_value:
+                    awarded = True
                 elif badge.criteria_type == "deploy_count" and deploy_count >= badge.criteria_value:
+                    awarded = True
+                
+                if awarded:
                     ub = _award_badge_internal(session, account.id, badge.slug)
                     if ub:
                         newly_awarded.append(badge.slug)
@@ -257,6 +262,93 @@ def check_and_award_badges(email: str) -> List[str]:
         logger.exception("Failed to check badges", email=email, error=str(e))
     
     return newly_awarded
+
+
+def backfill_all_user_badges() -> dict:
+    """Run check_and_award_badges for every registered user.
+    
+    Useful after deploying badge logic changes so existing users get caught
+    up on XP and badges they should have earned.
+    """
+    stats = {"users": 0, "newly_awarded": 0}
+    try:
+        with get_db_session() as session:
+            emails = [row[0] for row in session.query(EmailAccount.email).all()]
+        for email in emails:
+            stats["users"] += 1
+            stats["newly_awarded"] += len(check_and_award_badges(email))
+        logger.info("Badge backfill complete", **stats)
+    except Exception as e:
+        logger.exception("Backfill failed", error=str(e))
+    return stats
+
+
+def get_leaderboard(limit: int = 100) -> List[dict]:
+    """Return ranked list of users for the leaderboard.
+    
+    Ranks by XP descending, with deploy_count and contract_count as
+    tie-breakers. Includes profile picture, display name, level, badge
+    count, and recent badges.
+    """
+    with get_db_session() as session:
+        accounts = session.query(EmailAccount).order_by(EmailAccount.xp.desc().nullslast()).limit(limit).all()
+        results = []
+        for acc in accounts:
+            contract_count = session.query(JobHistory).filter(
+                JobHistory.user_email == acc.email,
+                JobHistory.status == "complete",
+            ).count()
+            deploy_count = session.query(DeployedContract).filter(
+                DeployedContract.user_email == acc.email,
+            ).count()
+            badge_count = session.query(UserBadge).filter_by(account_id=acc.id).count()
+
+            # Top 3 most recent badges for display
+            recent_badges = (
+                session.query(UserBadge, Badge)
+                .join(Badge, UserBadge.badge_id == Badge.id)
+                .filter(UserBadge.account_id == acc.id)
+                .order_by(UserBadge.earned_at.desc())
+                .limit(3)
+                .all()
+            )
+
+            xp = acc.xp or 0
+            results.append({
+                "display_name": acc.display_name or (acc.email.split("@")[0] if acc.email else "user"),
+                "profile_picture_url": acc.profile_picture_url,
+                "xp": xp,
+                "level": _level_from_xp(xp),
+                "badge_count": badge_count,
+                "contract_count": contract_count,
+                "deploy_count": deploy_count,
+                "rank_tier": _rank_tier(xp, contract_count, deploy_count),
+                "recent_badges": [
+                    {
+                        "slug": b.slug,
+                        "name": b.name,
+                        "icon": b.icon,
+                        "color": b.color,
+                        "rarity": b.rarity,
+                    }
+                    for _ub, b in recent_badges
+                ],
+                "member_since": acc.created_at.isoformat() if acc.created_at else None,
+            })
+        # Final sort by xp desc, deploy_count desc, contract_count desc
+        results.sort(key=lambda r: (-r["xp"], -r["deploy_count"], -r["contract_count"]))
+        return results
+
+
+def _rank_tier(xp: int, contract_count: int, deploy_count: int) -> str:
+    """Categorise user into a trust tier based on activity."""
+    if deploy_count >= 25 or xp >= 500:
+        return "ARCHITECT"
+    if deploy_count >= 10 or xp >= 200:
+        return "BUILDER"
+    if deploy_count >= 1 or contract_count >= 1:
+        return "SIGNER"
+    return "NEWCOMER"
 
 
 def get_user_badges(email: str) -> List[dict]:

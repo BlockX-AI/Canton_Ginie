@@ -20,7 +20,7 @@ from services.cloudinary_service import (
     is_cloudinary_configured,
     MAX_FILE_SIZE_BYTES,
 )
-from services.badge_service import get_user_badges, get_user_stats
+from services.badge_service import get_user_badges, get_user_stats, check_and_award_badges, get_leaderboard
 from db.session import get_db_session
 from db.models import EmailAccount
 
@@ -155,12 +155,23 @@ async def delete_my_picture(user: dict = Depends(get_current_user)):
 async def get_my_profile(user: dict = Depends(get_current_user)):
     """Get the current user's full profile with stats and badges."""
     email = _email_from_token(user)
+    # Self-heal: re-check badge criteria so XP catches up if we missed events
+    try:
+        check_and_award_badges(email)
+    except Exception:
+        pass
     stats = get_user_stats(email)
     if not stats:
         raise HTTPException(status_code=404, detail="Profile not found")
     
     badges = get_user_badges(email)
     return {**stats, "badges": badges}
+
+
+@profile_router.get("/leaderboard")
+async def leaderboard(limit: int = 100):
+    """Public leaderboard ranked by XP, deployments, and contracts."""
+    return {"users": get_leaderboard(limit=limit)}
 
 
 @profile_router.get("/user/{email}")

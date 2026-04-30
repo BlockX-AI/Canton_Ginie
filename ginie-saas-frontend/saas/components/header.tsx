@@ -2,7 +2,7 @@
 
 
 
-import { ChevronDown, User, Database, LogOut, History } from "lucide-react";
+import { ChevronDown, User, Database, LogOut, History, Trophy } from "lucide-react";
 
 import { AnimatePresence, motion } from "motion/react";
 
@@ -393,6 +393,14 @@ export function Header(): ReactNode {
               History
             </a>
           )}
+
+          <a href="/leaderboard" className="inline-flex items-center gap-1.5 rounded-full bg-foreground/5 border border-border px-3 py-1.5 text-sm font-medium text-foreground/80 hover:bg-foreground/10 transition-colors">
+
+            <Trophy className="w-3.5 h-3.5" />
+
+            Leaderboard
+
+          </a>
 
           <a href="/explorer" className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 border border-accent/20 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 transition-colors">
 
