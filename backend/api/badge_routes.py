@@ -15,10 +15,20 @@ badge_router = APIRouter(prefix="/badges", tags=["badges"])
 
 
 def _email_from_token(user: dict) -> str:
+    """Resolve email from JWT sub (which is the party_id)."""
     sub = user.get("sub", "")
+    if not sub:
+        raise HTTPException(status_code=400, detail="Invalid token")
     if sub.startswith("email:"):
         return sub[len("email:"):]
-    raise HTTPException(status_code=400, detail="Not an email account token")
+    # sub is a party_id — look up linked EmailAccount
+    from db.session import get_db_session
+    from db.models import EmailAccount
+    with get_db_session() as session:
+        account = session.query(EmailAccount).filter_by(party_id=sub).first()
+        if not account:
+            raise HTTPException(status_code=404, detail="No email account linked to this party")
+        return account.email
 
 
 @badge_router.get("")

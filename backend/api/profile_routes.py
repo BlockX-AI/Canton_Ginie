@@ -29,10 +29,23 @@ profile_router = APIRouter(prefix="/profile", tags=["profile"])
 
 
 def _email_from_token(user: dict) -> str:
+    """Resolve the email account associated with the authenticated user.
+
+    The JWT 'sub' is the Canton party_id. Email is stored on the EmailAccount
+    row keyed by party_id.
+    """
     sub = user.get("sub", "")
+    if not sub:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    # Backward-compat: if sub is "email:xxx", strip prefix
     if sub.startswith("email:"):
         return sub[len("email:"):]
-    raise HTTPException(status_code=400, detail="Not an email account token")
+    # Otherwise sub is a party_id — look up the linked EmailAccount
+    with get_db_session() as session:
+        account = session.query(EmailAccount).filter_by(party_id=sub).first()
+        if not account:
+            raise HTTPException(status_code=404, detail="No email account linked to this party")
+        return account.email
 
 
 @profile_router.post("/upload-picture")

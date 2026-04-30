@@ -86,38 +86,59 @@ function BadgeCard({ badge, earned }: { badge: Badge; earned: boolean }) {
 
   return (
     <div
-      className={`relative rounded-2xl border p-5 transition-all ${
+      className={`group relative rounded-2xl border p-5 transition-all duration-300 overflow-hidden ${
         earned
-          ? "bg-frame border-border hover:border-foreground/20 hover:shadow-lg"
-          : "bg-foreground/[0.02] border-foreground/10 opacity-60"
+          ? "bg-gradient-to-br from-frame to-frame/50 border-border hover:-translate-y-1 hover:shadow-2xl hover:border-foreground/20"
+          : "bg-foreground/[0.02] border-foreground/10 opacity-50 hover:opacity-70"
       }`}
       title={earned ? `Earned ${earnedAt}` : "Not yet earned"}
     >
+      {/* Glow effect on hover for earned badges */}
+      {earned && (
+        <div
+          className="absolute inset-0 opacity-0 group-hover:opacity-30 transition-opacity duration-300 pointer-events-none"
+          style={{
+            background: `radial-gradient(circle at 50% 0%, ${badge.color}60 0%, transparent 70%)`,
+          }}
+        />
+      )}
       {!earned && (
-        <Lock className="absolute top-3 right-3 w-4 h-4 text-muted-foreground" />
+        <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-foreground/5 flex items-center justify-center">
+          <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+        </div>
       )}
       <div
-        className={`w-14 h-14 rounded-xl flex items-center justify-center mb-3 ring-2 ${rarity.ring}`}
+        className={`relative w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ring-2 ${rarity.ring} ${
+          earned ? "shadow-lg" : ""
+        }`}
         style={{
-          backgroundColor: earned ? `${badge.color}20` : "rgba(120,120,120,0.1)",
+          background: earned
+            ? `linear-gradient(135deg, ${badge.color}30, ${badge.color}10)`
+            : "rgba(120,120,120,0.08)",
+          boxShadow: earned ? `0 0 24px ${badge.color}30` : undefined,
         }}
       >
         <Icon
-          className="w-7 h-7"
-          style={{ color: earned ? badge.color : "#888" }}
+          className="w-8 h-8"
+          style={{ color: earned ? badge.color : "#666" }}
         />
       </div>
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
         <h3 className="text-sm font-semibold text-foreground">{badge.name}</h3>
-        <span className={`text-[10px] uppercase tracking-wider font-bold ${rarity.label}`}>
+        <span
+          className={`text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full border border-current/30 ${rarity.label}`}
+        >
           {badge.rarity}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground leading-relaxed mb-2">
+      <p className="text-xs text-muted-foreground leading-relaxed mb-3 min-h-[2.5em]">
         {badge.description}
       </p>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-accent font-medium">+{badge.xp_reward} XP</span>
+      <div className="flex items-center justify-between text-[11px] pt-3 border-t border-border/50">
+        <span className="inline-flex items-center gap-1 text-accent font-semibold">
+          <Zap className="w-3 h-3" />
+          {badge.xp_reward} XP
+        </span>
         {earned && earnedAt && (
           <span className="text-muted-foreground">{earnedAt}</span>
         )}
@@ -138,14 +159,19 @@ function StatCard({
   accent?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-frame p-5">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className={`w-4 h-4 ${accent || "text-muted-foreground"}`} />
-        <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+    <div className="group relative rounded-2xl border border-border bg-gradient-to-br from-frame to-frame/60 p-5 hover:border-foreground/20 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden">
+      <div className="absolute -top-6 -right-6 w-24 h-24 bg-foreground/[0.02] rounded-full group-hover:bg-foreground/[0.04] transition-colors" />
+      <div className="relative flex items-center gap-2 mb-3">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-foreground/5 ${accent || "text-muted-foreground"}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
           {label}
         </span>
       </div>
-      <div className="text-2xl font-semibold text-foreground">{value}</div>
+      <div className="relative text-3xl font-semibold text-foreground tracking-tight">
+        {value}
+      </div>
     </div>
   );
 }
@@ -287,22 +313,37 @@ export default function ProfilePage() {
   const progressPercent = Math.min(100, (progressInLevel / xpNeeded) * 100);
 
   return (
-    <div className="min-h-screen pt-28 pb-20 px-4 md:px-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen pt-28 pb-20 px-4 md:px-8 relative overflow-hidden">
+      {/* Decorative background glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-accent/5 blur-3xl rounded-full pointer-events-none" />
+      <div className="absolute top-40 right-0 w-[400px] h-[400px] bg-purple-500/5 blur-3xl rounded-full pointer-events-none" />
+
+      <div className="max-w-6xl mx-auto relative">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back
+          Back to home
         </Link>
 
         {/* Profile header card */}
-        <div className="rounded-3xl border border-border bg-frame p-6 md:p-8 mb-8">
-          <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
-            {/* Avatar */}
-            <div className="relative group">
-              <div className="w-28 h-28 rounded-full border-4 border-accent/30 overflow-hidden bg-foreground/5 flex items-center justify-center">
+        <div className="relative rounded-3xl border border-border bg-gradient-to-br from-frame via-frame to-frame/80 p-8 md:p-10 mb-10 overflow-hidden shadow-xl">
+          {/* Subtle pattern overlay */}
+          <div
+            className="absolute inset-0 opacity-[0.03] pointer-events-none"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+              backgroundSize: "24px 24px",
+            }}
+          />
+
+          <div className="relative flex flex-col md:flex-row gap-8 items-start md:items-center">
+            {/* Avatar with gradient ring */}
+            <div className="relative group flex-shrink-0">
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-accent via-purple-500 to-cyan-500 opacity-60 blur-md group-hover:opacity-100 transition-opacity" />
+              <div className="relative w-32 h-32 rounded-full border-4 border-background overflow-hidden bg-foreground/5 flex items-center justify-center shadow-2xl">
                 {profile.profile_picture_url ? (
                   <img
                     src={profile.profile_picture_url}
@@ -310,14 +351,15 @@ export default function ProfilePage() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <UserIcon className="w-12 h-12 text-muted-foreground" />
+                  <UserIcon className="w-14 h-14 text-muted-foreground" />
                 )}
               </div>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-accent text-background flex items-center justify-center shadow-lg hover:bg-accent/90 transition-colors disabled:opacity-50"
+                className="absolute bottom-1 right-1 w-10 h-10 rounded-full bg-accent text-background flex items-center justify-center shadow-xl hover:bg-accent/90 hover:scale-110 transition-all disabled:opacity-50 ring-4 ring-background"
                 title="Change picture"
+                aria-label="Change profile picture"
               >
                 {uploading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -338,11 +380,17 @@ export default function ProfilePage() {
             </div>
 
             {/* Info */}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-3xl font-semibold text-foreground mb-1">
-                {profile.display_name || profile.email.split("@")[0]}
-              </h1>
-              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-4">
+            <div className="flex-1 min-w-0 w-full">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                <h1 className="text-4xl font-semibold text-foreground tracking-tight">
+                  {profile.display_name || profile.email.split("@")[0]}
+                </h1>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent/15 border border-accent/30 text-xs font-bold text-accent">
+                  <Star className="w-3 h-3 fill-current" />
+                  LVL {profile.level}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground mb-5">
                 <span className="inline-flex items-center gap-1.5">
                   <Mail className="w-3.5 h-3.5" />
                   {profile.email}
@@ -355,29 +403,33 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Level + XP bar */}
-              <div className="max-w-md">
-                <div className="flex items-center justify-between mb-1.5 text-xs">
-                  <span className="font-semibold text-foreground inline-flex items-center gap-1.5">
-                    <Star className="w-3.5 h-3.5 text-accent" />
-                    Level {profile.level}
+              {/* XP bar */}
+              <div className="max-w-lg">
+                <div className="flex items-center justify-between mb-2 text-xs">
+                  <span className="font-medium text-foreground/80 inline-flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-accent" />
+                    Progress to Level {profile.level + 1}
                   </span>
-                  <span className="text-muted-foreground">
+                  <span className="text-muted-foreground font-mono">
                     {progressInLevel} / {xpNeeded} XP
                   </span>
                 </div>
-                <div className="h-2 rounded-full bg-foreground/10 overflow-hidden">
+                <div className="h-2.5 rounded-full bg-foreground/10 overflow-hidden relative">
                   <div
-                    className="h-full bg-gradient-to-r from-accent to-accent/70 transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-accent via-accent to-cyan-400 transition-all duration-700 relative"
                     style={{ width: `${progressPercent}%` }}
-                  />
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           {error && (
-            <div className="mt-4 text-sm text-red-500">{error}</div>
+            <div className="relative mt-6 text-sm text-red-500 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+              {error}
+            </div>
           )}
         </div>
 
