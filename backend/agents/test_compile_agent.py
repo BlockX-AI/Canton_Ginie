@@ -157,12 +157,36 @@ def run_test_compile_agent(
         return _fail("build exited 0 but no test DAR produced", job_id=job_id)
 
     logger.info("Test scaffold compiled", job_id=job_id, test_dar=test_dar)
+
+    # Phase F.1: optionally execute the Daml scripts in the test DAR.
+    # ``daml test`` runs every ``script do`` block in the package and
+    # aborts non-zero if any script fails an assert that was not wrapped
+    # in ``submitMustFail``. Flag-gated so we can A/B against the
+    # current pipeline before flipping the default. Default *on* in
+    # production environments where the SDK is reliable; the flag
+    # exists so a user with a flaky CI runner can opt out.
+    if _scripts_enabled():
+        script_outcome = _run_scripts(project_dir, sdk_path)
+        return {
+            "success":                       True,
+            "test_dar_path":                 test_dar,
+            "output":                        proc_result["stdout"],
+            "errors":                        [],
+            "test_compile_output_summary":   _summarise_script_outcome(script_outcome),
+            "script_run_attempted":          True,
+            "script_run_success":            script_outcome["success"],
+            "script_run_summary":            script_outcome["summary"],
+            "script_run_failures":           script_outcome["failures"],
+            "script_run_output_tail":        script_outcome["output_tail"],
+        }
+
     return {
         "success":                       True,
         "test_dar_path":                 test_dar,
         "output":                        proc_result["stdout"],
         "errors":                        [],
         "test_compile_output_summary":   "Test scaffold compiled successfully.",
+        "script_run_attempted":          False,
     }
 
 
@@ -210,6 +234,186 @@ def _run_build(project_dir: str, sdk_path: str) -> dict:
             "stderr":  f"test build crashed: {exc}",
             "code":    -1,
         }
+
+
+# ---------------------------------------------------------------------------
+# Phase F.1: Daml-Script execution
+# ---------------------------------------------------------------------------
+
+
+def _scripts_enabled() -> bool:
+    """Phase F.1 is gated by ``RUN_DAML_SCRIPTS``.
+
+    Default OFF for safety \u2014 running ``daml test`` adds 10\u201360s
+    to every job and requires a working JVM + sandbox at compile-time.
+    Set ``RUN_DAML_SCRIPTS=true`` (or ``1``, ``yes``, ``on``) to opt in.
+    """
+    return os.environ.get("RUN_DAML_SCRIPTS", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+# Recognised runtime failure markers in ``daml test`` output. Each is
+# a substring search (not a regex) for speed and predictability.
+# These cover Daml 2.x and 3.x.
+_RUNTIME_FAIL_MARKERS = (
+    "ENSURE_VIOLATED",
+    "REQUIRES_AUTHORITATIVE",
+    "AUTHORIZATION_FAILED",
+    "ASSERTION_FAILED",
+    "Aborted:",
+    "Pretty.PrettyError",
+    "Script execution failed",
+    "Test failed",
+    "[Error]",
+)
+
+
+def _run_scripts(project_dir: str, sdk_path: str) -> dict:
+    """Run ``daml test`` against the freshly-built test package.
+
+    Returns a dict with:
+      * ``success``      : bool   - all scripts passed
+      * ``returncode``   : int
+      * ``output_tail``  : str    - last ~2000 chars of combined output
+      * ``summary``      : str    - 1-2 line human summary
+      * ``failures``     : list   - parsed runtime failures, each
+                                    ``{"script": str, "marker": str, "context": str}``
+    """
+    java_home    = os.environ.get("JAVA_HOME", "/opt/homebrew/opt/openjdk")
+    daml_bin_dir = os.path.dirname(sdk_path)
+    path_sep     = ";" if os.name == "nt" else ":"
+    env = {
+        **os.environ,
+        "DAML_PROJECT": project_dir,
+        "JAVA_HOME":    java_home,
+        "PATH":         f"{daml_bin_dir}{path_sep}{java_home}/bin{path_sep}{os.environ.get('PATH', '')}",
+    }
+    # ``daml test --color no --junit <file>`` would give us structured
+    # results, but the JUnit emitter writes to disk and we'd have to
+    # parse XML. The plain ``daml test`` stdout is reliable enough for
+    # a pass/fail signal and we extract failure detail by substring
+    # search on the output. Wall-clock cap: 90s.
+    cmd = [sdk_path, "test", "--color", "no"]
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            env=env,
+            cwd=project_dir,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "success":     False,
+            "returncode":  -1,
+            "output_tail": "daml test timed out after 90s",
+            "summary":     "Test execution timed out after 90s.",
+            "failures":    [{"script": "(timeout)", "marker": "TIMEOUT", "context": ""}],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "success":     False,
+            "returncode":  -1,
+            "output_tail": f"daml test crashed: {exc}",
+            "summary":     f"Test execution crashed: {exc}",
+            "failures":    [{"script": "(crash)", "marker": "CRASH", "context": str(exc)}],
+        }
+
+    combined  = (proc.stdout or "") + "\n" + (proc.stderr or "")
+    tail      = combined[-2000:]
+    failures  = _parse_runtime_failures(combined)
+    success   = proc.returncode == 0 and not failures
+
+    if success:
+        summary = "All Daml scripts passed."
+    elif failures:
+        # Pluck the first failure for a punchy human summary; full list
+        # is in ``failures``.
+        f0 = failures[0]
+        summary = (
+            f"Test runtime failure: {f0.get('marker', '?')} in "
+            f"{f0.get('script', '<unknown>')}. "
+            f"{len(failures) - 1} additional failure(s) suppressed."
+            if len(failures) > 1
+            else f"Test runtime failure: {f0.get('marker', '?')} in "
+                 f"{f0.get('script', '<unknown>')}."
+        )
+    else:
+        summary = f"Test execution exited with code {proc.returncode}."
+
+    return {
+        "success":     success,
+        "returncode":  proc.returncode,
+        "output_tail": tail,
+        "summary":     summary,
+        "failures":    failures,
+    }
+
+
+def _parse_runtime_failures(output: str) -> list[dict]:
+    """Pull failure tuples out of ``daml test`` output.
+
+    Daml prints each failing script on a line like
+    ``daml/Test/FooTest.daml:run: FAILURE`` followed by an indented
+    error trace. We anchor on those headers and capture the next 6
+    non-blank lines as ``context``, then look for any of the
+    ``_RUNTIME_FAIL_MARKERS`` to label the failure mode.
+    """
+    failures: list[dict] = []
+    lines = output.splitlines()
+    n = len(lines)
+    header_re = __import__("re").compile(
+        r"^(?P<file>[^\s:]+\.daml):(?P<script>[\w']+):\s*(?:FAIL|FAILURE|fail)",
+        __import__("re").IGNORECASE,
+    )
+    for i, ln in enumerate(lines):
+        m = header_re.match(ln.strip())
+        if not m:
+            continue
+        ctx_lines = []
+        for j in range(i + 1, min(i + 12, n)):
+            if not lines[j].strip():
+                continue
+            ctx_lines.append(lines[j])
+            if len(ctx_lines) >= 6:
+                break
+        ctx_blob = "\n".join(ctx_lines)
+        marker = next(
+            (mk for mk in _RUNTIME_FAIL_MARKERS if mk in ctx_blob),
+            "UNCLASSIFIED",
+        )
+        failures.append({
+            "script":  f"{m.group('file')}:{m.group('script')}",
+            "marker":  marker,
+            "context": ctx_blob[:1000],
+        })
+    # Fallback: if no header was found but the output contains a
+    # runtime marker, surface it as a single anonymous failure so the
+    # caller still knows something went wrong.
+    if not failures:
+        for mk in _RUNTIME_FAIL_MARKERS:
+            if mk in output:
+                idx = output.index(mk)
+                ctx = output[max(0, idx - 200): idx + 400]
+                failures.append({
+                    "script":  "<unidentified>",
+                    "marker":  mk,
+                    "context": ctx,
+                })
+                break
+    return failures
+
+
+def _summarise_script_outcome(outcome: dict) -> str:
+    """Compose the user-visible test_compile_summary string."""
+    if outcome["success"]:
+        return "Test scaffold compiled and all scripts passed."
+    return (
+        "Test scaffold compiled but script execution failed: "
+        + outcome["summary"]
+    )
 
 
 def _find_dar(project_dir: str) -> str:

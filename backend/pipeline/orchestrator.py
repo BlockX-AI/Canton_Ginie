@@ -1,3 +1,4 @@
+import os
 import structlog
 from typing import Literal
 from langgraph.graph import StateGraph, END
@@ -1031,6 +1032,39 @@ def test_compile_node(state: dict) -> dict:
         return state
 
     if result.get("success"):
+        # Phase F.1: ``test_compile_agent`` may have additionally
+        # *executed* the test scripts via ``daml test`` when
+        # ``RUN_DAML_SCRIPTS=true``. Compile success and script-run
+        # success are independent: a scaffold can compile cleanly and
+        # still abort at runtime with ``ENSURE_VIOLATED`` (the
+        # FullRepay deadlock pattern). Surface that as a HIGH finding
+        # so the audit panel reflects the runtime defect, while
+        # leaving production deploy unaffected (sandbox policy).
+        if (
+            result.get("script_run_attempted")
+            and not result.get("script_run_success")
+        ):
+            _append_script_runtime_finding(state, result)
+            summary = result.get("test_compile_output_summary") or (
+                "Test scaffold compiled but Daml-Script execution failed."
+            )
+            emit_log(state, summary, level="warn")
+            emit_stage_completed(
+                state,
+                "test_compile",
+                summary + " \u2014 production DAR is unaffected and will still deploy.",
+            )
+            return {
+                **state,
+                "test_dar_path":            result.get("test_dar_path", ""),
+                "test_compile_success":     True,
+                "script_run_success":       False,
+                "script_run_failures":      result.get("script_run_failures") or [],
+                "script_run_summary":       result.get("script_run_summary", ""),
+                "test_compile_errors":      [],
+                "test_compile_summary":     summary,
+            }
+
         emit_stage_completed(
             state,
             "test_compile",
@@ -1040,6 +1074,8 @@ def test_compile_node(state: dict) -> dict:
             **state,
             "test_dar_path":              result.get("test_dar_path", ""),
             "test_compile_success":       True,
+            "script_run_success":         result.get("script_run_success", None),
+            "script_run_summary":         result.get("script_run_summary", ""),
             "test_compile_errors":        [],
             "test_compile_summary":       result.get("test_compile_output_summary", ""),
         }
@@ -1099,6 +1135,258 @@ def _append_test_compile_finding(state: dict, result: dict) -> None:
     })
 
 
+def _append_script_runtime_finding(state: dict, result: dict) -> None:
+    """Phase F.1: surface a Daml-Script runtime failure as a HIGH finding.
+
+    Unlike ``DSV-022`` (compile failure), runtime failures point at a
+    real semantic defect in the *production* contract \u2014 the
+    scaffold compiles, but executing the happy-path script trips an
+    ``ENSURE_VIOLATED`` / authorization error that the static checks
+    could not see. We label these ``DSV-029`` so they are
+    distinguishable from compile-time issues in the user-visible
+    findings list.
+    """
+    audit    = state.setdefault("audit_reports", {})
+    sec      = audit.setdefault("security_audit", {})
+    findings = sec.setdefault("findings", [])
+    fails    = result.get("script_run_failures") or []
+    # Compose a short failure list that fits the audit panel.
+    fail_lines = []
+    for f in fails[:5]:
+        fail_lines.append(
+            f"  {f.get('script', '<unknown>')}: {f.get('marker', '?')}"
+        )
+    fail_blob = "\n".join(fail_lines) or "(no parseable failures; see script_run_summary)"
+    tail      = (result.get("script_run_output_tail") or "")[-800:]
+    findings.append({
+        "id":          "DSV-029::script-runtime",
+        "severity":    "HIGH",
+        "category":    "Test Execution",
+        "title":       "Generated Daml-Script test failed at runtime",
+        "description": (
+            "The auto-generated happy-path script compiled cleanly but "
+            "aborted during execution. Runtime failures of this kind "
+            "(``ENSURE_VIOLATED``, ``AUTHORIZATION_FAILED``, etc.) "
+            "indicate a *semantic* defect in the production contract "
+            "that static analysis could not see \u2014 typically an "
+            "ensure clause that contradicts a choice precondition, or "
+            "a missing signatory authorization on a downstream "
+            "create.\n\nFailures:\n"
+            + fail_blob
+            + ("\n\nLast lines of test output:\n" + tail if tail else "")
+        ),
+        "location":    {"template": None, "choice": None, "lineNumbers": [0, 0]},
+        "impact": (
+            "The happy-path workflow documented in the test scaffold "
+            "is not actually reachable. In practice this means a "
+            "production deploy will trip the same runtime error the "
+            "first time a real party tries to exercise the choice."
+        ),
+        "recommendation": (
+            "Read the failure marker (e.g. ``ENSURE_VIOLATED``) and "
+            "the source location, then fix the underlying contract: "
+            "either relax the violated ensure or capture the original "
+            "value into a separate immutable field (see SEC-GEN-021 "
+            "for the canonical pattern)."
+        ),
+        "references": ["DSV-029"],
+        "source":     "test_compile",
+    })
+
+
+# ---------------------------------------------------------------------------
+# Phase F.4: audit-driven retry
+# ---------------------------------------------------------------------------
+
+
+# Findings whose presence justifies a one-shot fix-and-retry. These are
+# the *semantic* defects that the LLM can plausibly repair given a
+# clear feedback message, not vague vulnerability reports the LLM
+# auditor sometimes emits. Keeping the list short prevents noisy
+# retries on subjective findings (observer-information-leakage etc.).
+_AUDIT_RETRY_FINDING_PREFIXES = (
+    "DSV-024",   # invariant deadlock (FullRepay-class)
+    "DSV-025",   # observer-only counterparty (signatory regression)
+    "DSV-026",   # proposal missing expiresAt
+    "DSV-027",   # accept choice does not enforce expiresAt
+    "DSV-028",   # terminal state populated from mutated balance
+    "DSV-029",   # daml-script runtime failure (F.1 signal)
+)
+
+
+def _max_audit_retries() -> int:
+    """Hard ceiling on audit-driven retries.
+
+    One round is the sweet spot: it gives the LLM a chance to address
+    the deterministic-detector feedback without compounding wall-clock
+    cost. Overridable via ``MAX_AUDIT_RETRIES``.
+    """
+    raw = os.environ.get("MAX_AUDIT_RETRIES", "1")
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 1
+
+
+def _collect_actionable_findings(state: dict) -> list[dict]:
+    """Pluck findings whose IDs match the retry-allowlist."""
+    out: list[dict] = []
+    audit = state.get("audit_reports") or {}
+    sec   = audit.get("security_audit") if isinstance(audit, dict) else None
+    if not isinstance(sec, dict):
+        return out
+    for f in sec.get("findings") or []:
+        fid = str(f.get("id", ""))
+        if any(fid.startswith(p) for p in _AUDIT_RETRY_FINDING_PREFIXES):
+            out.append(f)
+    return out
+
+
+def _format_findings_as_compile_errors(findings: list[dict]) -> list[dict]:
+    """Adapt audit findings to the ``fix_agent`` compile-error shape.
+
+    ``run_fix_agent`` accepts a list of dicts whose ``message`` field
+    drives the LLM prompt. We pack the title + recommendation into
+    that field so the LLM has a concrete fix instruction, not just a
+    diagnosis.
+    """
+    out: list[dict] = []
+    for f in findings:
+        title = f.get("title") or "audit finding"
+        rec   = f.get("recommendation") or ""
+        loc   = f.get("location") or {}
+        tpl   = loc.get("template") or ""
+        ch    = loc.get("choice") or ""
+        location_str = (
+            f"{tpl}::{ch}" if tpl and ch
+            else tpl or ch or ""
+        )
+        message = (
+            f"[{f.get('severity', 'HIGH')}] {f.get('id', '?')}: {title}\n"
+            + (f"Location: {location_str}\n" if location_str else "")
+            + (f"Fix: {rec}\n" if rec else "")
+        )
+        out.append({
+            "file":    "daml/Main.daml",
+            "line":    0,
+            "column":  0,
+            "message": message,
+            "type":    "audit",
+            "raw":     message,
+        })
+    return out
+
+
+def audit_retry_node(state: dict) -> dict:
+    """Phase F.4: feed semantic audit findings back into the fix agent.
+
+    Runs at most ``MAX_AUDIT_RETRIES`` times per job. On each call:
+
+      1. Collect actionable findings from the audit + test-runtime steps.
+      2. If none, or budget exhausted, route forward to ``diagram`` unchanged.
+      3. Otherwise format findings as fix-agent feedback, invoke
+         ``run_fix_agent`` with the current production source, and on
+         success replace ``generated_code`` and route back to ``compile``.
+
+    The node never aborts the pipeline. If the fix agent fails or
+    returns no change we fall through to ``diagram`` so the user
+    still gets a deploy off the last-known-good DAR.
+    """
+    job_id   = state.get("job_id", "?")
+    attempts = int(state.get("audit_fix_attempts", 0))
+    if attempts >= _max_audit_retries():
+        logger.info(
+            "audit_retry budget exhausted; routing forward",
+            job_id=job_id, attempts=attempts,
+        )
+        return {**state, "audit_retry_done": True}
+
+    findings = _collect_actionable_findings(state)
+    if not findings:
+        logger.info(
+            "audit_retry: no actionable findings",
+            job_id=job_id, attempts=attempts,
+        )
+        return {**state, "audit_retry_done": True}
+
+    logger.info(
+        "Node: audit_retry",
+        job_id=job_id,
+        attempts=attempts + 1,
+        finding_count=len(findings),
+        finding_ids=[f.get("id") for f in findings],
+    )
+    _push_status(
+        state,
+        f"Auto-fixing audit findings (round {attempts + 1}/{_max_audit_retries()})...",
+        72,
+    )
+    emit_log(
+        state,
+        f"Re-running fix agent with {len(findings)} audit finding(s) as feedback",
+        level="info",
+    )
+
+    pseudo_errors = _format_findings_as_compile_errors(findings)
+    try:
+        result = run_fix_agent(
+            daml_code=state.get("generated_code", ""),
+            compile_errors=pseudo_errors,
+            attempt_number=attempts + 1,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("audit_retry fix agent crashed; routing forward", error=str(exc))
+        return {**state, "audit_retry_done": True}
+
+    if not result or not result.get("success") or not result.get("fixed_code"):
+        logger.info(
+            "audit_retry: fix agent returned no change",
+            job_id=job_id, attempts=attempts + 1,
+        )
+        return {
+            **state,
+            "audit_fix_attempts": attempts + 1,
+            "audit_retry_done":   True,
+        }
+
+    new_code = result["fixed_code"]
+    if new_code.strip() == (state.get("generated_code", "") or "").strip():
+        return {
+            **state,
+            "audit_fix_attempts": attempts + 1,
+            "audit_retry_done":   True,
+        }
+
+    emit_log(state, "Audit-driven fix applied \u2014 recompiling", level="success")
+    # Reset compile-fix state so the recompile counts as fresh, but
+    # keep the audit-retry counter incrementing so we cannot loop.
+    return {
+        **state,
+        "generated_code":      new_code,
+        "audit_fix_attempts":  attempts + 1,
+        "audit_retry_done":    False,
+        "attempt_number":      1,
+        "compile_errors":      [],
+        "dar_path":            "",
+        # Clear stale audit + test-compile state so the next round
+        # writes fresh findings rather than appending duplicates.
+        "audit_reports":       {},
+        "script_run_failures": [],
+        "script_run_summary":  "",
+    }
+
+
+def _route_after_test_compile(state: dict) -> str:
+    """Decide whether to fire one more audit-driven fix round."""
+    if state.get("audit_retry_done"):
+        return "diagram"
+    if int(state.get("audit_fix_attempts", 0)) >= _max_audit_retries():
+        return "diagram"
+    if not _collect_actionable_findings(state):
+        return "diagram"
+    return "audit_retry"
+
+
 def _build_pipeline() -> CompiledStateGraph:
     graph = StateGraph(dict)
 
@@ -1113,6 +1401,7 @@ def _build_pipeline() -> CompiledStateGraph:
     graph.add_node("audit",            audit_node)
     graph.add_node("test_writer",      test_writer_node)
     graph.add_node("test_compile",     test_compile_node)
+    graph.add_node("audit_retry",      audit_retry_node)
     graph.add_node("diagram",          diagram_node)
     graph.add_node("deploy",           deploy_node)
     graph.add_node("error",            error_node)
@@ -1137,7 +1426,23 @@ def _build_pipeline() -> CompiledStateGraph:
     graph.add_edge("fallback", "compile")  # recompile after fallback — guaranteed success
     graph.add_edge("audit",        "test_writer")
     graph.add_edge("test_writer",  "test_compile")
-    graph.add_edge("test_compile", "diagram")
+    # Phase F.4: after test_compile, conditionally fire one round of
+    # audit-driven re-fix-and-recompile if any actionable findings
+    # are still open. Otherwise proceed straight to diagram/deploy.
+    graph.add_conditional_edges(
+        "test_compile",
+        _route_after_test_compile,
+        {"audit_retry": "audit_retry", "diagram": "diagram"},
+    )
+    # The retry node either edits the source and routes back to compile
+    # (so the next compile/audit/test_compile pass sees the fixed code),
+    # or no-ops and routes forward to diagram. We capture both via a
+    # tiny conditional on the same ``audit_retry_done`` flag.
+    graph.add_conditional_edges(
+        "audit_retry",
+        lambda s: "diagram" if s.get("audit_retry_done") else "compile",
+        {"compile": "compile", "diagram": "diagram"},
+    )
     graph.add_edge("diagram",      "deploy")
     graph.add_edge("deploy", END)
     graph.add_edge("error",  END)

@@ -713,6 +713,312 @@ def _check_unchecked_subtraction(daml_code: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Phase F.3 detectors: signatory model, proposal expiry, original capture
+# ---------------------------------------------------------------------------
+
+
+# CamelCase identifiers like ``LoanAgreement`` have no word-boundary
+# between ``Loan`` and ``Agreement``, so a ``\b``-anchored regex misses
+# them. We match the keyword as a plain substring \u2014 false positives
+# are extremely unlikely (``Sales`` matching ``Sale`` is benign because
+# any template named ``Sales*`` is a counterparty agreement anyway).
+_AGREEMENT_NAME_RE = re.compile(
+    r"(Agreement|Contract|Deal|Trade|Loan|Lease|Sale)"
+)
+_TEMPLATE_HEAD_RE = re.compile(
+    r"^template\s+(?P<name>\w+)\b(?P<body>.*?)(?=^template\s+\w+|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_SIGNATORY_LINE_RE = re.compile(r"^\s*signatory\s+(?P<list>[^\n]+)$", re.MULTILINE)
+_OBSERVER_LINE_RE  = re.compile(r"^\s*observer\s+(?P<list>[^\n]+)$",  re.MULTILINE)
+_FIELD_DECL_RE     = re.compile(r"^\s+(?P<name>[A-Za-z_]\w*)\s*:\s*Party\b", re.MULTILINE)
+
+
+def _check_observer_only_counterparty(code: str) -> list[dict]:
+    """SEC-GEN-019: counterparty agreements must list both parties as signatories.
+
+    Heuristic: if a template's name matches the agreement keyword set AND
+    the template declares >= 2 ``Party`` fields AND only one of them
+    appears in the ``signatory`` list, emit a HIGH finding. Templates
+    whose name ends in ``Proposal`` are exempt (proposals legitimately
+    have a one-signatory + one-observer shape so the proposer can
+    withdraw before acceptance).
+    """
+    findings: list[dict] = []
+    for m in _TEMPLATE_HEAD_RE.finditer(code):
+        name = m.group("name")
+        body = m.group("body")
+        if name.endswith("Proposal"):
+            continue
+        if not _AGREEMENT_NAME_RE.search(name):
+            continue
+
+        # Count Party-typed fields declared in `with`.
+        with_block_match = re.search(
+            r"^\s*with\s*\n(?P<f>.*?)^\s*where\b", body, re.MULTILINE | re.DOTALL
+        )
+        if not with_block_match:
+            continue
+        party_fields = [fm.group("name") for fm in _FIELD_DECL_RE.finditer(
+            with_block_match.group("f")
+        )]
+        if len(party_fields) < 2:
+            continue
+
+        sig_match = _SIGNATORY_LINE_RE.search(body)
+        if not sig_match:
+            continue
+        sig_list = sig_match.group("list")
+        sig_parties = {p.strip() for p in re.split(r"[,\s]+", sig_list) if p.strip()}
+
+        obs_match = _OBSERVER_LINE_RE.search(body)
+        obs_parties: set[str] = set()
+        if obs_match:
+            obs_parties = {
+                p.strip() for p in re.split(r"[,\s]+", obs_match.group("list")) if p.strip()
+            }
+
+        missing_signatories = [
+            p for p in party_fields
+            if p not in sig_parties and p in obs_parties
+        ]
+        if not missing_signatories:
+            continue
+
+        for p in missing_signatories:
+            findings.append({
+                "id":          "DSV-025",
+                "severity":    "HIGH",
+                "title":       (
+                    f"Counterparty ``{p}`` is observer-only on ``{name}``"
+                ),
+                "description": (
+                    f"Template ``{name}`` declares ``{p}`` as an observer "
+                    f"but not a signatory. On a counterparty agreement "
+                    f"(name matches Agreement/Contract/Deal/Trade/Loan/"
+                    f"Lease/Sale) every party that is economically "
+                    f"committed MUST be a signatory \u2014 otherwise the "
+                    f"other party can unilaterally exercise choices that "
+                    f"mutate the contract\u2019s economic terms with no "
+                    f"consent path for ``{p}``."
+                ),
+                "location":    {"template": name, "choice": None, "lineNumbers": [0, 0]},
+                "impact": (
+                    f"``{p}`` carries zero on-ledger authority over the "
+                    f"agreement. The propose-accept pattern obtained "
+                    f"both parties\u2019 authorisation at creation but "
+                    f"that authorisation is dropped here."
+                ),
+                "recommendation": (
+                    f"Change ``signatory <other>`` to "
+                    f"``signatory <other>, {p}`` and remove ``{p}`` "
+                    f"from the observer line. The Accept choice already "
+                    f"has both parties\u2019 authorisation so the create "
+                    f"will succeed."
+                ),
+                "references": ["DSV-025", "SEC-GEN-019"],
+                "source":     "static",
+            })
+    return findings
+
+
+def _check_proposal_missing_expiry(code: str) -> list[dict]:
+    """SEC-GEN-020: ``*Proposal`` templates must carry ``expiresAt`` and guard Accept."""
+    findings: list[dict] = []
+    for m in _TEMPLATE_HEAD_RE.finditer(code):
+        name = m.group("name")
+        body = m.group("body")
+        if not name.endswith("Proposal"):
+            continue
+
+        has_expires_field = bool(
+            re.search(r"^\s+expiresAt\s*:\s*Time\b", body, re.MULTILINE)
+        )
+        if not has_expires_field:
+            findings.append({
+                "id":          "DSV-026",
+                "severity":    "HIGH",
+                "title":       f"Proposal template ``{name}`` lacks ``expiresAt``",
+                "description": (
+                    f"``{name}`` is a proposal-pattern template (suffix "
+                    f"``Proposal``) but does not declare an ``expiresAt "
+                    f": Time`` field. A proposal without an explicit "
+                    f"deadline can be accepted indefinitely; in a "
+                    f"financial product this means a counterparty can "
+                    f"sit on a stale proposal and accept it months "
+                    f"later when economic conditions have moved against "
+                    f"the proposer."
+                ),
+                "location":    {"template": name, "choice": None, "lineNumbers": [0, 0]},
+                "impact": (
+                    "Stale-proposal acceptance risk. Real-world example: "
+                    "interest rates move 200 bps; the lender accepts a "
+                    "month-old loan proposal at the now-favourable rate, "
+                    "leaving the borrower bound to terms they would no "
+                    "longer agree to."
+                ),
+                "recommendation": (
+                    f"Add ``expiresAt : Time`` to ``{name}``\u2019s with "
+                    f"block. In every Accept-style choice add: "
+                    f"``do now <- getTime; assertMsg \"Proposal expired\" "
+                    f"(now < expiresAt); ...``. Add an ``Expire`` choice "
+                    f"controlled by the proposer that creates an "
+                    f"audit-record successor once the deadline has "
+                    f"passed."
+                ),
+                "references": ["DSV-026", "SEC-GEN-020"],
+                "source":     "static",
+            })
+            continue
+
+        # Field exists - now check that an Accept choice guards against it.
+        # We look for any choice on this template that creates a non-Proposal
+        # template; that's the Accept. Then we check the body mentions
+        # ``expiresAt`` in an assertMsg.
+        accept_choice_re = re.compile(
+            r"(?:nonconsuming\s+|preconsuming\s+|postconsuming\s+)?"
+            r"choice\s+(?P<n>\w+)\b.*?\bcreate\s+(?P<t>[A-Z]\w*)\b",
+            re.DOTALL,
+        )
+        for cm in accept_choice_re.finditer(body):
+            target = cm.group("t")
+            if target.endswith("Proposal"):
+                continue
+            choice_name = cm.group("n")
+            choice_body = body[cm.start():]  # we just need a slice that contains the body
+            # Bound to this choice's body: take up to the next choice anchor.
+            next_anchor = re.search(
+                r"^\s*(?:nonconsuming\s+|preconsuming\s+|postconsuming\s+)?choice\s+\w+",
+                choice_body[40:],  # skip current choice header
+                re.MULTILINE,
+            )
+            slice_end = next_anchor.start() + 40 if next_anchor else len(choice_body)
+            this_choice = choice_body[:slice_end]
+
+            mentions_expiry = bool(
+                re.search(r"\bassertMsg[^\n]*expiresAt", this_choice)
+                or re.search(r"\bassert[^\n]*expiresAt", this_choice)
+                or re.search(r"\bnow\s*<\s*expiresAt", this_choice)
+                or re.search(r"\bexpiresAt\s*>\s*now", this_choice)
+            )
+            if mentions_expiry:
+                continue
+
+            findings.append({
+                "id":          "DSV-027",
+                "severity":    "MEDIUM",
+                "title":       (
+                    f"``{name}::{choice_name}`` does not enforce "
+                    f"``expiresAt`` before creating ``{target}``"
+                ),
+                "description": (
+                    f"The Accept-style choice ``{choice_name}`` on "
+                    f"``{name}`` creates ``{target}`` without first "
+                    f"asserting ``now < expiresAt``. The expiry field "
+                    f"exists on the proposal but the choice does not "
+                    f"read it, so the field is decorative rather than "
+                    f"enforced."
+                ),
+                "location":    {"template": name, "choice": choice_name, "lineNumbers": [0, 0]},
+                "impact":      "Stale proposals can be accepted indefinitely.",
+                "recommendation": (
+                    f"Insert at the top of the choice body: "
+                    f"``do now <- getTime; assertMsg \"Proposal expired\" "
+                    f"(now < expiresAt); ...``."
+                ),
+                "references": ["DSV-027", "SEC-GEN-020"],
+                "source":     "static",
+            })
+    return findings
+
+
+def _check_terminal_uses_mutated_balance(code: str) -> list[dict]:
+    """SEC-GEN-021: terminal-state successors must read from an immutable field.
+
+    Heuristic: a choice that asserts ``<field> == 0.0`` and immediately
+    creates a different template using ``<field>`` as a value indicates
+    the V3 FullRepay anti-pattern. The successor will store zero,
+    which is almost always wrong (and frequently violates the
+    successor's own ensure - though that latter case is also caught
+    by ``invariant_analyzer``).
+    """
+    findings: list[dict] = []
+    # Choice block: keep it broad to catch both with- and without-payload variants.
+    choice_block_re = re.compile(
+        r"(?:nonconsuming\s+|preconsuming\s+|postconsuming\s+)?choice\s+(?P<name>\w+)\b"
+        r"(?P<body>.*?)(?=^\s*(?:nonconsuming\s+|preconsuming\s+|postconsuming\s+)?choice\s+\w+|^template\s+\w+|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    for cm in choice_block_re.finditer(code):
+        choice = cm.group("name")
+        body   = cm.group("body")
+
+        zero_match = re.search(
+            r"\bassertMsg\s+\"[^\"]*\"\s+\(\s*(?P<field>\w+)\s*==\s*0(?:\.0)?\s*\)",
+            body,
+        )
+        if not zero_match:
+            continue
+        zeroed_field = zero_match.group("field")
+
+        create_match = re.search(
+            r"\bcreate\s+(?P<target>[A-Z]\w*)\s+with\b(?P<assigns>.*?)"
+            r"(?=^\s*(?:create|choice|nonconsuming|preconsuming|postconsuming|template)\b|\Z)",
+            body,
+            re.MULTILINE | re.DOTALL,
+        )
+        if not create_match:
+            continue
+
+        # Look for an assignment whose RHS is exactly the zeroed field.
+        rhs_uses_zero = re.search(
+            rf"\b(?P<lhs>\w+)\s*=\s*{re.escape(zeroed_field)}\b\s*(?:\n|,|$)",
+            create_match.group("assigns"),
+        )
+        if not rhs_uses_zero:
+            continue
+
+        target_field = rhs_uses_zero.group("lhs")
+        target       = create_match.group("target")
+        findings.append({
+            "id":          "DSV-028",
+            "severity":    "HIGH",
+            "title":       (
+                f"``{choice}`` populates ``{target}.{target_field}`` "
+                f"from a field asserted to be zero"
+            ),
+            "description": (
+                f"The choice ``{choice}`` first asserts "
+                f"``{zeroed_field} == 0.0`` and then creates "
+                f"``{target}`` with ``{target_field} = {zeroed_field}``. "
+                f"This stores zero into the successor record, which is "
+                f"almost certainly wrong: the successor is meant to "
+                f"capture the *original* amount, not the (now-zero) "
+                f"remaining balance. If the successor template "
+                f"declares ``ensure {target_field} > 0`` the create "
+                f"will additionally fail at runtime."
+            ),
+            "location":    {"template": None, "choice": choice, "lineNumbers": [0, 0]},
+            "impact": (
+                "Audit-record successor stores zero where it should "
+                "store the original amount. Downstream reporting reads "
+                "zero principal repaid, even though a non-zero loan "
+                "was successfully closed."
+            ),
+            "recommendation": (
+                f"Add an immutable ``original{zeroed_field.capitalize()}`` "
+                f"field to the host template (set once at Accept, never "
+                f"written again). Change the create to "
+                f"``{target_field} = original{zeroed_field.capitalize()}``."
+            ),
+            "references": ["DSV-028", "SEC-GEN-021"],
+            "codeSnippet": f"create {target} with {target_field} = {zeroed_field}",
+            "source":      "static",
+        })
+    return findings
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -729,6 +1035,19 @@ def detect_static_findings(daml_code: str) -> list[dict]:
         findings.extend(_check_consuming_no_op(daml_code))
         findings.extend(_check_missing_terminal_state(daml_code))
         findings.extend(_check_unchecked_subtraction(daml_code))
+        # F.3 detectors:
+        findings.extend(_check_observer_only_counterparty(daml_code))
+        findings.extend(_check_proposal_missing_expiry(daml_code))
+        findings.extend(_check_terminal_uses_mutated_balance(daml_code))
     except Exception as e:
         logger.warning("Static checks crashed", error=str(e))
+    # Phase F.2: deterministic invariant analyzer. Imported lazily so
+    # an import-time failure in the analyzer module never takes down
+    # the regex-based checks above (which are the bedrock of the audit
+    # gate). We add the findings whether or not the analyzer crashes.
+    try:
+        from security.invariant_analyzer import detect_invariant_deadlocks
+        findings.extend(detect_invariant_deadlocks(daml_code))
+    except Exception as e:
+        logger.warning("Invariant analyzer crashed", error=str(e))
     return findings

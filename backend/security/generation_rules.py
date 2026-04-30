@@ -234,6 +234,111 @@ GENERATION_SECURITY_RULES: list[dict] = [
         ),
         "severity": "medium",
     },
+    {
+        "id": "SEC-GEN-019",
+        "rule": (
+            "Templates that represent an *active counterparty agreement* "
+            "(name contains `Agreement`, `Contract`, `Deal`, `Trade`, "
+            "`Loan`, `Lease`, `Sale`) MUST list ALL counterparties as "
+            "signatories \u2014 NEVER as observers-only. An observer-only "
+            "lender on a `LoanAgreement` carries zero on-ledger authority: "
+            "the borrower can unilaterally exercise borrower-controlled "
+            "choices that mutate the agreement's economic terms with no "
+            "lender consent required. The propose-accept pattern already "
+            "ensures both parties have authorised the agreement at "
+            "creation time \u2014 carry that authorisation through into "
+            "the live contract."
+        ),
+        "example": (
+            "template LoanAgreement\n"
+            "  with borrower : Party; lender : Party; ...\n"
+            "  where\n"
+            "    signatory borrower, lender   -- NOT: signatory borrower; observer lender"
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-020",
+        "rule": (
+            "Any template whose name ends in `Proposal` MUST include "
+            "an `expiresAt : Time` field, AND its `Accept` choice MUST "
+            "guard against expiry: "
+            "`do now <- getTime; assertMsg \"Proposal expired\" "
+            "(now < expiresAt); ...`. A proposal without expiry can be "
+            "accepted years later, when economic conditions have moved "
+            "against the proposer. The proposer is also entitled to "
+            "an `Expire` choice that creates an `Expired<Name>` audit "
+            "record once the deadline has passed."
+        ),
+        "example": (
+            "template LoanAgreementProposal\n"
+            "  with borrower; lender; principal; expiresAt : Time\n"
+            "  where signatory borrower; observer lender\n"
+            "    choice Accept : ContractId LoanAgreement\n"
+            "      controller lender\n"
+            "      do now <- getTime\n"
+            "         assertMsg \"Proposal expired\" (now < expiresAt)\n"
+            "         create LoanAgreement with ..."
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-021",
+        "rule": (
+            "When a choice creates an audit-record successor (e.g. "
+            "`RepaidLoan`, `SettledTrade`, `ClosedAccount`) the successor "
+            "MUST be populated from a SEPARATE immutable field captured "
+            "at the agreement's CREATION time \u2014 NEVER from the "
+            "currently-mutated balance. Concretely: a `LoanAgreement` "
+            "whose `principal` field is decremented by `MakePayment` "
+            "MUST also carry an `originalPrincipal : Decimal` field that "
+            "is set ONCE on Accept and never written again. `FullRepay` "
+            "creates `RepaidLoan with originalAmount = originalPrincipal`, "
+            "NOT `= principal`. Reading from the mutated field guarantees "
+            "the successor stores zero, which then violates its own "
+            "`ensure originalAmount > 0.0` and renders the terminal "
+            "state permanently unreachable."
+        ),
+        "example": (
+            "template LoanAgreement with\n"
+            "    borrower : Party; lender : Party\n"
+            "    principal : Decimal           -- mutates with each payment\n"
+            "    originalPrincipal : Decimal   -- set ONCE, never written\n"
+            "  where\n"
+            "    signatory borrower, lender\n"
+            "    ensure principal >= 0.0  -- note: >= not > so terminal create is legal\n"
+            "    choice FullRepay : ContractId RepaidLoan\n"
+            "      controller borrower\n"
+            "      do now <- getTime\n"
+            "         assertMsg \"Loan must be fully repaid\" (principal == 0.0)\n"
+            "         create RepaidLoan with\n"
+            "           borrower; lender\n"
+            "           originalAmount = originalPrincipal   -- not principal!\n"
+            "           repaidAt = now"
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-022",
+        "rule": (
+            "Time fields named `maturity`, `dueDate`, `deadline`, or "
+            "`expiresAt` on a non-proposal template MUST be referenced "
+            "by at least one choice (typically a `Default` / `Expire` "
+            "choice exercisable after the deadline). A field that exists "
+            "in the template schema but is never read is semantically "
+            "inert \u2014 it gives a false sense of expiry behaviour "
+            "without actually enforcing one."
+        ),
+        "example": (
+            "choice Default : ContractId DefaultedLoan\n"
+            "  controller lender\n"
+            "  do now <- getTime\n"
+            "     assertMsg \"Loan not yet matured\" (now > maturity)\n"
+            "     assertMsg \"Loan already repaid\" (principal > 0.0)\n"
+            "     create DefaultedLoan with borrower; lender; outstanding = principal"
+        ),
+        "severity": "medium",
+    },
 ]
 
 
