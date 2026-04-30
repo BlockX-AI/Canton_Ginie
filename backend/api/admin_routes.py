@@ -141,23 +141,20 @@ async def delete_user(body: DeleteUserRequest):
     
     TEMPORARY: No auth required for testing.
     """
-    from db.session import SessionLocal
+    from db.session import get_db_session
     from db.models import EmailAccount
     
-    db = SessionLocal()
     try:
-        account = db.query(EmailAccount).filter(EmailAccount.email == body.email).first()
-        if not account:
-            raise HTTPException(status_code=404, detail="Account not found")
-        
-        db.delete(account)
-        db.commit()
-        logger.info("Deleted account via admin API", email=body.email, deleted_by=user.get("sub"))
-        return {"success": True, "message": f"Account {body.email} deleted"}
+        with get_db_session() as db:
+            account = db.query(EmailAccount).filter(EmailAccount.email == body.email).first()
+            if not account:
+                raise HTTPException(status_code=404, detail="Account not found")
+            db.delete(account)
+            db.commit()
+            logger.info("Deleted account via admin API", email=body.email)
+            return {"success": True, "message": f"Account {body.email} deleted"}
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Failed to delete account", email=body.email, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to delete account")
-    finally:
-        db.close()
