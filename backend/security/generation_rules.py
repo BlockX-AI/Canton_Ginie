@@ -339,6 +339,66 @@ GENERATION_SECURITY_RULES: list[dict] = [
         ),
         "severity": "medium",
     },
+    {
+        "id": "SEC-GEN-023",
+        "rule": (
+            "EVERY type used in a field declaration MUST have its "
+            "module imported. ``: Time``, ``: UTCTime``, ``: RelTime`` "
+            "and any call to ``getTime`` / ``addRelTime`` / ``days`` / "
+            "``hours`` REQUIRE ``import DA.Time`` directly under the "
+            "``module ... where`` line. ``: Date`` REQUIRES "
+            "``import DA.Date``. Qualified calls like ``Map.empty``, "
+            "``TextMap.lookup``, ``Set.member`` REQUIRE the matching "
+            "``import DA.Map`` / ``import DA.TextMap`` / ``import "
+            "DA.Set``. A contract that uses ``Time`` without importing "
+            "``DA.Time`` will not build \u2014 it never reaches the "
+            "audit, the deploy, or the user. The April 30 KYC contract "
+            "is the regression: it declared ``issuedAt : Time`` with "
+            "no imports at all and was unbuildable."
+        ),
+        "example": (
+            "module Main where\n"
+            "import DA.Time   -- REQUIRED for Time / getTime / addRelTime\n"
+            "template Verification\n"
+            "  with officer : Party; client : Party; issuedAt : Time\n"
+            "  where ..."
+        ),
+        "severity": "high",
+    },
+    {
+        "id": "SEC-GEN-024",
+        "rule": (
+            "When the user asks for a contract \u2014 even one with "
+            "multiple lifecycle phases like a Bond (issuance + coupon "
+            "payments + redemption) \u2014 emit ONE ``module Main "
+            "where`` file containing every template. Do NOT split "
+            "into multiple modules unless the user EXPLICITLY asks "
+            "for a multi-module project. When multiple templates are "
+            "needed in a single module they MUST be linked via "
+            "``ContractId`` fields where the lifecycle requires it: "
+            "e.g. a ``CouponPayment`` template should carry "
+            "``bondCid : ContractId Bond`` so the payment is "
+            "verifiably attached to the parent bond, not a free-"
+            "floating record that happens to share field names. The "
+            "April 30 Bond contract violated this by emitting three "
+            "unlinked modules ``Bond.daml`` / ``CouponPayment.daml`` "
+            "/ ``Redemption.daml`` with no cross-references; the "
+            "result was three independent contracts pretending to "
+            "be one product."
+        ),
+        "example": (
+            "module Main where\n"
+            "import DA.Time\n"
+            "template Bond with company; investor; principal; ... where ...\n"
+            "template CouponPayment\n"
+            "  with bondCid : ContractId Bond; ...   -- LINK to parent\n"
+            "  where ...\n"
+            "template Redemption\n"
+            "  with bondCid : ContractId Bond; ...\n"
+            "  where ..."
+        ),
+        "severity": "high",
+    },
 ]
 
 

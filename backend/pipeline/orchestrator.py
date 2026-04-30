@@ -1205,12 +1205,14 @@ def _append_script_runtime_finding(state: dict, result: dict) -> None:
 # auditor sometimes emits. Keeping the list short prevents noisy
 # retries on subjective findings (observer-information-leakage etc.).
 _AUDIT_RETRY_FINDING_PREFIXES = (
-    "DSV-024",   # invariant deadlock (FullRepay-class)
+    "DSV-017",   # archive-only terminal choice (no successor record)
+    "DSV-024",   # invariant deadlock (FullRepay-class, same- + cross-template)
     "DSV-025",   # observer-only counterparty (signatory regression)
     "DSV-026",   # proposal missing expiresAt
     "DSV-027",   # accept choice does not enforce expiresAt
     "DSV-028",   # terminal state populated from mutated balance
     "DSV-029",   # daml-script runtime failure (F.1 signal)
+    "DSV-030",   # missing import (compile-time blocker, e.g. KYC's Time use)
 )
 
 

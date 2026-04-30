@@ -722,8 +722,104 @@ def _check_unchecked_subtraction(daml_code: str) -> list[dict]:
 # them. We match the keyword as a plain substring \u2014 false positives
 # are extremely unlikely (``Sales`` matching ``Sale`` is benign because
 # any template named ``Sales*`` is a counterparty agreement anyway).
+# ---------------------------------------------------------------------------
+# DSV-030: missing imports (compile-time blocker, e.g. KYC's ``Time`` use)
+# ---------------------------------------------------------------------------
+
+
+# Map: a regex that, when found in the source, requires the corresponding
+# import. Module names are matched against the import line set below.
+# Patterns deliberately avoid matching inside string literals or comments
+# (we strip comments before matching; strings are accepted as a tolerable
+# false-positive cost since they're rare in template field declarations).
+_REQUIRED_IMPORTS: list[tuple[str, re.Pattern]] = [
+    # Field type ``: Time`` or ``: UTCTime`` requires DA.Time. We anchor
+    # on the colon-Time field-decl shape to avoid matching ``Time`` as
+    # part of an arbitrary identifier.
+    ("DA.Time", re.compile(r":\s*(?:Time|UTCTime|RelTime)\b")),
+    # Calls into the Time module's helpers also require it.
+    ("DA.Time", re.compile(r"\b(?:getTime|addRelTime|subTime|days\b|hours\b|minutes\b|seconds\b)")),
+    # Field type ``: Date`` requires DA.Date.
+    ("DA.Date", re.compile(r":\s*Date\b")),
+    # Map / TextMap / Set qualified usage.
+    ("DA.Map",       re.compile(r"\bMap\.[a-z]\w*\b")),
+    ("DA.TextMap",   re.compile(r"\bTextMap\.[a-z]\w*\b")),
+    ("DA.Set",       re.compile(r"\bSet\.[a-z]\w*\b")),
+    ("DA.Optional",  re.compile(r"\b(?:fromOptional|fromOptionalEx|catOptionals)\b")),
+]
+
+
+def _check_missing_imports(daml_code: str) -> list[dict]:
+    """DSV-030: flag uses of types/helpers whose module isn't imported.
+
+    The April 30 KYC contract used ``issuedAt : Time`` without
+    ``import DA.Time``, so it failed at ``daml build`` long before
+    anything else could review it. The static checker now catches
+    this deterministically before the user ever sees a compile log.
+    """
+    findings: list[dict] = []
+    try:
+        cleaned = _strip_comments(daml_code)
+        # Capture imported modules. ``import qualified Foo as Bar`` and
+        # ``import Foo`` are both treated as importing ``Foo``.
+        imported = {m.group(1) for m in _IMPORT_RE.finditer(cleaned)}
+
+        seen: set[str] = set()
+        for module, pattern in _REQUIRED_IMPORTS:
+            if module in imported:
+                continue
+            if not pattern.search(cleaned):
+                continue
+            if module in seen:
+                continue
+            seen.add(module)
+            findings.append({
+                "id":          f"DSV-030::{module}",
+                "severity":    "HIGH",
+                "category":    "Compile-time Blocker",
+                "title":       f"Source uses ``{module}`` symbols but never imports it",
+                "description": (
+                    f"The contract references types or helpers defined "
+                    f"in ``{module}`` (for example ``Time``, "
+                    f"``getTime``, ``addRelTime``) but does not "
+                    f"include ``import {module}`` at the top of the "
+                    f"module. ``daml build`` will fail with a "
+                    f"``Variable not in scope`` or ``Data constructor "
+                    f"not in scope`` error before anything can be "
+                    f"deployed."
+                ),
+                "location":    {"template": None, "choice": None, "lineNumbers": [0, 0]},
+                "impact": (
+                    "The DAR will not build. The contract cannot be "
+                    "deployed to any Canton domain in its current "
+                    "form."
+                ),
+                "recommendation": (
+                    f"Add ``import {module}`` directly under the "
+                    f"``module ... where`` line and re-run "
+                    f"``daml build``."
+                ),
+                "references":  ["DSV-030"],
+                "codeSnippet": f"-- missing: import {module}",
+                "fixedCode":   f"import {module}",
+                "source":      "static",
+            })
+    except Exception as e:  # noqa: BLE001
+        logger.warning("missing-import check crashed", error=str(e))
+    return findings
+
+
 _AGREEMENT_NAME_RE = re.compile(
-    r"(Agreement|Contract|Deal|Trade|Loan|Lease|Sale)"
+    # Counterparty / value-transfer template names. We deliberately
+    # cast a wide net here because the cost of a false-positive is
+    # one extra finding the user can ignore, while the cost of a
+    # false-negative is a contract that ships with a counterparty
+    # silently observer-only on their own settlement record (see the
+    # April 30 Escrow / Bond / CouponPayment audits).
+    r"(Agreement|Contract|Deal|Trade|Loan|Lease|Sale|Bond"
+    r"|Escrow|Coupon|Payment|Settled|Settlement|Refund(?:ed)?"
+    r"|Resolved|Confirmed|Redemption|Redeemed|Issuance|Issued"
+    r"|Receipt|Dispute|Verification|Repaid|Released|Closed)"
 )
 _TEMPLATE_HEAD_RE = re.compile(
     r"^template\s+(?P<name>\w+)\b(?P<body>.*?)(?=^template\s+\w+|\Z)",
@@ -1039,6 +1135,8 @@ def detect_static_findings(daml_code: str) -> list[dict]:
         findings.extend(_check_observer_only_counterparty(daml_code))
         findings.extend(_check_proposal_missing_expiry(daml_code))
         findings.extend(_check_terminal_uses_mutated_balance(daml_code))
+        # April 30 contract-batch regressions (KYC compile failure):
+        findings.extend(_check_missing_imports(daml_code))
     except Exception as e:
         logger.warning("Static checks crashed", error=str(e))
     # Phase F.2: deterministic invariant analyzer. Imported lazily so

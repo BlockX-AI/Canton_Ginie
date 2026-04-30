@@ -377,12 +377,15 @@ def detect_invariant_deadlocks(daml_code: str) -> list[dict]:
 
         # Walk every choice across every template body.
         for tpl_name, tpl_match in _iter_templates_with_body(daml_code):
+            host_info = templates.get(tpl_name)
             for cm in _CHOICE_RE.finditer(tpl_match):
                 choice_name = cm.group("name")
                 body        = cm.group("body")
                 constraints = _extract_assert_constraints(body)
                 creates     = _extract_creates(body)
 
+                # Pattern 1: cross-template ``create T with f = expr``
+                # where the resolved expr violates ``T``'s ensure.
                 for target, assigns in creates:
                     target_info = templates.get(target)
                     if target_info is None or not target_info.ensures:
@@ -395,6 +398,24 @@ def detect_invariant_deadlocks(daml_code: str) -> list[dict]:
                             assigns=assigns,
                             constraints=constraints,
                             target_ensures=target_info.ensures,
+                        )
+                    )
+
+                # Pattern 2: same-template assert-vs-ensure deadlock.
+                # The choice body asserts ``field op value`` but the
+                # *host* template's own ensure on that same field is
+                # disjoint with the assertion. The choice can therefore
+                # never fire on a live instance of the host template.
+                # This is the CouponPayment.FinalizePayment regression
+                # the April 30 audit caught: ``ensure principal > 0.0``
+                # combined with ``assertMsg "" (principal == 0.0)``.
+                if host_info and host_info.ensures and constraints:
+                    findings.extend(
+                        _check_choice_against_host_ensure(
+                            host_template=tpl_name,
+                            choice=choice_name,
+                            host_ensures=host_info.ensures,
+                            constraints=constraints,
                         )
                     )
     except Exception as exc:  # noqa: BLE001
@@ -496,6 +517,109 @@ def _check_create_against_ensure(
 
         # Otherwise the rhs is an expression we cannot reason about -
         # skip silently to keep false-positive rate at zero.
+    return out
+
+
+def _check_choice_against_host_ensure(
+    *,
+    host_template: str,
+    choice: str,
+    host_ensures: list[Predicate],
+    constraints: dict[str, Predicate],
+) -> list[dict]:
+    """Detect same-template assert-vs-ensure deadlocks.
+
+    For every assertion the choice makes of the form ``field op k``,
+    if the host template's ensure also constrains ``field`` and the
+    two predicates are jointly unsatisfiable, the choice is dead
+    code: no instance of the host template that satisfies the ensure
+    can ever satisfy the choice's assertion.
+
+    The canonical example is ``FinalizePayment``::
+
+        template CouponPayment with ... principal : Decimal
+          where
+            ensure principal > 0.0
+            choice FinalizePayment : ContractId Settled
+              do
+                assertMsg "Principal must be fully paid" (principal == 0.0)
+                ...
+
+    Any live ``CouponPayment`` has ``principal > 0.0`` (its ensure),
+    yet the choice asserts ``principal == 0.0`` to fire. The two
+    predicates have empty intersection, so ``FinalizePayment`` is
+    permanently unreachable.
+    """
+    out: list[dict] = []
+    # Dedup by (var) so a choice that asserts the same field twice
+    # doesn't produce duplicate findings.
+    seen_vars: set[str] = set()
+    for var, constraint in constraints.items():
+        if var in seen_vars:
+            continue
+        for ens in host_ensures:
+            if ens.var != var:
+                continue
+            if not _is_unsat(constraint, ens):
+                continue
+            seen_vars.add(var)
+            out.append({
+                "id":          "DSV-024",
+                "severity":    "HIGH",
+                "title":       (
+                    f"Unreachable choice: ``{host_template}::{choice}`` "
+                    f"asserts a condition the template's own ensure forbids"
+                ),
+                "description": (
+                    f"The choice ``{choice}`` on template "
+                    f"``{host_template}`` asserts "
+                    f"``{var} {constraint.op} {constraint.value}`` to "
+                    f"fire, but the template itself declares "
+                    f"``ensure {var} {ens.op} {ens.value}``. Every live "
+                    f"instance of ``{host_template}`` satisfies the "
+                    f"ensure by construction, which means no live "
+                    f"instance can ever satisfy the assertion. The "
+                    f"choice is dead code that will always abort with "
+                    f"``ASSERT_FAILED`` at runtime."
+                ),
+                "location": {
+                    "template":    host_template,
+                    "choice":      choice,
+                    "lineNumbers": [0, 0],
+                },
+                "impact": (
+                    f"The intended terminal/cleanup workflow is "
+                    f"unreachable. Holders of ``{host_template}`` "
+                    f"cannot retire their contract through the "
+                    f"documented path \u2014 the choice is a trap."
+                ),
+                "exploitScenario": (
+                    f"User drives the contract toward the condition "
+                    f"``{var} {constraint.op} {constraint.value}``. "
+                    f"Long before they get there, the host template's "
+                    f"ensure ``{var} {ens.op} {ens.value}`` aborts the "
+                    f"recreate (e.g. paying down a balance through "
+                    f"``MakePayment`` already trips ``ENSURE_VIOLATED`` "
+                    f"on the very last payment). They cannot reach a "
+                    f"state where the assertion would be satisfied."
+                ),
+                "recommendation": (
+                    f"Either (a) relax the host ensure on ``{var}`` so "
+                    f"it admits the boundary value (e.g. "
+                    f"``ensure {var} >= 0.0`` instead of "
+                    f"``ensure {var} > 0.0``), or (b) replace the "
+                    f"two-step ``MakePayment`` \u2192 ``FinalizePayment`` "
+                    f"workflow with a single branching choice that "
+                    f"creates the terminal record directly when the "
+                    f"final payment is received, before the value "
+                    f"hits the boundary."
+                ),
+                "references":  ["DSV-024", "SEC-GEN-021"],
+                "codeSnippet": f"assertMsg \"\" ({var} {constraint.op} {constraint.value})",
+                "fixedCode":   f"-- Relax: ensure {var} >= {ens.value}",
+                "source":      "static",
+            })
+            break
     return out
 
 
