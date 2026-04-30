@@ -95,7 +95,7 @@ class Settings(BaseSettings):
 
     # Brevo (email OTP)
     brevo_api_key: str = ""
-    brevo_sender_email: str = "noreply@ginie.xyz"
+    brevo_sender_email: str = "noreply@brevo.com"
     brevo_sender_name: str = "Ginie Canton"
     email_otp_required: bool = True
     otp_expiry_minutes: int = 10
