@@ -406,13 +406,13 @@ export function Header(): ReactNode {
 
             <div className="flex items-center gap-2">
 
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-3 py-1.5 text-sm font-medium text-foreground">
+              <a href="/profile" className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 hover:bg-accent/30 px-3 py-1.5 text-sm font-medium text-foreground transition-colors" title="View profile and badges">
 
                 <User className="w-3.5 h-3.5" />
 
                 {identityLabel}
 
-              </span>
+              </a>
 
               <button
 
