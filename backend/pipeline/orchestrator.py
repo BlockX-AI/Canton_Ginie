@@ -292,10 +292,15 @@ def generate_project_node(state: dict) -> dict:
         initiator = parties[0] if parties else "issuer"
         acceptors = parties[1:2] if len(parties) > 1 else ["acceptor"]
         _push_status(state, "Injecting Propose-Accept pattern...", 42)
-        # Find the core template file and inject proposal into it
+        # Find the core template file and inject proposal into it.
+        # Post-SEC-GEN-024 the project writer merges every template
+        # into ``daml/Main.daml``, so we prefer that canonical path
+        # and only fall back to ``daml/{primary}.daml`` when the
+        # merger didn't run (single-template projects).
         core_name = result.get("primary_template", "")
-        core_file = f"daml/{core_name}.daml" if core_name else None
-        if core_file and core_file in files:
+        candidates = ["daml/Main.daml", f"daml/{core_name}.daml" if core_name else None]
+        core_file = next((c for c in candidates if c and c in files), None)
+        if core_file:
             try:
                 files[core_file] = inject_proposal_pattern(files[core_file], initiator, acceptors)
                 # Rebuild combined view
@@ -607,6 +612,22 @@ def audit_node(state: dict) -> dict:
         compliance_score = audit_result.get("combined_scores", {}).get("compliance_score")
         enterprise_score = audit_result.get("combined_scores", {}).get("enterprise_score")
         deploy_gate = audit_result.get("combined_scores", {}).get("deploy_gate", True)
+        audit_degraded = audit_result.get("combined_scores", {}).get("audit_degraded", False)
+
+        # Apr-30 regression: LLM audit returning non-JSON twice produced
+        # ``security_score=None`` while ``deploy_gate`` stayed ``True``.
+        # The hybrid_auditor now blocks the gate; here we make the
+        # degradation visible in the status/event stream so the UI can
+        # flag it distinctly from a normal low-score finding.
+        if audit_degraded:
+            emit(
+                state,
+                "audit_degraded",
+                "Security audit phase failed to produce a score (LLM returned non-JSON). "
+                "Static checks still apply; MainNet deploy is blocked until the audit is re-run.",
+                level="warn",
+                data={"security_score": None},
+            )
 
         _push_status(
             state,

@@ -203,6 +203,38 @@ def run_project_writer_agent(
             generated_context.append(sup_code)
 
     # ------------------------------------------------------------------
+    # Structural SEC-GEN-024 enforcement (Apr-30 regression).
+    #
+    # The LLM rule ``emit a single module`` is unreliable \u2014 both
+    # equity-token and trade-finance runs produced three unlinked
+    # modules despite the prompt instruction. Fragmented modules with
+    # no ``ContractId`` cross-references behave as independent
+    # contracts that happen to share field names, which is
+    # semantically wrong for lifecycle products (Bond + CouponPayment
+    # + Redemption, EquityIssuance + InstalmentPayment + ShareTransfer).
+    #
+    # We merge every generated template body into one
+    # ``daml/Main.daml`` deterministically, stripping per-file module
+    # headers and de-duplicating imports. The result is a single
+    # compile unit that the downstream proposal-injector and compile
+    # agent can operate on without the ``daml build`` failure loop
+    # observed in jobs beef1b78 and e2dc7936.
+    # ------------------------------------------------------------------
+    if len(files) > 1:
+        merged = _merge_project_into_main(files)
+        files = {"daml/Main.daml": prepend_brand_header(
+            merged,
+            pattern=spec_pattern,
+            domain=spec_domain,
+            module_name="Main",
+        )}
+        logger.info(
+            "Project merged into single module (SEC-GEN-024 enforcement)",
+            original_file_count=len(generated_context),
+            templates=[t.get("name") for t in [core_spec] + support_templates[:4]],
+        )
+
+    # ------------------------------------------------------------------
     # Build daml.yaml deterministically
     # ------------------------------------------------------------------
     daml_yaml = _build_daml_yaml(project_name)
@@ -220,6 +252,67 @@ def run_project_writer_agent(
         "daml_yaml": daml_yaml,
         "primary_template": primary_name,
     }
+
+
+# ---------------------------------------------------------------------------
+# SEC-GEN-024 structural helper
+# ---------------------------------------------------------------------------
+
+_MODULE_HEADER_RE = re.compile(
+    r"^\s*module\s+\S+\s+where\s*$", re.MULTILINE,
+)
+_IMPORT_LINE_RE = re.compile(
+    r"^\s*import\s+(?:qualified\s+)?\S[^\n]*$", re.MULTILINE,
+)
+_BRAND_BLOCK_RE = re.compile(
+    # Matches the banner emitted by ``prepend_brand_header`` so we
+    # don't carry six duplicate banners into the merged file.
+    r"-- =+\n(?:--[^\n]*\n)+-- =+\n",
+)
+
+
+def _merge_project_into_main(files: dict[str, str]) -> str:
+    """Fold every ``daml/*.daml`` template file into one ``Main`` module.
+
+    Strategy:
+
+    * Strip the per-file ``module X where`` header; the merged file
+      declares ``module Main where`` exactly once.
+    * Collect every ``import ...`` line, deduplicate verbatim, and
+      emit the union near the top.
+    * Strip the Canton.Ginie banner from each body (the caller
+      re-applies a single banner to the merged file so we don't ship
+      six stacked banners).
+    * Preserve template bodies in the order they were generated
+      (core template first, then lifecycle supports) so the reader
+      sees the primary object before its derivatives.
+
+    Cross-template ``ContractId`` linkage is NOT synthesised here \u2014
+    that requires semantic understanding the writer prompt now carries
+    (``SEC-GEN-024``). This merger only eliminates the
+    ``three-unlinked-files`` structural failure mode.
+    """
+    imports: list[str] = []
+    seen_imports: set[str] = set()
+    bodies: list[str] = []
+    for path, src in files.items():
+        if not src:
+            continue
+        cleaned = _BRAND_BLOCK_RE.sub("", src)
+        for m in _IMPORT_LINE_RE.finditer(cleaned):
+            line = m.group(0).strip()
+            if line and line not in seen_imports:
+                seen_imports.add(line)
+                imports.append(line)
+        body = _IMPORT_LINE_RE.sub("", cleaned)
+        body = _MODULE_HEADER_RE.sub("", body)
+        body = body.strip()
+        if body:
+            bodies.append(f"-- Source: {path}\n{body}")
+    if not imports:
+        imports = ["import DA.Time", "import DA.Date", "import DA.Text"]
+    header = "module Main where\n\n" + "\n".join(imports) + "\n\n"
+    return header + "\n\n".join(bodies) + "\n"
 
 
 # ---------------------------------------------------------------------------

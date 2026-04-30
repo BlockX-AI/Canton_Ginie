@@ -58,7 +58,17 @@ def run_fix_agent(daml_code: str, compile_errors: list[dict], attempt_number: in
     logger.info("Targeted fixes made no change, using LLM fix", attempt=attempt_number)
 
     error_descriptions = _format_errors_for_llm(compile_errors)
-    raw_stderr = compile_errors[0].get("raw", "") if compile_errors else ""
+    # Apr-30 regression: the fix agent looped three times returning the
+    # same ``code_length`` because it only saw ``compile_errors[0].raw``
+    # \u2014 a single error's local context lines, not the full stderr.
+    # When a project contains multiple files the first error rarely tells
+    # the LLM *enough* to fix the actual issue (often in another file).
+    # We now concatenate the ``raw`` context from every parsed error so
+    # the LLM has the complete compile output and can cross-reference
+    # files.
+    raw_stderr = "\n---\n".join(
+        e.get("raw", "") for e in compile_errors if e.get("raw")
+    ) if compile_errors else ""
 
     if attempt_number >= 3:
         user_message = _build_regeneration_message(daml_code, error_descriptions)
@@ -401,7 +411,11 @@ def _build_fix_message(daml_code: str, error_descriptions: str, raw_stderr: str 
     raw_section = ""
     if raw_stderr:
         clean = _strip_sdk_banner(raw_stderr)
-        raw_section = f"\nRAW COMPILER OUTPUT:\n{clean[:2000]}\n"
+        # Generous cap: with multi-error concatenation we need room
+        # for several error blocks. 6000 chars is ~1.5k tokens, still
+        # well under the model window and enough to cover 5\u201310
+        # discrete compile errors with full local context each.
+        raw_section = f"\nRAW COMPILER OUTPUT (all errors):\n{clean[:6000]}\n"
 
     return f"""Fix the following Daml code. It has compiler errors.
 

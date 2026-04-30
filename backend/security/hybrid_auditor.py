@@ -179,13 +179,34 @@ def run_hybrid_audit(
         combined["enterprise_score"] = compliance_score
         combined["enterprise_readiness"] = "READY" if compliance_score >= 85 else "CONDITIONAL" if compliance_score >= 65 else "NOT_READY"
 
-    # Deployment gate
+    # Deployment gate.
+    #
+    # Apr-30 regression: when the LLM audit returned non-JSON twice,
+    # ``security_score`` was ``None`` and the gate previously evaluated
+    # ``True`` via the ``or security_score is None`` clause. A contract
+    # with an UNKNOWN security score then shipped to production with
+    # ``readiness=CONDITIONAL`` but no signal to the deploy agent that
+    # the audit had silently failed. We now explicitly BLOCK deploy
+    # when we don't have a security score, and also block when
+    # deterministic static-check findings flagged HIGH severity even
+    # if the LLM phase failed \u2014 those findings are authoritative
+    # on their own.
     sec_rec = (audit_result or {}).get("executive_summary", {}).get("recommendation", "")
-    combined["deploy_gate"] = sec_rec in ("DEPLOY_READY",) or security_score is None
+    combined["deploy_gate"] = sec_rec in ("DEPLOY_READY",) and security_score is not None
     if audit_result and audit_result.get("success"):
         crit = audit_result.get("executive_summary", {}).get("criticalIssues", 0)
         if crit > 0:
             combined["deploy_gate"] = False
+    # If the LLM audit failed entirely but static checks produced
+    # findings, surface the static severity as the authority.
+    if security_score is None:
+        has_high = any(
+            (f.get("severity") or "").upper() in ("HIGH", "CRITICAL")
+            for f in static_findings
+        )
+        combined["deploy_gate"] = False
+        combined["enterprise_readiness"] = "NOT_READY" if has_high else "CONDITIONAL"
+        combined["audit_degraded"] = True
 
     result["combined_scores"] = combined
 

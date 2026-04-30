@@ -70,7 +70,11 @@ ABSOLUTE RULES:
    c) reject / cancel with empty reason (when those choices exist)
    d) controller tries to act on a contract they're not the controller of
    e) any business-rule guard (e.g. negative amount, wrong status)
-9. Use `pass (days N)` to advance time when expiry is involved.
+9. Use `passTime (days N)` to advance the ledger clock when expiry is
+   involved. The function is named `passTime` in Daml.Script 2.x —
+   `pass` alone is a reserved keyword and will not type-check. `days`
+   is exported from `DA.Time`, so every test module MUST include
+   `import DA.Time (days)` at the top when using `passTime`.
 10. Every `submitMustFail` MUST be commented with the rule it is proving:
        -- Bob cannot Accept (only Alice's counterparty can).
        submitMustFail eve do exerciseCmd cid Accept
@@ -251,7 +255,8 @@ REQUIREMENTS:
   meaningful choice on it, assert the result.
 * Provide AT LEAST FIVE `submitMustFail` cases. Comment each with the
   rule it proves.
-* Use `pass (days N)` to test expiry when the contract has `expiresAt`.
+* Use `passTime (days N)` to test expiry when the contract has
+  `expiresAt`. Always `import DA.Time (days)` when using `passTime`.
 * Output raw Daml only \u2014 no markdown, no prose.
 
 Begin with: `module {module_name} where`"""
@@ -281,6 +286,25 @@ def _post_process(
         code = code.replace(
             f"module {module_name} where",
             f"module {module_name} where\n\nimport Daml.Script\nimport qualified Main",
+            1,
+        )
+    # ------------------------------------------------------------------
+    # Deterministic safety net for the Apr-30 ``pass (days N)`` regression.
+    # The LLM repeatedly emitted the Daml.Script 1.x API (``pass``), which
+    # fails compilation with ``Variable not in scope: pass``. We rewrite
+    # it to the 2.x form (``passTime``) and ensure ``DA.Time (days)`` is
+    # imported so ``days`` resolves. Applied AFTER the LLM has had its
+    # chance to get it right, so well-behaved output is untouched.
+    # ------------------------------------------------------------------
+    code = re.sub(
+        r"(?<![A-Za-z0-9_])pass(\s*\()",
+        r"passTime\1",
+        code,
+    )
+    if "passTime" in code and "DA.Time" not in code:
+        code = code.replace(
+            "import Daml.Script",
+            "import Daml.Script\nimport DA.Time (days)",
             1,
         )
     return code.strip() + "\n"

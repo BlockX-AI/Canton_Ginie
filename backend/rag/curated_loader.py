@@ -66,16 +66,52 @@ _ALIASES: dict[str, str] = {
     "collectible":          "nft",
     "rights":               "nft",
     "art":                  "nft",
-    # bond / finance
+    # bond / fixed-income \u2014 intentionally narrow. ``"finance"`` used
+    # to resolve here and swallowed equity-token + trade-finance prompts
+    # (Apr-30 regression). Only match prompts that are *actually* about
+    # bonds / notes / fixed-income instruments.
     "bond":                 "bond-tokenization",
     "bond-tokenization":    "bond-tokenization",
     "note":                 "bond-tokenization",
     "fixed-income":         "bond-tokenization",
-    "finance":              "bond-tokenization",
-    # generic two-party agreement
+    "coupon":               "bond-tokenization",
+    "debenture":            "bond-tokenization",
+    # equity / shares / instalment payments \u2014 route to the
+    # propose-accept lifecycle pattern (two-party issuance with
+    # acceptance + cancellation), which is the closest curated
+    # template until a dedicated equity-token file ships.
+    "equity":               "propose-accept",
+    "equity-token":         "propose-accept",
+    "share":                "propose-accept",
+    "shares":               "propose-accept",
+    "stock":                "propose-accept",
+    "instalment":           "propose-accept",
+    "installment":          "propose-accept",
+    "cap-table":            "propose-accept",
+    # trade finance / letters of credit / multi-party conditional
+    # release \u2014 route to escrow, the only curated template that
+    # models conditional fund release with a middleman.
+    "trade-finance":        "escrow",
+    "trade_finance":        "escrow",
+    "letter-of-credit":     "escrow",
+    "lc":                   "escrow",
+    "documentary-credit":   "escrow",
+    "import":               "escrow",
+    "export":               "escrow",
+    "shipment":             "escrow",
+    "collateral":           "escrow",
+    # generic two-party agreement. ``"contract"`` used to land here but
+    # is too broad \u2014 it matches *every* request since the user is
+    # always asking for a ``contract``. Keep only the specific aliases.
     "propose-accept":       "propose-accept",
     "agreement":            "propose-accept",
-    "contract":             "propose-accept",
+    "loan":                 "propose-accept",
+    "lease":                "propose-accept",
+    "sale":                 "propose-accept",
+    "purchase":             "propose-accept",
+    "settlement":           "propose-accept",
+    "kyc":                  "propose-accept",
+    "verification":         "propose-accept",
     # invoice / billing lifecycle
     "invoice":              "invoice-processing",
     "invoice-processing":   "invoice-processing",
