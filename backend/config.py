@@ -93,6 +93,19 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://canton.ginie.xyz,https://*.vercel.app"
 
+    # Brevo (email OTP)
+    brevo_api_key: str = ""
+    brevo_sender_email: str = "noreply@ginie.xyz"
+    brevo_sender_name: str = "Ginie Canton"
+    email_otp_required: bool = True
+    otp_expiry_minutes: int = 10
+    otp_max_attempts: int = 5
+
+    # Cloudinary (profile pictures)
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+
     def get_canton_url(self) -> str:
         mapping = {
             "sandbox": self.canton_sandbox_url,

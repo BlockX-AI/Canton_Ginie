@@ -299,8 +299,25 @@ class EmailAuthResponse(BaseModel):
     display_name: Optional[str]
     party_id: Optional[str]
     party_name: Optional[str] = None
+    profile_picture_url: Optional[str] = None
     needs_party: bool
     expires_in_days: int
+
+
+class SendOTPRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=120)
+    display_name: Optional[str] = Field(None, max_length=60)
+
+
+class VerifyOTPRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=120)
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class OTPResponse(BaseModel):
+    success: bool
+    message: str
+    expires_in_minutes: Optional[int] = None
 
 
 class LinkPartyRequest(BaseModel):
@@ -318,16 +335,73 @@ def _create_email_token(email: str, display_name: str, party_id: Optional[str]) 
     )
 
 
+@auth_router.post("/email/send-otp", response_model=OTPResponse)
+@limiter.limit("3/minute")
+async def email_send_otp(request: Request, body: SendOTPRequest = Body()):
+    """Send an OTP verification code to the given email for signup."""
+    from auth.otp_manager import send_otp
+    from auth.email_auth import get_email_account
+    
+    settings = get_settings()
+    
+    # Check if email is already registered (prevent OTP spam for existing accounts)
+    existing = get_email_account(body.email)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="An account with this email already exists. Please sign in instead."
+        )
+    
+    success, error = await send_otp(body.email, purpose="signup", display_name=body.display_name)
+    if not success:
+        raise HTTPException(status_code=500, detail=error or "Failed to send OTP")
+    
+    return OTPResponse(
+        success=True,
+        message="Verification code sent to your email",
+        expires_in_minutes=settings.otp_expiry_minutes,
+    )
+
+
+@auth_router.post("/email/verify-otp", response_model=OTPResponse)
+@limiter.limit("10/minute")
+async def email_verify_otp(request: Request, body: VerifyOTPRequest = Body()):
+    """Verify an OTP code. User has 30 minutes after verification to complete signup."""
+    from auth.otp_manager import verify_otp
+    
+    success, error = verify_otp(body.email, body.otp, purpose="signup")
+    if not success:
+        raise HTTPException(status_code=400, detail=error or "Invalid OTP")
+    
+    return OTPResponse(
+        success=True,
+        message="Email verified successfully. You can now complete signup.",
+    )
+
+
 @auth_router.post("/email/signup", response_model=EmailAuthResponse)
 @limiter.limit("5/minute")
 async def email_signup(request: Request, body: EmailSignupRequest = Body()):
     """Create a new email/password account. Party is created later via /setup.
     
-    Requires a valid invite code for signup.
+    Requires:
+      - Valid invite code
+      - Verified email (via OTP) if EMAIL_OTP_REQUIRED=true
     """
     from auth.invite_manager import validate_invite_code, mark_invite_code_used
+    from auth.otp_manager import is_email_verified_recently, consume_signup_verification
+    from services.badge_service import award_badge
+    from services.brevo_service import send_welcome_email
     
     settings = get_settings()
+    
+    # Check email verification (gated by feature flag for backward compat)
+    if settings.email_otp_required:
+        if not is_email_verified_recently(body.email, window_minutes=30):
+            raise HTTPException(
+                status_code=403,
+                detail="Please verify your email first. Request a verification code."
+            )
     
     # Validate invite code
     if not validate_invite_code(body.invite_code):
@@ -346,8 +420,27 @@ async def email_signup(request: Request, body: EmailSignupRequest = Body()):
         # Mark invite code as used
         mark_invite_code_used(body.invite_code, body.email)
         
+        # Consume the signup OTP so it can't be reused
+        try:
+            consume_signup_verification(body.email)
+        except Exception:
+            pass
+        
+        # Award Newcomer badge + send welcome email (non-fatal)
+        try:
+            award_badge(body.email, "newcomer")
+        except Exception as e:
+            logger.warning("Failed to award newcomer badge", error=str(e))
+        
+        try:
+            await send_welcome_email(body.email, account.get("display_name") or body.email.split("@")[0])
+        except Exception as e:
+            logger.warning("Failed to send welcome email", error=str(e))
+        
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Email signup failed", error=str(e))
         raise HTTPException(status_code=500, detail="Signup failed")
@@ -364,6 +457,7 @@ async def email_signup(request: Request, body: EmailSignupRequest = Body()):
         display_name=account["display_name"],
         party_id=None,
         party_name=None,
+        profile_picture_url=None,
         needs_party=True,
         expires_in_days=settings.jwt_expiry_days,
     )
@@ -399,6 +493,7 @@ async def email_login(request: Request, body: EmailLoginRequest = Body()):
         display_name=display_name,
         party_id=None,
         party_name=None,
+        profile_picture_url=account.get("profile_picture_url"),
         needs_party=True,
         expires_in_days=settings.jwt_expiry_days,
     )
@@ -437,6 +532,7 @@ async def email_link_party(
         display_name=account["display_name"],
         party_id=account.get("party_id"),
         party_name=account.get("party_name"),
+        profile_picture_url=account.get("profile_picture_url"),
         needs_party=False,
         expires_in_days=settings.jwt_expiry_days,
     )

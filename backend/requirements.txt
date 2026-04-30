@@ -30,3 +30,5 @@ PyJWT==2.9.0
 bcrypt==4.2.0
 pypdf==5.1.0
 sentence-transformers==3.3.1
+cloudinary==1.41.0
+Pillow==10.4.0

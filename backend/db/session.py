@@ -108,6 +108,12 @@ def _apply_inline_schema_upgrades(engine) -> None:
         # endpoint is flaky.
         "ALTER TABLE registered_parties ADD COLUMN IF NOT EXISTS user_email TEXT",
         "CREATE INDEX IF NOT EXISTS idx_registered_parties_user_email ON registered_parties (user_email)",
+        # Migration 005: profile picture + email verification + XP for email accounts
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS profile_picture_url TEXT",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS profile_picture_public_id TEXT",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS email_verified INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP WITH TIME ZONE",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS xp INTEGER NOT NULL DEFAULT 0",
     ]
     from sqlalchemy import text
     for stmt in statements:

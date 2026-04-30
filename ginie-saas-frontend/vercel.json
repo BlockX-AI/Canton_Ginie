@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd saas && npm run build",
+  "outputDirectory": "saas/.next",
+  "installCommand": "cd saas && npm install",
+  "framework": "nextjs",
+  "devCommand": "cd saas && npm run dev"
+}

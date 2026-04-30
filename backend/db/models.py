@@ -9,7 +9,7 @@ Tables:
 
 from datetime import datetime, timezone
 from sqlalchemy import (
-    Column, Integer, Text, DateTime, ForeignKey, Index, JSON,
+    Column, Integer, Text, DateTime, ForeignKey, Index, JSON, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -52,6 +52,14 @@ class EmailAccount(Base):
     password_hash = Column(Text, nullable=False)
     display_name = Column(Text, nullable=True)
     party_id = Column(Text, ForeignKey("registered_parties.party_id"), nullable=True, index=True)
+    # Profile picture (Cloudinary)
+    profile_picture_url = Column(Text, nullable=True)
+    profile_picture_public_id = Column(Text, nullable=True)
+    # Email verification
+    email_verified = Column(Integer, nullable=False, default=0)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    # XP tracking for badge/rank system
+    xp = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -170,4 +178,64 @@ class InviteCode(Base):
 
     __table_args__ = (
         Index("idx_invite_codes_used", "used"),
+    )
+
+
+class EmailOTP(Base):
+    """One-time passwords for email verification during signup.
+    
+    OTPs are stored as SHA-256 hashes (never plaintext). Each OTP expires
+    after 10 minutes and allows max 5 verification attempts.
+    """
+    
+    __tablename__ = "email_otps"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(Text, nullable=False, index=True)
+    otp_hash = Column(Text, nullable=False)
+    verified = Column(Integer, nullable=False, default=0)
+    attempts = Column(Integer, nullable=False, default=0)
+    purpose = Column(Text, nullable=False, default="signup")  # signup, password_reset, etc.
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    
+    __table_args__ = (
+        Index("idx_email_otps_email_verified", "email", "verified"),
+        Index("idx_email_otps_expires", "expires_at"),
+    )
+
+
+class Badge(Base):
+    """Badge catalog - defines all available badges and their criteria."""
+    
+    __tablename__ = "badges"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    slug = Column(Text, nullable=False, unique=True, index=True)
+    name = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    icon = Column(Text, nullable=True)  # Lucide icon name
+    color = Column(Text, nullable=True)  # Hex color
+    category = Column(Text, nullable=False, default="milestone")  # milestone, quality, special
+    criteria_type = Column(Text, nullable=False)  # contract_count, deploy_count, custom
+    criteria_value = Column(Integer, nullable=False, default=0)
+    rarity = Column(Text, nullable=False, default="common")  # common, rare, epic, legendary
+    xp_reward = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class UserBadge(Base):
+    """Association between users and earned badges."""
+    
+    __tablename__ = "user_badges"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account_id = Column(Integer, ForeignKey("email_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    badge_id = Column(Integer, ForeignKey("badges.id", ondelete="CASCADE"), nullable=False)
+    earned_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    
+    __table_args__ = (
+        UniqueConstraint("account_id", "badge_id", name="uq_user_badge"),
+        Index("idx_user_badges_account", "account_id"),
     )

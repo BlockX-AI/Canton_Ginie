@@ -89,6 +89,7 @@ def authenticate_email(email: str, password: str) -> Optional[dict]:
             "display_name": account.display_name,
             "party_id": account.party_id,
             "party_name": _resolve_party_name(session, account.party_id),
+            "profile_picture_url": account.profile_picture_url,
         }
     return result
 
@@ -113,6 +114,7 @@ def link_party_to_email(email: str, party_id: str, display_name: Optional[str] =
             "display_name": account.display_name,
             "party_id": account.party_id,
             "party_name": display_name or _resolve_party_name(session, party_id),
+            "profile_picture_url": account.profile_picture_url,
         }
 
     logger.info("Party linked to email account", email=email_norm, party_id=party_id)

@@ -96,6 +96,15 @@ def _set_job(job_id: str, data: dict):
                 # Store full result on completion/failure
                 if data.get("status") in ("complete", "failed"):
                     job.result_json = data
+                # Award badges on successful completion (best-effort, non-fatal)
+                if data.get("status") == "complete":
+                    user_email = data.get("user_email") or job.user_email
+                    if user_email:
+                        try:
+                            from services.badge_service import check_and_award_badges
+                            check_and_award_badges(user_email)
+                        except Exception:
+                            pass
             else:
                 job = JobHistory(
                     job_id=job_id,

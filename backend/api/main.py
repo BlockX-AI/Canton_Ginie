@@ -11,6 +11,8 @@ from api.audit_routes import audit_router
 from api.auth_routes import auth_router as auth_api_router
 from api.admin_routes import admin_router
 from api.ledger_routes import ledger_router
+from api.profile_routes import profile_router
+from api.badge_routes import badge_router
 from api.ws_routes import ws_router
 from api.rate_limiter import limiter, rate_limit_exceeded_handler
 from config import get_settings
@@ -30,6 +32,15 @@ async def lifespan(app: FastAPI):
         logger.info("PostgreSQL database initialized")
     except Exception as e:
         logger.warning("PostgreSQL initialization deferred — jobs will use Redis/memory fallback", error=str(e))
+
+    # Seed badge catalog (idempotent)
+    try:
+        from services.badge_service import seed_badges
+        added = seed_badges()
+        if added:
+            logger.info("Badge catalog seeded", added=added)
+    except Exception as e:
+        logger.warning("Badge seeding deferred", error=str(e))
 
     # Validate Canton token for non-sandbox environments
     if settings.canton_environment != "sandbox":
@@ -114,6 +125,8 @@ def create_app() -> FastAPI:
     app.include_router(admin_router, prefix="/api/v1", tags=["admin"])
     app.include_router(audit_router, prefix="/api/v1", tags=["audit", "compliance"])
     app.include_router(ledger_router, prefix="/api/v1", tags=["ledger-explorer"])
+    app.include_router(profile_router, prefix="/api/v1", tags=["profile"])
+    app.include_router(badge_router, prefix="/api/v1", tags=["badges"])
     app.include_router(ws_router, tags=["websocket"])
 
     return app

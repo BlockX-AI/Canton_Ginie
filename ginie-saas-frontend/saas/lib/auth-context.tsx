@@ -28,6 +28,7 @@ interface AuthState {
   partyName: string | null;
   fingerprint: string | null;
   email: string | null;
+  profilePictureUrl: string | null;
   needsParty: boolean;
 }
 
@@ -41,9 +42,13 @@ interface AuthContextValue extends AuthState {
   login: (token: string, partyId: string, displayName: string, fingerprint: string) => void;
   loginEmail: (email: string, password: string) => Promise<EmailAuthResult>;
   signupEmail: (email: string, password: string, displayName?: string, inviteCode?: string) => Promise<EmailAuthResult>;
+  sendOTP: (email: string, displayName?: string) => Promise<void>;
+  verifyOTP: (email: string, otp: string) => Promise<void>;
+  uploadProfilePictureSignup: (email: string, file: Blob) => Promise<string>;
   linkParty: (partyId: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
+  setProfilePictureUrl: (url: string | null) => void;
 }
 
 const defaultState: AuthState = {
@@ -54,6 +59,7 @@ const defaultState: AuthState = {
   partyName: null,
   fingerprint: null,
   email: null,
+  profilePictureUrl: null,
   needsParty: false,
 };
 
@@ -91,9 +97,13 @@ const AuthContext = createContext<AuthContextValue>({
   login: () => {},
   loginEmail: async () => ({ needsParty: false, partyId: null }),
   signupEmail: async () => ({ needsParty: true, partyId: null }),
+  sendOTP: async () => {},
+  verifyOTP: async () => {},
+  uploadProfilePictureSignup: async () => "",
   linkParty: async () => {},
   logout: async () => {},
   refreshToken: async () => {},
+  setProfilePictureUrl: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -120,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         partyName: displayName,
         fingerprint,
         email: null,
+        profilePictureUrl: null,
         needsParty: false,
       };
       setState(next);
@@ -134,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     display_name: string | null;
     party_name?: string | null;
     party_id: string | null;
+    profile_picture_url?: string | null;
     needs_party: boolean;
   }): EmailAuthResult => {
     const next: AuthState = {
@@ -144,11 +156,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       partyName: data.party_name ?? null,
       fingerprint: `email:${data.email}`,
       email: data.email,
+      profilePictureUrl: data.profile_picture_url ?? null,
       needsParty: data.needs_party,
     };
     setState(next);
     saveToStorage(next);
     return { needsParty: data.needs_party, partyId: data.party_id };
+  }, []);
+
+  const sendOTP = useCallback(
+    async (email: string, displayName?: string): Promise<void> => {
+      const resp = await fetch(`${API_URL}/auth/email/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, display_name: displayName }),
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.detail || "Failed to send verification code");
+      }
+    },
+    [],
+  );
+
+  const verifyOTP = useCallback(
+    async (email: string, otp: string): Promise<void> => {
+      const resp = await fetch(`${API_URL}/auth/email/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp }),
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.detail || "Invalid verification code");
+      }
+    },
+    [],
+  );
+
+  const uploadProfilePictureSignup = useCallback(
+    async (email: string, file: Blob): Promise<string> => {
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("file", file, "profile.jpg");
+      const resp = await fetch(`${API_URL}/profile/upload-picture-signup`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail?.detail || "Failed to upload picture");
+      }
+      const data = await resp.json();
+      return data.profile_picture_url as string;
+    },
+    [],
+  );
+
+  const setProfilePictureUrl = useCallback((url: string | null) => {
+    setState((prev) => {
+      const next = { ...prev, profilePictureUrl: url };
+      if (next.isAuthenticated) saveToStorage(next);
+      return next;
+    });
   }, []);
 
   const signupEmail = useCallback(
@@ -271,9 +341,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         loginEmail,
         signupEmail,
+        sendOTP,
+        verifyOTP,
+        uploadProfilePictureSignup,
         linkParty,
         logout,
         refreshToken,
+        setProfilePictureUrl,
       }}
     >
       {children}
