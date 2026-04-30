@@ -755,12 +755,42 @@ def _build_payload(fields: list[dict], party_values: dict, daml_code: str = "", 
                 else:
                     payload[name] = f"sample-{name}"
         elif ftype == "Date":
-            # Use distinct future dates (ensure clauses often check date > now)
-            date_counter += 1
-            payload[name] = f"2027-{min(date_counter + 5, 12):02d}-15"
+            # Name-semantic assignment so cross-field ensure clauses hold.
+            # The deploy agent does not parse ensure expressions, but the
+            # *vast* majority of real templates encode the ordering via
+            # field names (``issuedAt``, ``maturity``, ``expiresAt``).
+            # Picking values purely off declaration order produced bugs
+            # like Bond's ``maturity=06-15`` < ``issuedAt=07-15`` which
+            # trips ``ensure maturity > issuedAt`` at create-time.
+            name_lower = name.lower()
+            if any(k in name_lower for k in (
+                "matur", "expir", "deadline", "due", "endat", "endsat",
+                "closesat", "closingdate", "endsOn", "termination",
+            )):
+                payload[name] = "2030-12-15"          # ~3y out
+            elif any(k in name_lower for k in (
+                "issued", "start", "created", "opened", "openedat",
+                "openat", "begin", "originat",
+            )):
+                payload[name] = "2027-01-15"          # near-future
+            else:
+                date_counter += 1
+                payload[name] = f"2027-{min(date_counter + 5, 12):02d}-15"
         elif ftype in ("Time", "UTCTime"):
-            date_counter += 1
-            payload[name] = f"2027-{min(date_counter + 5, 12):02d}-15T00:00:00Z"
+            name_lower = name.lower()
+            if any(k in name_lower for k in (
+                "matur", "expir", "deadline", "due", "endat", "endsat",
+                "closesat", "closingdate", "endsOn", "termination",
+            )):
+                payload[name] = "2030-12-15T00:00:00Z"
+            elif any(k in name_lower for k in (
+                "issued", "start", "created", "opened", "openedat",
+                "openat", "begin", "originat",
+            )):
+                payload[name] = "2027-01-15T00:00:00Z"
+            else:
+                date_counter += 1
+                payload[name] = f"2027-{min(date_counter + 5, 12):02d}-15T00:00:00Z"
         elif ftype == "Bool":
             payload[name] = True
         elif ftype.startswith("["):
