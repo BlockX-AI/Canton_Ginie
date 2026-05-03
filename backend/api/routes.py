@@ -352,6 +352,36 @@ async def generate_contract(request: Request, body: GenerateRequest, user: dict 
         elif isinstance(party_id, str) and party_id.startswith("email:"):
             user_email = party_id[len("email:"):]
 
+    # --- Per-user lifetime quota enforcement -----------------------------
+    # Authenticated email accounts are capped at ``contract_generation_limit``
+    # successful contracts. The limit only applies once we have a stable
+    # identity (email); anonymous users are still bounded by the IP-based
+    # 5/minute slowapi limit above.
+    if user_email:
+        from services.quota_service import get_quota
+        quota = get_quota(user_email)
+        if not quota["can_generate"]:
+            logger.info(
+                "Generation blocked — user over quota",
+                user_email=user_email,
+                used=quota["used"],
+                limit=quota["limit"],
+            )
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "quota_exceeded",
+                    "message": (
+                        f"You have reached the {quota['limit']}-contract generation "
+                        f"limit on this account. Please contact support to request "
+                        f"an increase."
+                    ),
+                    "used": quota["used"],
+                    "limit": quota["limit"],
+                    "remaining": 0,
+                },
+            )
+
     initial_data = {
         "job_id":       job_id,
         "status":       "queued",

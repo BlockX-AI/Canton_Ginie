@@ -20,6 +20,14 @@ import {
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
+export interface Quota {
+  used: number;
+  limit: number;
+  remaining: number;
+  can_generate: boolean;
+  bypass: boolean;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   token: string | null;
@@ -39,6 +47,7 @@ interface EmailAuthResult {
 
 interface AuthContextValue extends AuthState {
   hydrated: boolean;
+  quota: Quota | null;
   login: (token: string, partyId: string, displayName: string, fingerprint: string) => void;
   loginEmail: (email: string, password: string) => Promise<EmailAuthResult>;
   signupEmail: (email: string, password: string, displayName?: string, inviteCode?: string) => Promise<EmailAuthResult>;
@@ -48,6 +57,7 @@ interface AuthContextValue extends AuthState {
   linkParty: (partyId: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
+  refreshQuota: () => Promise<void>;
   setProfilePictureUrl: (url: string | null) => void;
 }
 
@@ -94,6 +104,7 @@ function clearStorage() {
 const AuthContext = createContext<AuthContextValue>({
   ...defaultState,
   hydrated: false,
+  quota: null,
   login: () => {},
   loginEmail: async () => ({ needsParty: false, partyId: null }),
   signupEmail: async () => ({ needsParty: true, partyId: null }),
@@ -103,12 +114,14 @@ const AuthContext = createContext<AuthContextValue>({
   linkParty: async () => {},
   logout: async () => {},
   refreshToken: async () => {},
+  refreshQuota: async () => {},
   setProfilePictureUrl: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(defaultState);
   const [hydrated, setHydrated] = useState(false);
+  const [quota, setQuota] = useState<Quota | null>(null);
 
   // Restore from sessionStorage on mount
   useEffect(() => {
@@ -333,11 +346,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [state.isAuthenticated, refreshToken]);
 
+  // --- Per-user contract generation quota ---------------------------------
+  // Pulls /profile/quota for authenticated email accounts so the UI can
+  // disable the Generate button once the lifetime cap is reached. We
+  // silently noop on errors so a quota outage never blocks the app.
+  const refreshQuota = useCallback(async () => {
+    if (!state.token || !state.email) {
+      setQuota(null);
+      return;
+    }
+    try {
+      const resp = await fetch(`${API_URL}/profile/quota`, {
+        headers: { Authorization: `Bearer ${state.token}` },
+      });
+      if (!resp.ok) return;
+      const data = (await resp.json()) as Quota;
+      setQuota(data);
+    } catch {
+      // Network blip — keep last known quota. Worst case the backend
+      // still rejects with HTTP 429, which the UI surfaces.
+    }
+  }, [state.token, state.email]);
+
+  // Fetch quota whenever auth identity changes (login / logout / refresh).
+  useEffect(() => {
+    if (state.isAuthenticated && state.email) {
+      refreshQuota();
+    } else {
+      setQuota(null);
+    }
+  }, [state.isAuthenticated, state.email, refreshQuota]);
+
   return (
     <AuthContext.Provider
       value={{
         ...state,
         hydrated,
+        quota,
         login,
         loginEmail,
         signupEmail,
@@ -347,6 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         linkParty,
         logout,
         refreshToken,
+        refreshQuota,
         setProfilePictureUrl,
       }}
     >

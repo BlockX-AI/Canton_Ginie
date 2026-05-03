@@ -1,7 +1,7 @@
 "use client";
 
 import { LogoLoop, type LogoItem } from "@/components/logo-loop";
-import { ArrowDownRight, Send, Users, FileCode, Shield, Loader2, CheckCircle2 } from "lucide-react";
+import { ArrowDownRight, Send, Users, FileCode, Shield, Loader2, CheckCircle2, Lock } from "lucide-react";
 import { motion, useMotionValue, useSpring } from "motion/react";
 import { useRef, useState, type ReactNode, type MouseEvent, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -37,7 +37,11 @@ export function Hero(): ReactNode {
   const sectionRef = useRef<HTMLElement>(null);
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { token, isAuthenticated, partyId, needsParty } = useAuth();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { token, isAuthenticated, partyId, needsParty, quota, refreshQuota } = useAuth();
+  // Lifetime cap is only enforced for authenticated email users. Anonymous
+  // users still pass through the per-IP rate limiter on the backend.
+  const quotaExceeded = !!quota && !quota.can_generate;
   // A user with a party already shouldn't be re-prompted to allocate one;
   // we surface a passive ``Party Generated`` confirmation instead so the
   // CTA real-estate stays useful without encouraging duplicate parties
@@ -70,8 +74,9 @@ export function Hero(): ReactNode {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || isSubmitting) return;
+    if (!prompt.trim() || isSubmitting || quotaExceeded) return;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (isAuthenticated && token) {
@@ -82,12 +87,36 @@ export function Hero(): ReactNode {
         headers,
         body: JSON.stringify({ prompt: prompt.trim(), deploy: true }),
       });
+      // 429 = lifetime quota exceeded. Surface the backend message and
+      // refresh local quota so the button stays disabled.
+      if (resp.status === 429) {
+        const data = await resp.json().catch(() => ({}));
+        const detail = data?.detail;
+        const msg =
+          (detail && typeof detail === "object" && detail.message) ||
+          (typeof detail === "string" ? detail : null) ||
+          "You've reached your contract generation limit.";
+        setSubmitError(msg);
+        refreshQuota();
+        return;
+      }
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        const detail = data?.detail;
+        setSubmitError(
+          (typeof detail === "string" ? detail : null) ||
+            "Something went wrong. Please try again.",
+        );
+        return;
+      }
       const data = await resp.json();
       if (data.job_id) {
+        // Refresh quota so the next page load reflects the new count.
+        refreshQuota();
         window.location.href = `/sandbox/${data.job_id}`;
       }
     } catch {
-      // silently fail — user can retry
+      setSubmitError("Network error. Please check your connection and retry.");
     } finally {
       setIsSubmitting(false);
     }
@@ -232,7 +261,12 @@ export function Hero(): ReactNode {
 
                   <button
                     type="submit"
-                    disabled={!prompt.trim() || isSubmitting}
+                    disabled={!prompt.trim() || isSubmitting || quotaExceeded}
+                    title={
+                      quotaExceeded
+                        ? `You've reached your ${quota?.limit ?? 5}-contract generation limit.`
+                        : undefined
+                    }
                     className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-black text-white font-medium text-sm transition-all hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed w-full min-[850px]:w-auto"
                   >
                     {isSubmitting ? (
@@ -240,13 +274,40 @@ export function Hero(): ReactNode {
                         <Loader2 className="w-4 h-4 animate-spin" />
                         Generating...
                       </>
+                    ) : quotaExceeded ? (
+                      <>
+                        <Lock className="w-4 h-4" />
+                        Limit Reached
+                      </>
                     ) : (
                       <>
                         <Send className="w-4 h-4" />
-                        Generate & Deploy
+                        Generate &amp; Deploy
                       </>
                     )}
                   </button>
+
+                  {/* Quota / error feedback */}
+                  {quotaExceeded ? (
+                    <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+                      You&apos;ve used <strong>{quota?.used ?? 0}/{quota?.limit ?? 5}</strong> contract
+                      generations on this account. Contact{" "}
+                      <a href="mailto:support@ginie.xyz" className="underline">
+                        support@ginie.xyz
+                      </a>{" "}
+                      to request more.
+                    </div>
+                  ) : quota && !quota.bypass && quota.limit > 0 ? (
+                    <p className="text-[11px] text-neutral-500 text-center min-[850px]:text-left">
+                      <strong>{quota.remaining}</strong> of {quota.limit} contract generations remaining.
+                    </p>
+                  ) : null}
+
+                  {submitError && !quotaExceeded ? (
+                    <div className="rounded-lg border border-red-300/60 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+                      {submitError}
+                    </div>
+                  ) : null}
 
                   <p className="text-[11px] text-neutral-400 text-center min-[850px]:text-left">
                     Canton.Ginie is an AI and can make mistakes. Check important info before deploying to a production network.

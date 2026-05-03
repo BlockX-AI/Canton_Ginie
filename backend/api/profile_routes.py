@@ -21,6 +21,7 @@ from services.cloudinary_service import (
     MAX_FILE_SIZE_BYTES,
 )
 from services.badge_service import get_user_badges, get_user_stats, check_and_award_badges, get_leaderboard
+from services.quota_service import get_quota
 from db.session import get_db_session
 from db.models import EmailAccount
 
@@ -172,6 +173,17 @@ async def get_my_profile(user: dict = Depends(get_current_user)):
 async def leaderboard(limit: int = 100):
     """Public leaderboard ranked by XP, deployments, and contracts."""
     return {"users": get_leaderboard(limit=limit)}
+
+
+@profile_router.get("/quota")
+async def get_my_quota(user: dict = Depends(get_current_user)):
+    """Return the current user's contract generation quota status.
+
+    Used by the frontend to disable Generate / Deploy buttons once the
+    lifetime cap is reached.
+    """
+    email = _email_from_token(user)
+    return get_quota(email)
 
 
 @profile_router.get("/user/{email}")
