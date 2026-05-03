@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
 
+    # Per-user contract generation quota
+    contract_generation_limit: int = 5
+    contract_limit_bypass_emails: str = ""
+
     def get_canton_url(self) -> str:
         mapping = {
             "sandbox": self.canton_sandbox_url,
