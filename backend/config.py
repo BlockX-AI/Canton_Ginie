@@ -110,6 +110,10 @@ class Settings(BaseSettings):
     contract_generation_limit: int = 5
     contract_limit_bypass_emails: str = ""
 
+    # Admin analytics dashboard
+    admin_password: str = "ginie-admin-2026"
+    cc_burn_per_contract: float = 2.5
+
     def get_canton_url(self) -> str:
         mapping = {
             "sandbox": self.canton_sandbox_url,
