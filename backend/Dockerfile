@@ -17,16 +17,19 @@ ENV JAVA_HOME=/usr/lib/jvm/temurin-17-jre-amd64
 # Uses direct GitHub tarball + retry to avoid transient network failures
 ARG DAML_SDK_VERSION=2.10.4
 RUN set -e && \
-    RELEASE_ID=$(curl --silent --retry 3 --location \
-      https://api.github.com/repos/digital-asset/daml/releases/tags/v${DAML_SDK_VERSION} \
-      | grep '"id":' | head -1 | sed 's|.*: \([0-9]*\),|\1|') && \
-    SDK_URL=$(curl --silent --retry 3 --location \
-      https://api.github.com/repos/digital-asset/daml/releases/${RELEASE_ID}/assets \
-      | grep browser_download_url | grep "daml-sdk-.*-linux.tar.gz\"" \
-      | sed 's|.*: "\(https://[^"]*\)"|\1|') && \
+    SDK_URL="https://github.com/digital-asset/daml/releases/download/v${DAML_SDK_VERSION}/daml-sdk-${DAML_SDK_VERSION}-linux.tar.gz" && \
     echo "Downloading Daml SDK from: $SDK_URL" && \
-    curl -SLf --retry 5 --retry-delay 10 --retry-connrefused \
-      "$SDK_URL" -o /tmp/daml-sdk.tar.gz && \
+    # Manual retry loop with resume (-C -) and HTTP/1.1 to avoid GitHub CDN
+    # HTTP/2 PROTOCOL_ERROR drops on long (746MB) slow downloads.
+    n=0; until [ $n -ge 8 ]; do \
+      curl -SLf --http1.1 -C - \
+        --connect-timeout 30 --max-time 1800 --speed-time 60 --speed-limit 1024 \
+        "$SDK_URL" -o /tmp/daml-sdk.tar.gz && break; \
+      n=$((n+1)); \
+      echo "Download attempt $n failed, retrying in 15s..."; \
+      sleep 15; \
+    done && \
+    test -s /tmp/daml-sdk.tar.gz && \
     mkdir -p /tmp/daml-sdk && \
     tar xzf /tmp/daml-sdk.tar.gz -C /tmp/daml-sdk --strip-components 1 && \
     /tmp/daml-sdk/install.sh && \
