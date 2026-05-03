@@ -170,12 +170,33 @@ async def admin_login(body: AdminLoginRequest):
     return {"success": True}
 
 
+# Range options for the timeline. Each entry: (window, bucket_seconds, num_buckets).
+# bucket_seconds defines the granularity of each datapoint.
+_RANGE_CONFIG: dict[str, tuple[timedelta, int, int]] = {
+    "1h": (timedelta(hours=1), 60, 60),                    # 1 min buckets
+    "6h": (timedelta(hours=6), 600, 36),                   # 10 min buckets
+    "12h": (timedelta(hours=12), 1800, 24),                # 30 min buckets
+    "1d": (timedelta(days=1), 3600, 24),                   # 1 hour buckets
+    "7d": (timedelta(days=7), 3600 * 6, 28),               # 6 hour buckets
+    "30d": (timedelta(days=30), 3600 * 24, 30),            # 1 day buckets
+}
+
+
+def _bucket_key(dt: datetime, bucket_seconds: int, anchor: datetime) -> int:
+    """Map a timestamp to its bucket index relative to an anchor (the window start)."""
+    delta = (dt - anchor).total_seconds()
+    return int(delta // bucket_seconds)
+
+
 @admin_router.get("/analytics")
-async def get_analytics(_: None = Depends(require_admin_password)):
+async def get_analytics(
+    range_: str = Query("30d", alias="range", description="Timeline window: 1h, 6h, 12h, 1d, 7d, 30d"),
+    _: None = Depends(require_admin_password),
+):
     """Aggregate platform analytics for the admin dashboard.
 
-    Returns top-line counters, a 30-day activity timeline, CC burn estimate,
-    and the most active users by contract + deploy count.
+    Returns top-line counters, an activity timeline at the requested
+    granularity, CC burn estimate (CC + USD), and most active users.
     """
     from db.session import get_db_session
     from db.models import (
@@ -185,6 +206,12 @@ async def get_analytics(_: None = Depends(require_admin_password)):
 
     settings = get_settings()
     cc_per_contract = float(settings.cc_burn_per_contract or 0)
+    usd_per_cc = float(settings.cc_to_usd_rate or 0)
+
+    range_key = (range_ or "30d").lower()
+    if range_key not in _RANGE_CONFIG:
+        range_key = "30d"
+    window, bucket_seconds, num_buckets = _RANGE_CONFIG[range_key]
 
     try:
         with get_db_session() as s:
@@ -198,52 +225,58 @@ async def get_analytics(_: None = Depends(require_admin_password)):
             invite_total = s.query(InviteCode).count()
             invite_used = s.query(InviteCode).filter(InviteCode.used == 1).count()
 
-            # --- 30-day timeline ------------------------------------------
+            # --- Timeline (range-aware) -----------------------------------
             now = datetime.now(timezone.utc)
-            since = now - timedelta(days=30)
+            # Anchor the window so the *last* bucket ends at `now`.
+            anchor = now - timedelta(seconds=bucket_seconds * num_buckets)
 
             users_rows = (
                 s.query(EmailAccount.created_at)
-                .filter(EmailAccount.created_at >= since)
+                .filter(EmailAccount.created_at >= anchor)
                 .all()
             )
             contracts_rows = (
                 s.query(DeployedContract.created_at)
-                .filter(DeployedContract.created_at >= since)
+                .filter(DeployedContract.created_at >= anchor)
                 .all()
             )
             jobs_rows = (
                 s.query(JobHistory.created_at, JobHistory.status)
-                .filter(JobHistory.created_at >= since)
+                .filter(JobHistory.created_at >= anchor)
                 .all()
             )
 
-            day_bucket: dict[str, dict[str, int]] = defaultdict(
-                lambda: {"users": 0, "contracts": 0, "jobs": 0, "successful": 0}
-            )
+            buckets: list[dict[str, int]] = [
+                {"users": 0, "contracts": 0, "jobs": 0, "successful": 0}
+                for _ in range(num_buckets)
+            ]
+
+            def _add(idx: int, key: str) -> None:
+                if 0 <= idx < num_buckets:
+                    buckets[idx][key] += 1
+
             for row in users_rows:
                 if row.created_at:
-                    day_bucket[row.created_at.date().isoformat()]["users"] += 1
+                    _add(_bucket_key(row.created_at, bucket_seconds, anchor), "users")
             for row in contracts_rows:
                 if row.created_at:
-                    day_bucket[row.created_at.date().isoformat()]["contracts"] += 1
+                    _add(_bucket_key(row.created_at, bucket_seconds, anchor), "contracts")
             for row in jobs_rows:
                 if row.created_at:
-                    k = row.created_at.date().isoformat()
-                    day_bucket[k]["jobs"] += 1
+                    idx = _bucket_key(row.created_at, bucket_seconds, anchor)
+                    _add(idx, "jobs")
                     if row.status == "complete":
-                        day_bucket[k]["successful"] += 1
+                        _add(idx, "successful")
 
             timeline = []
-            for i in range(30, -1, -1):
-                d = (now - timedelta(days=i)).date().isoformat()
-                b = day_bucket.get(d, {"users": 0, "contracts": 0, "jobs": 0, "successful": 0})
+            for i in range(num_buckets):
+                bucket_start = anchor + timedelta(seconds=bucket_seconds * i)
                 timeline.append({
-                    "date": d,
-                    "users": b["users"],
-                    "contracts": b["contracts"],
-                    "jobs": b["jobs"],
-                    "successful": b["successful"],
+                    "date": bucket_start.isoformat(),
+                    "users": buckets[i]["users"],
+                    "contracts": buckets[i]["contracts"],
+                    "jobs": buckets[i]["jobs"],
+                    "successful": buckets[i]["successful"],
                 })
 
             # --- Most active users ---------------------------------------
@@ -320,14 +353,17 @@ async def get_analytics(_: None = Depends(require_admin_password)):
             # --- Job status distribution ----------------------------------
             status_rows = (
                 s.query(JobHistory.status, func.count(JobHistory.id))
+                .filter(JobHistory.status != "failed")
                 .group_by(JobHistory.status)
                 .all()
             )
             status_breakdown = [{"status": st or "unknown", "count": int(c)} for st, c in status_rows]
 
         # Derived metrics (outside the session)
-        success_rate = round(100 * successful_jobs / total_jobs, 1) if total_jobs else 0.0
+        non_failed_jobs = max(total_jobs - failed_jobs, 0)
+        success_rate = round(100 * successful_jobs / non_failed_jobs, 1) if non_failed_jobs else 0.0
         estimated_cc_burn = round(total_deployed * cc_per_contract, 2)
+        estimated_usd_value = round(estimated_cc_burn * usd_per_cc, 2)
 
         return {
             "totals": {
@@ -335,15 +371,18 @@ async def get_analytics(_: None = Depends(require_admin_password)):
                 "verified_users": verified_users,
                 "parties": total_parties,
                 "deployed_contracts": total_deployed,
-                "total_jobs": total_jobs,
+                "total_jobs": non_failed_jobs,
                 "successful_jobs": successful_jobs,
-                "failed_jobs": failed_jobs,
                 "success_rate": success_rate,
                 "invite_codes_total": invite_total,
                 "invite_codes_used": invite_used,
                 "estimated_cc_burn": estimated_cc_burn,
                 "cc_burn_per_contract": cc_per_contract,
+                "estimated_usd_value": estimated_usd_value,
+                "cc_to_usd_rate": usd_per_cc,
             },
+            "range": range_key,
+            "bucket_seconds": bucket_seconds,
             "timeline": timeline,
             "most_active_users": most_active,
             "env_breakdown": env_breakdown,

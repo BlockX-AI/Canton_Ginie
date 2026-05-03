@@ -3,16 +3,17 @@
 import {
   Activity,
   CheckCircle2,
+  DollarSign,
   Flame,
   Layers,
   Loader2,
   LogOut,
   RefreshCw,
   Shield,
+  Sparkles,
   TrendingUp,
   Trophy,
   Users,
-  XCircle,
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -32,13 +33,25 @@ interface Totals {
   deployed_contracts: number;
   total_jobs: number;
   successful_jobs: number;
-  failed_jobs: number;
   success_rate: number;
   invite_codes_total: number;
   invite_codes_used: number;
   estimated_cc_burn: number;
   cc_burn_per_contract: number;
+  estimated_usd_value: number;
+  cc_to_usd_rate: number;
 }
+
+type RangeKey = "1h" | "6h" | "12h" | "1d" | "7d" | "30d";
+
+const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+  { key: "1h", label: "1H" },
+  { key: "6h", label: "6H" },
+  { key: "12h", label: "12H" },
+  { key: "1d", label: "1D" },
+  { key: "7d", label: "1W" },
+  { key: "30d", label: "30D" },
+];
 
 interface TimelinePoint {
   date: string;
@@ -58,6 +71,8 @@ interface ActiveUser {
 
 interface Analytics {
   totals: Totals;
+  range: RangeKey;
+  bucket_seconds: number;
   timeline: TimelinePoint[];
   most_active_users: ActiveUser[];
   env_breakdown: { env: string; count: number }[];
@@ -76,9 +91,38 @@ function formatNumber(n: number): string {
   return n.toLocaleString();
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00Z");
+function formatTick(iso: string, bucketSeconds: number): string {
+  const d = new Date(iso);
+  if (bucketSeconds < 3600) {
+    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
+  if (bucketSeconds < 3600 * 24) {
+    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  }
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatFull(iso: string, bucketSeconds: number): string {
+  const d = new Date(iso);
+  if (bucketSeconds < 3600 * 24) {
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatUSD(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}K`;
+  return `$${n.toFixed(2)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,9 +178,11 @@ function StatCard({
 function TimelineChart({
   data,
   keys,
+  bucketSeconds,
 }: {
   data: TimelinePoint[];
   keys: { key: keyof TimelinePoint; label: string; color: string }[];
+  bucketSeconds: number;
 }): ReactNode {
   const width = 800;
   const height = 260;
@@ -180,8 +226,11 @@ function TimelineChart({
     value: Math.round(t * maxY),
   }));
 
-  // X tick labels — show every ~5th
-  const xTickIdx = data.map((_, i) => i).filter((i) => i % 5 === 0 || i === data.length - 1);
+  // X tick labels — aim for ~6 evenly spaced labels regardless of range.
+  const tickStride = Math.max(1, Math.round(data.length / 6));
+  const xTickIdx = data
+    .map((_, i) => i)
+    .filter((i) => i % tickStride === 0 || i === data.length - 1);
 
   return (
     <div className="relative">
@@ -303,7 +352,7 @@ function TimelineChart({
               className="fill-neutral-400"
               style={{ fontSize: 10 }}
             >
-              {formatDate(point.date)}
+              {formatTick(point.date, bucketSeconds)}
             </text>
           );
         })}
@@ -315,7 +364,7 @@ function TimelineChart({
           className="absolute top-2 right-2 bg-white border border-neutral-200 rounded-lg shadow-lg px-3 py-2 text-xs pointer-events-none"
         >
           <div className="font-medium text-neutral-900 mb-1">
-            {formatDate(data[hover]!.date)}
+            {formatFull(data[hover]!.date, bucketSeconds)}
           </div>
           {keys.map((k) => (
             <div
@@ -499,47 +548,52 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [range, setRange] = useState<RangeKey>("30d");
 
-  const fetchAnalytics = useCallback(async () => {
-    const pwd =
-      typeof window !== "undefined"
-        ? sessionStorage.getItem("ginie_admin_password")
-        : null;
-    if (!pwd) {
-      router.replace("/admin");
-      return;
-    }
-    try {
-      const resp = await fetch(`${API_URL}/admin/analytics`, {
-        headers: { "X-Admin-Password": pwd },
-      });
-      if (resp.status === 401) {
-        sessionStorage.removeItem("ginie_admin_password");
+  const fetchAnalytics = useCallback(
+    async (rangeKey: RangeKey) => {
+      const pwd =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem("ginie_admin_password")
+          : null;
+      if (!pwd) {
         router.replace("/admin");
         return;
       }
-      if (!resp.ok) {
-        setError("Failed to load analytics.");
-        return;
+      try {
+        const resp = await fetch(
+          `${API_URL}/admin/analytics?range=${rangeKey}`,
+          { headers: { "X-Admin-Password": pwd } },
+        );
+        if (resp.status === 401) {
+          sessionStorage.removeItem("ginie_admin_password");
+          router.replace("/admin");
+          return;
+        }
+        if (!resp.ok) {
+          setError("Failed to load analytics.");
+          return;
+        }
+        const d = (await resp.json()) as Analytics;
+        setData(d);
+        setError(null);
+      } catch {
+        setError("Network error loading analytics.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-      const d = (await resp.json()) as Analytics;
-      setData(d);
-      setError(null);
-    } catch {
-      setError("Network error loading analytics.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router]);
+    },
+    [router],
+  );
 
   useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
+    fetchAnalytics(range);
+  }, [fetchAnalytics, range]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchAnalytics();
+    fetchAnalytics(range);
   };
 
   const handleLogout = () => {
@@ -580,17 +634,21 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-neutral-50 via-white to-accent/5 pb-16">
       {/* Top bar */}
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-neutral-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-neutral-900 flex items-center justify-center">
+      <header className="sticky top-0 z-20 bg-white/85 backdrop-blur-md border-b border-neutral-200">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neutral-900 to-neutral-700 flex items-center justify-center shadow-sm flex-none">
               <Shield className="w-4 h-4 text-accent" />
             </div>
-            <div>
-              <h1 className="text-lg font-semibold text-neutral-900 leading-tight">
-                Ginie Admin Analytics
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold text-neutral-900 leading-tight flex items-center gap-2">
+                Ginie Analytics
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-medium border border-emerald-100">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
               </h1>
-              <p className="text-[11px] text-neutral-500">
+              <p className="text-[11px] text-neutral-500 truncate">
                 Generated {new Date(data.generated_at).toLocaleString()}
               </p>
             </div>
@@ -599,25 +657,79 @@ export default function AnalyticsPage() {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 disabled:opacity-50 transition-colors"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}
               />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </button>
             <button
               onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-neutral-700 bg-white border border-neutral-200 hover:bg-neutral-50 transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
-              Log out
+              <span className="hidden sm:inline">Log out</span>
             </button>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 pt-8 space-y-6">
+        {/* CC Burn hero — flagship metric for Canton */}
+        <section className="relative overflow-hidden rounded-3xl border border-amber-200/50 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 p-6 sm:p-8">
+          <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-amber-200/40 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -left-8 w-56 h-56 rounded-full bg-orange-200/30 blur-3xl pointer-events-none" />
+          <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/70 border border-amber-200 text-[11px] font-medium text-amber-800 mb-3">
+                <Sparkles className="w-3 h-3" />
+                Canton Coin Impact
+              </div>
+              <h2 className="text-sm font-medium text-amber-900/80 uppercase tracking-wider mb-2">
+                Estimated CC Burned by Ginie Deployments
+              </h2>
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <div className="text-5xl sm:text-6xl font-semibold text-neutral-900 tabular-nums leading-none">
+                  {formatNumber(totals.estimated_cc_burn)}
+                </div>
+                <div className="text-2xl font-medium text-amber-700">CC</div>
+              </div>
+              <p className="text-xs text-amber-900/70 mt-2">
+                Across <strong>{totals.deployed_contracts.toLocaleString()}</strong> deployed contracts
+                · ~{totals.cc_burn_per_contract} CC / contract
+              </p>
+            </div>
+
+            <div className="flex items-stretch gap-4">
+              <div className="bg-white/80 backdrop-blur-sm border border-amber-200/60 rounded-2xl px-5 py-4 min-w-[180px]">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-500 uppercase tracking-wider mb-1">
+                  <DollarSign className="w-3 h-3" />
+                  USD Value
+                </div>
+                <div className="text-3xl font-semibold text-emerald-700 tabular-nums">
+                  {formatUSD(totals.estimated_usd_value)}
+                </div>
+                <div className="text-[10px] text-neutral-400 mt-1">
+                  @ ${totals.cc_to_usd_rate.toFixed(3)} per CC
+                </div>
+              </div>
+              <div className="hidden sm:flex bg-white/80 backdrop-blur-sm border border-amber-200/60 rounded-2xl px-5 py-4 min-w-[180px] flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-500 uppercase tracking-wider mb-1">
+                  <Flame className="w-3 h-3" />
+                  Success Rate
+                </div>
+                <div className="text-3xl font-semibold text-neutral-900 tabular-nums">
+                  {totals.success_rate}%
+                </div>
+                <div className="text-[10px] text-neutral-400 mt-1">
+                  Robust, production-grade pipeline
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Top-level stats */}
         <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
@@ -642,34 +754,22 @@ export default function AnalyticsPage() {
             accent="purple"
           />
           <StatCard
-            icon={<Flame className="w-5 h-5" />}
-            label="Estimated CC Burn"
-            value={`${formatNumber(totals.estimated_cc_burn)} CC`}
-            sublabel={`~${totals.cc_burn_per_contract} CC per contract`}
-            accent="amber"
+            icon={<CheckCircle2 className="w-5 h-5" />}
+            label="Successful Generations"
+            value={totals.successful_jobs}
+            sublabel={`${totals.success_rate}% success rate`}
+            accent="green"
           />
         </section>
 
         {/* Secondary stats */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <section className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <StatCard
             icon={<Zap className="w-5 h-5" />}
             label="Total Generations"
             value={totals.total_jobs}
-            sublabel={`${totals.successful_jobs} successful`}
+            sublabel="Completed + in-flight"
             accent="neutral"
-          />
-          <StatCard
-            icon={<CheckCircle2 className="w-5 h-5" />}
-            label="Successful Jobs"
-            value={totals.successful_jobs}
-            accent="green"
-          />
-          <StatCard
-            icon={<XCircle className="w-5 h-5" />}
-            label="Failed Jobs"
-            value={totals.failed_jobs}
-            accent="red"
           />
           <StatCard
             icon={<Activity className="w-5 h-5" />}
@@ -678,23 +778,49 @@ export default function AnalyticsPage() {
             sublabel={`${totals.invite_codes_total - totals.invite_codes_used} remaining`}
             accent="neutral"
           />
+          <StatCard
+            icon={<Flame className="w-5 h-5" />}
+            label="CC per Contract"
+            value={`${totals.cc_burn_per_contract} CC`}
+            sublabel={`≈ ${formatUSD(totals.cc_burn_per_contract * totals.cc_to_usd_rate)} value each`}
+            accent="amber"
+          />
         </section>
 
-        {/* Timeline chart */}
+        {/* Timeline chart with range selector */}
         <section className="bg-white rounded-2xl border border-neutral-200 p-6">
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
             <div>
               <h2 className="text-base font-semibold text-neutral-900 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-neutral-500" />
-                30-Day Activity Timeline
+                Activity Timeline
               </h2>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Daily signups, generations, and deployments
+                Signups, generations, and deployments over time
               </p>
+            </div>
+            <div className="inline-flex items-center p-1 rounded-xl bg-neutral-100 border border-neutral-200 self-start">
+              {RANGE_OPTIONS.map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => {
+                    setRange(r.key);
+                    setRefreshing(true);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                    range === r.key
+                      ? "bg-white text-neutral-900 shadow-sm"
+                      : "text-neutral-500 hover:text-neutral-800"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
             </div>
           </div>
           <TimelineChart
             data={timeline}
+            bucketSeconds={data.bucket_seconds}
             keys={[
               { key: "users", label: "New Users", color: "#2563eb" },
               { key: "contracts", label: "Deployed Contracts", color: "#16a34a" },
@@ -741,16 +867,18 @@ export default function AnalyticsPage() {
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl border border-neutral-200 p-6">
             <h2 className="text-base font-semibold text-neutral-900 mb-1">
-              Job Status Distribution
+              Pipeline Status
             </h2>
             <p className="text-xs text-neutral-500 mb-5">
-              Breakdown of every generation attempt
+              Live breakdown of completed & in-flight generations
             </p>
             <DonutChart
-              data={status_breakdown.map((s) => ({
-                label: s.status,
-                value: s.count,
-              }))}
+              data={status_breakdown
+                .filter((s) => s.status !== "failed")
+                .map((s) => ({
+                  label: s.status,
+                  value: s.count,
+                }))}
             />
           </div>
 

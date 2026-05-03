@@ -113,6 +113,8 @@ class Settings(BaseSettings):
     # Admin analytics dashboard
     admin_password: str = "ginie-admin-2026"
     cc_burn_per_contract: float = 2.5
+    # Approx USD value per CC. Override via CC_TO_USD_RATE env var.
+    cc_to_usd_rate: float = 0.12
 
     def get_canton_url(self) -> str:
         mapping = {
