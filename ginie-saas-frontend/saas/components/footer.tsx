@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 const footerLinks = {
   menu: [
-    { label: "Documentation", href: "#" },
+    { label: "Documentation", href: "https://docs.ginie.xyz/" },
     { label: "Canton Network", href: "https://www.canton.network" },
     { label: "DAML Docs", href: "https://docs.daml.com" },
   ],

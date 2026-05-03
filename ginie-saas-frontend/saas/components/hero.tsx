@@ -292,8 +292,8 @@ export function Hero(): ReactNode {
                     <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
                       You&apos;ve used <strong>{quota?.used ?? 0}/{quota?.limit ?? 5}</strong> contract
                       generations on this account. Contact{" "}
-                      <a href="mailto:support@ginie.xyz" className="underline">
-                        support@ginie.xyz
+                      <a href="mailto:info@blockxai.xyz" className="underline">
+                        info@blockxai.xyz
                       </a>{" "}
                       to request more.
                     </div>

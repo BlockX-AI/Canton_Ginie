@@ -14,27 +14,15 @@ import { useAuth } from "@/lib/auth-context";
 
 const menus = {
 
-  products: [
-
-    { label: "Contract Generator", description: "AI-powered DAML code generation" },
-
-    { label: "Ledger Explorer", description: "Browse contracts and parties on Canton" },
-
-    { label: "Security Auditor", description: "Automated compliance and vulnerability checks" },
-
-    { label: "Party Manager", description: "Ed25519 identity and key management" },
-
-  ],
-
   resources: [
 
-    { label: "Documentation", description: "Guides and API reference" },
+    { label: "Documentation", description: "Guides and API reference", href: "https://docs.ginie.xyz/" },
 
-    { label: "Canton Network", description: "Learn about the Canton protocol" },
+    { label: "Canton Network", description: "Learn about the Canton protocol", href: "https://www.canton.network/" },
 
-    { label: "DAML Docs", description: "Official DAML language reference" },
+    { label: "DAML Docs", description: "Official DAML language reference", href: "https://docs.daml.com/" },
 
-    { label: "GitHub", description: "Source code and contributions" },
+    { label: "GitHub", description: "Source code and contributions", href: "https://github.com/BlockX-AI/Canton_Ginie" },
 
   ],
 
@@ -148,7 +136,7 @@ function DesktopDropdown({
 
               {menus[menuKey].map((item) => (
 
-                <a key={item.label} href="#" className="block px-4 py-3 rounded-xl hover:bg-muted transition-colors">
+                <a key={item.label} href={item.href || "#"} target="_blank" rel="noopener noreferrer" className="block px-4 py-3 rounded-xl hover:bg-muted transition-colors">
 
                   <div className="text-sm font-medium text-foreground">{item.label}</div>
 
@@ -250,7 +238,11 @@ function MobileExpandable({
 
                   key={item.label}
 
-                  href="#"
+                  href={item.href || "#"}
+
+                  target="_blank"
+
+                  rel="noopener noreferrer"
 
                   className="block py-2 text-sm text-foreground/80 hover:text-foreground"
 
@@ -352,20 +344,6 @@ export function Header(): ReactNode {
 
 
         <nav className="flex items-center gap-1 max-[1200px]:gap-0 max-[850px]:hidden">
-
-          <DesktopDropdown
-
-            label="Products"
-
-            menuKey="products"
-
-            isOpen={activeMenu === "products"}
-
-            onOpen={() => setActiveMenu("products")}
-
-            onClose={() => setActiveMenu(null)}
-
-          />
 
           <DesktopDropdown
 
@@ -493,26 +471,6 @@ export function Header(): ReactNode {
             <div className="px-6 pb-4">
 
               <nav className="space-y-0">
-
-                <a href="#" className="flex items-center justify-between py-4 text-base font-medium text-foreground border-b border-foreground/10" onClick={closeMobile}>
-
-                  Customers
-
-                </a>
-
-                <MobileExpandable
-
-                  label="Products"
-
-                  menuKey="products"
-
-                  isExpanded={mobileExpanded === "products"}
-
-                  onToggle={() => toggleExpanded("products")}
-
-                  onClose={closeMobile}
-
-                />
 
                 <MobileExpandable
 
