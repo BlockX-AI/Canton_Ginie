@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     api_port: int = int(os.getenv("PORT", "8000"))
 
     max_fix_attempts: int = 3
-    llm_model: str = "gpt-4o"
+    llm_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.1
     # Per-request HTTP timeout for the LLM SDKs. The vendor defaults are
     # ~10 minutes, which is long enough that a network blip silently stalls
