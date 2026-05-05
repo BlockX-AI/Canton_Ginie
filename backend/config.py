@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     cloudinary_api_secret: str = ""
 
     # Per-user contract generation quota
-    contract_generation_limit: int = 5
+    contract_generation_limit: int = 1
     contract_limit_bypass_emails: str = ""
 
     # Admin analytics dashboard
